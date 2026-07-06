@@ -1,6 +1,7513 @@
-//@ts-ignore
+import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260706_fix15";
 
-setTimeout(() => {
-  import(api.api_base + "/workspace_web/input.js");
-}, 500);
+const EXTENSION_NAME = "comfyui.workspace2";
+const DRAG_TYPE = "application/x-workspace2-item";
+const NODE_DRAG_TYPE = "application/x-workspace2-node";
+const COMFY_NODE_DRAG_TYPE = "application/x-comfy-node";
+const FAVORITE_DRAG_TYPE = "application/x-workspace2-favorite";
+const FONT_SCALE_KEY = "workspace2.fontScale";
+const FONT_SCALE_LINEAR_KEY = "workspace2.fontScale.linear";
+const WORKFLOW_SORT_KEY = "workspace2.workflows.sort";
+const WORKFLOW_ORDER_KEY = "workspace2.workflows.customOrder";
+const WORKFLOW_CUSTOM_ORDER_KEY = "workspace2.workflows.customOrderEnabled";
+const WORKFLOW_FOLDER_FIRST_KEY = "workspace2.workflows.folderFirst";
+const NODE_FONT_SCALE_KEY = "workspace2.nodes.fontScale";
+const NODE_ROW_SPACING_KEY = "workspace2.nodes.rowSpacing";
+const NODE_UI_SCALE_KEY = "workspace2.nodes.uiScale";
+const NODE_VISIBLE_SECTIONS_KEY = "workspace2.nodes.visibleSections";
+const NODE_SORT_KEY = "workspace2.nodes.sort";
+const NODE_CUSTOM_ORDER_KEY = "workspace2.nodes.customOrder";
+const NODE_CUSTOM_ORDER_ENABLED_KEY = "workspace2.nodes.customOrderEnabled";
+const OFFICIAL_NODE_ADAPTER_KEY = "workspace2.officialNodeAdapter";
+const CANVAS_GROUP_CTRL_G_KEY = "workspace2.canvasGroups.ctrlGCreate";
+const DEFAULT_LOCALE = "en-US";
+const NODE_DEFAULT_GROUP_ID = "default";
+const WORKFLOWS_TAB_ID = "workspace2-workflows";
+const NODES_TAB_ID = "workspace2-nodes";
+const CANVAS_GROUPS_TAB_ID = "workspace2-canvas-groups";
+const WORKFLOW_SORTS = ["nameAsc", "nameDesc", "updatedDesc", "updatedAsc"];
+const NODE_SECTION_FILTERS = ["bookmarked", "comfy", "extensions"];
+const NODE_SORTS = ["original", "alphabetical"];
+const DEFAULT_FOLDER_ICON_CLASS = "pi pi-folder";
+const DEFAULT_FOLDER_OPEN_ICON_CLASS = "pi pi-folder-open";
+const DEFAULT_FILE_ICON_CLASS = "pi pi-file";
+
+const FALLBACK_STRINGS = {
+  "zh-CN": {
+    "workflows.sort.nameAsc": "名称 A-Z",
+    "workflows.sort.nameDesc": "名称 Z-A",
+    "workflows.sort.updatedDesc": "修改时间新到旧",
+    "workflows.sort.updatedAsc": "修改时间旧到新",
+    "workflows.customOrder": "自定义顺序",
+    "workflows.folderFirst": "优先文件夹",
+    "workflows.sortTitle": "工作流排序：{sort}。点击打开菜单。",
+    "workflows.reorderHandle": "拖动调整顺序",
+    "nodes.customOrder": "自定义顺序",
+    "nodes.reorderHandle": "拖动调整顺序",
+    "nodes.defaultGroupName": "新建分组",
+    "menu.newSubfolder": "新建子文件夹",
+    "row.openLocation": "打开工作流位置",
+    "folder.personalize": "个性化",
+    "folder.changeIcon": "修改图标",
+    "folder.changeColor": "修改颜色",
+    "folder.resetStyle": "重置样式",
+    "folder.personalizeTitle": "个性化",
+    "folder.personalizePreview": "预览",
+    "folder.personalizeIcon": "图标",
+    "folder.personalizeColor": "颜色",
+    "folder.personalizeApply": "应用",
+    "folder.personalizeReset": "重置",
+    "folder.personalizeCancel": "取消",
+    "folder.personalizeDefault": "默认",
+    "folder.defaultName": "新建文件夹",
+    "folder.promptIcon": "输入 PrimeIcons class（如 pi pi-folder）或 emoji。留空使用默认图标。",
+    "folder.promptColor": "输入颜色，如 #8ab4f8。留空使用默认颜色。",
+    "canvasGroups.title": "编组2",
+    "canvasGroups.status": "{count} 个编组",
+    "canvasGroups.searchPlaceholder": "搜索编组",
+    "canvasGroups.create": "用当前选中节点创建编组",
+    "canvasGroups.refresh": "刷新编组列表",
+    "canvasGroups.empty": "当前工作流没有编组。",
+    "canvasGroups.noMatches": "没有匹配的编组。",
+    "canvasGroups.nodes": "{count} 个节点",
+    "canvasGroups.locate": "定位编组",
+    "canvasGroups.rename": "重命名编组",
+    "canvasGroups.promptRename": "编组名称",
+    "canvasGroups.toggleBypass": "绕过 / 恢复编组",
+    "canvasGroups.delete": "删除编组",
+    "canvasGroups.confirmDelete": "删除编组“{name}”？不会删除节点。",
+  },
+  "en-US": {
+    "workflows.sort.nameAsc": "Name A-Z",
+    "workflows.sort.nameDesc": "Name Z-A",
+    "workflows.sort.updatedDesc": "Newest modified",
+    "workflows.sort.updatedAsc": "Oldest modified",
+    "workflows.customOrder": "Custom order",
+    "workflows.folderFirst": "Folders first",
+    "workflows.sortTitle": "Workflow sort: {sort}. Click to open menu.",
+    "workflows.reorderHandle": "Drag to reorder",
+    "nodes.customOrder": "Custom order",
+    "nodes.reorderHandle": "Drag to reorder",
+    "nodes.defaultGroupName": "New group",
+    "menu.newSubfolder": "New subfolder",
+    "row.openLocation": "Show workflow in folder",
+    "folder.personalize": "Personalize",
+    "folder.changeIcon": "Change icon",
+    "folder.changeColor": "Change color",
+    "folder.resetStyle": "Reset style",
+    "folder.personalizeTitle": "Personalize",
+    "folder.personalizePreview": "Preview",
+    "folder.personalizeIcon": "Icon",
+    "folder.personalizeColor": "Color",
+    "folder.personalizeApply": "Apply",
+    "folder.personalizeReset": "Reset",
+    "folder.personalizeCancel": "Cancel",
+    "folder.personalizeDefault": "Default",
+    "folder.defaultName": "New folder",
+    "folder.promptIcon": "Enter a PrimeIcons class, such as pi pi-folder, or an emoji. Leave empty for the default icon.",
+    "folder.promptColor": "Enter a color, such as #8ab4f8. Leave empty for the default color.",
+    "canvasGroups.title": "Groups 2",
+    "canvasGroups.status": "{count} groups",
+    "canvasGroups.searchPlaceholder": "Search groups",
+    "canvasGroups.create": "Create group from selected nodes",
+    "canvasGroups.refresh": "Refresh group list",
+    "canvasGroups.empty": "This workflow has no groups.",
+    "canvasGroups.noMatches": "No matching groups.",
+    "canvasGroups.nodes": "{count} nodes",
+    "canvasGroups.locate": "Locate group",
+    "canvasGroups.rename": "Rename group",
+    "canvasGroups.promptRename": "Group name",
+    "canvasGroups.toggleBypass": "Bypass / restore group",
+    "canvasGroups.delete": "Delete group",
+    "canvasGroups.confirmDelete": "Delete group \"{name}\"? Nodes will not be deleted.",
+  },
+};
+const CORE_NODE_MODULES = new Set(["nodes", "comfy_extras", "comfy_api_nodes"]);
+const NODE_SOURCE = {
+  CORE: "core",
+  CUSTOM: "custom_nodes",
+  BLUEPRINT: "blueprint",
+  ESSENTIALS: "essentials",
+  UNKNOWN: "unknown",
+};
+const ESSENTIALS_CATEGORY_ORDER = [
+  "basics",
+  "text generation",
+  "image generation",
+  "video generation",
+  "image tools",
+  "video tools",
+  "audio",
+  "3D",
+];
+const ESSENTIALS_NODES = {
+  basics: ["LoadImage", "LoadVideo", "Load3D", "SaveImage", "SaveVideo", "SaveGLB", "PrimitiveStringMultiline", "PreviewImage"],
+  "text generation": ["OpenAIChatNode"],
+  "image generation": ["LoraLoader", "LoraLoaderModelOnly", "ConditioningCombine"],
+  "video generation": ["SubgraphBlueprint.pose_to_video_ltx_2_0", "SubgraphBlueprint.canny_to_video_ltx_2_0", "KlingLipSyncAudioToVideoNode", "KlingOmniProEditVideoNode"],
+  "image tools": ["ImageBatch", "ImageCrop", "ImageCropV2", "ImageScale", "ImageScaleBy", "ImageRotate", "ImageBlur", "ImageBlend", "ImageInvert", "ImageCompare", "Canny", "RecraftRemoveBackgroundNode", "RecraftVectorizeImageNode", "LoadImageMask", "GLSLShader"],
+  "video tools": ["GetVideoComponents", "CreateVideo", "Video Slice"],
+  audio: ["LoadAudio", "SaveAudio", "SaveAudioMP3", "StabilityTextToAudio", "EmptyLatentAudio"],
+  "3D": ["TencentTextToModelNode", "TencentImageToModelNode"],
+};
+const ESSENTIALS_CATEGORY_MAP = new Map(
+  Object.entries(ESSENTIALS_NODES).flatMap(([category, nodes]) => nodes.map((node) => [node, category])),
+);
+const ESSENTIALS_CATEGORY_RANK = new Map(ESSENTIALS_CATEGORY_ORDER.map((category, index) => [category, index]));
+const ESSENTIALS_NODE_RANK = new Map(
+  Object.entries(ESSENTIALS_NODES).map(([category, nodes]) => [
+    category,
+    new Map(nodes.map((node, index) => [node, index])),
+  ]),
+);
+const COMFY_CATEGORY_LABEL_KEYS = new Map([
+  ["3d", "nodes.officialCategory.3d"],
+  ["advanced", "nodes.officialCategory.advanced"],
+  ["api", "nodes.officialCategory.advanced"],
+  ["audio", "nodes.officialCategory.audio"],
+  ["conditioning", "nodes.officialCategory.conditioning"],
+  ["image", "nodes.officialCategory.image"],
+  ["latent", "nodes.officialCategory.latent"],
+  ["loaders", "nodes.officialCategory.model"],
+  ["mask", "nodes.officialCategory.image"],
+  ["model", "nodes.officialCategory.model"],
+  ["model_merging", "nodes.officialCategory.model"],
+  ["model_patches", "nodes.officialCategory.model"],
+  ["sampling", "nodes.officialCategory.model"],
+  ["sd", "nodes.officialCategory.model"],
+  ["text", "nodes.officialCategory.text"],
+  ["utils", "nodes.officialCategory.advanced"],
+  ["video", "nodes.officialCategory.video"],
+  ["_for_testing", "nodes.officialCategory.experimental"],
+]);
+
+const state = {
+  query: "",
+  items: [],
+  root: "",
+  officialRoot: "",
+  folderMeta: {},
+  isOfficialRoot: true,
+  status: "Loading...",
+  signature: "",
+  trashSignature: "",
+  refreshTimer: null,
+  refreshTarget: null,
+  expanded: new Set([""]),
+  selectedPath: "",
+  editingPath: "",
+  contextMenu: null,
+  contextMenuElement: null,
+  sortMenuElement: null,
+  sortMenuCloseHandler: null,
+  showTrash: false,
+  trashItems: [],
+  draggingItem: null,
+  pointerDrag: null,
+  reorderDrag: null,
+  suppressClick: false,
+  fontScale: readWorkflowFontScale(),
+  sort: WORKFLOW_SORTS.includes(localStorage.getItem(WORKFLOW_SORT_KEY)) ? localStorage.getItem(WORKFLOW_SORT_KEY) : "nameAsc",
+  customOrderEnabled: localStorage.getItem(WORKFLOW_CUSTOM_ORDER_KEY) === "1",
+  folderFirst: localStorage.getItem(WORKFLOW_FOLDER_FIRST_KEY) !== "0",
+  customOrder: readWorkflowCustomOrder(),
+  locale: DEFAULT_LOCALE,
+  strings: {},
+  localeTimer: null,
+  workflowsTarget: null,
+};
+
+const canvasGroupsState = {
+  query: "",
+  renderTarget: null,
+};
+
+const nodesState = {
+  query: "",
+  library: null,
+  objectInfo: null,
+  loading: false,
+  error: "",
+  expanded: new Set([NODE_DEFAULT_GROUP_ID, "__bookmarked__", "__comfy__", "__extensions__"]),
+  draggingNode: null,
+  renderTarget: null,
+  canvasDropReady: false,
+  pointerDrag: null,
+  groupDrag: null,
+  suppressClick: false,
+  pendingNode: null,
+  previewNode: null,
+  previewPopover: null,
+  contextMenuElement: null,
+  editingGroupId: "",
+  nSidebarPreview: null,
+  nSidebarLoading: false,
+  sortMenuElement: null,
+  sortMenuCloseHandler: null,
+  officialFavoritesMenuElement: null,
+  officialFavoritesMenuCloseHandler: null,
+  reorderDrag: null,
+  visibleSections: readNodeVisibleSections(),
+  sort: NODE_SORTS.includes(localStorage.getItem(NODE_SORT_KEY)) ? localStorage.getItem(NODE_SORT_KEY) : "original",
+  customOrderEnabled: localStorage.getItem(NODE_CUSTOM_ORDER_ENABLED_KEY) === "1",
+  customOrder: readNodeCustomOrder(),
+  uiScale: Number(localStorage.getItem(NODE_UI_SCALE_KEY) ?? localStorage.getItem(NODE_FONT_SCALE_KEY) ?? "50"),
+  fontScale: Number(localStorage.getItem(NODE_FONT_SCALE_KEY) || "0"),
+  rowSpacing: Number(localStorage.getItem(NODE_ROW_SPACING_KEY) || "0"),
+  officialAdapter: null,
+  officialFavoritesProbe: null,
+  officialFavoritesLoading: false,
+};
+
+function ownKeys(value) {
+  if (!value || (typeof value !== "object" && typeof value !== "function")) {
+    return [];
+  }
+  try {
+    return Object.keys(value).sort();
+  } catch {
+    return [];
+  }
+}
+
+function limitedKeys(value, pattern = null, limit = 30) {
+  const keys = ownKeys(value);
+  const filtered = pattern ? keys.filter((key) => pattern.test(key)) : keys;
+  return filtered.slice(0, limit);
+}
+
+function valueAtPath(root, path) {
+  let current = root;
+  for (const part of path.split(".")) {
+    current = current?.[part];
+    if (current == null) {
+      return null;
+    }
+  }
+  return current;
+}
+
+function findOfficialVueApp() {
+  const candidates = [
+    ["app.vueApp", app?.vueApp],
+    ["app._vueApp", app?._vueApp],
+    ["app.ui.vueApp", app?.ui?.vueApp],
+    ["app.extensionManager.vueApp", app?.extensionManager?.vueApp],
+    ["#app.__vue_app__", document.querySelector("#app")?.__vue_app__],
+    ["body.__vue_app__", document.body?.__vue_app__],
+  ];
+  return candidates
+    .filter(([, value]) => Boolean(value))
+    .map(([path, value]) => ({
+      path,
+      keys: limitedKeys(value),
+      hasContext: Boolean(value?._context),
+      contextKeys: limitedKeys(value?._context),
+      providesKeys: limitedKeys(value?._context?.provides),
+    }));
+}
+
+function findOfficialNodeObjects() {
+  const candidatePaths = [
+    "nodeDefStore",
+    "nodeStore",
+    "nodeLibrary",
+    "nodeLibraryService",
+    "nodeOrganizationService",
+    "extensionManager.nodeDefStore",
+    "extensionManager.nodeStore",
+    "extensionManager.nodeLibrary",
+    "extensionManager.nodeLibraryService",
+    "extensionManager.nodeOrganizationService",
+    "ui.nodeDefStore",
+    "ui.nodeStore",
+    "ui.nodeLibrary",
+    "ui.nodeLibraryService",
+    "ui.nodeOrganizationService",
+  ];
+  const found = [];
+  for (const path of candidatePaths) {
+    const value = valueAtPath(app, path);
+    if (!value) {
+      continue;
+    }
+    found.push({
+      path: `app.${path}`,
+      keys: limitedKeys(value),
+      nodeKeys: limitedKeys(value, /node|sort|organ/i),
+      hasGetSortingStrategies: typeof value.getSortingStrategies === "function",
+      hasOrganizeNodesByTab: typeof value.organizeNodesByTab === "function",
+      hasBuildNodeDefTree: typeof value.buildNodeDefTree === "function",
+    });
+  }
+  return found;
+}
+
+function findOfficialNodePreviewContainers() {
+  const selectors = [
+    "#node-library-node-preview-container",
+    "[id*='node-preview']",
+    "[class*='node-preview']",
+  ];
+  return selectors.map((selector) => ({
+    selector,
+    count: document.querySelectorAll(selector).length,
+  }));
+}
+
+function findOfficialNodeLibraryDom() {
+  const selectors = [
+    "[role='tree']",
+    "[role='treeitem']",
+    "[id*='node-library']",
+    "[class*='node-library']",
+  ];
+  return selectors.map((selector) => ({
+    selector,
+    count: document.querySelectorAll(selector).length,
+  }));
+}
+
+function defaultNodeVisibleSections() {
+  return { bookmarked: true, comfy: true, extensions: true };
+}
+
+function readNodeVisibleSections() {
+  const defaults = defaultNodeVisibleSections();
+  try {
+    const parsed = JSON.parse(localStorage.getItem(NODE_VISIBLE_SECTIONS_KEY) || "{}");
+    const next = { ...defaults };
+    for (const key of NODE_SECTION_FILTERS) {
+      if (typeof parsed?.[key] === "boolean") {
+        next[key] = parsed[key];
+      }
+    }
+    if (!Object.values(next).some(Boolean)) {
+      return defaults;
+    }
+    return next;
+  } catch {
+    return defaults;
+  }
+}
+
+function saveNodeVisibleSections() {
+  localStorage.setItem(NODE_VISIBLE_SECTIONS_KEY, JSON.stringify(nodesState.visibleSections));
+}
+
+function readNodeCustomOrder() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(NODE_CUSTOM_ORDER_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveNodeCustomOrder() {
+  localStorage.setItem(NODE_CUSTOM_ORDER_KEY, JSON.stringify(nodesState.customOrder || {}));
+}
+
+function detectOfficialNodeAdapter() {
+  const extensionManager = app?.extensionManager;
+  const adapter = {
+    checkedAt: new Date().toISOString(),
+    available: false,
+    reason: "",
+    appKeys: limitedKeys(app, /node|vue|store|library|extension|sidebar|workflow/i, 60),
+    extensionManagerKeys: limitedKeys(extensionManager, /node|vue|store|library|sidebar|tab|workflow|setting/i, 80),
+    vueApps: findOfficialVueApp(),
+    nodeObjects: findOfficialNodeObjects(),
+    previewContainers: findOfficialNodePreviewContainers(),
+    nodeLibraryDom: findOfficialNodeLibraryDom(),
+    globalNodeKeys: limitedKeys(globalThis, /comfy|node|vue|pinia|litegraph/i, 80),
+  };
+  adapter.hasNodeOrganizationService = adapter.nodeObjects.some((item) => item.hasOrganizeNodesByTab || item.hasGetSortingStrategies);
+  adapter.hasVueAppContext = adapter.vueApps.some((item) => item.hasContext);
+  adapter.hasPreviewContainer = adapter.previewContainers.some((item) => item.count > 0);
+  adapter.hasNodeLibraryDom = adapter.nodeLibraryDom.some((item) => item.count > 0);
+  adapter.available = adapter.hasNodeOrganizationService || adapter.hasVueAppContext || adapter.hasPreviewContainer;
+  adapter.reason = adapter.available
+    ? "Official frontend runtime objects were found. Inspect nodeObjects/vueApps before binding to them."
+    : adapter.hasNodeLibraryDom
+      ? "Official node-library DOM was found, but no stable service, Vue context, or preview container is exposed."
+      : "No stable official node-library runtime object was found from Workspace2 setup.";
+  nodesState.officialAdapter = adapter;
+  globalThis.__workspace2OfficialNodeAdapter = adapter;
+  globalThis.__workspace2ProbeOfficialNodeAdapter = detectOfficialNodeAdapter;
+  try {
+    localStorage.setItem(OFFICIAL_NODE_ADAPTER_KEY, JSON.stringify(adapter));
+  } catch {
+    // Ignore storage failures; the global debug object is the primary probe result.
+  }
+  console.info("[Workspace2] official node adapter probe", adapter);
+  return adapter;
+}
+
+function summarizeOfficialFavoriteValue(value) {
+  if (Array.isArray(value)) {
+    const strings = value.filter((item) => typeof item === "string");
+    return {
+      type: "array",
+      count: value.length,
+      stringCount: strings.length,
+      sample: strings.slice(0, 20),
+      looksLikeNodeList: strings.length === value.length,
+    };
+  }
+  if (value && typeof value === "object") {
+    return {
+      type: "object",
+      keys: Object.keys(value).slice(0, 30),
+      count: Object.keys(value).length,
+    };
+  }
+  return {
+    type: typeof value,
+    value: String(value).slice(0, 160),
+  };
+}
+
+function findLocalOfficialFavoriteCandidates() {
+  const candidates = [];
+  const patterns = [/node.*bookmark/i, /bookmark.*node/i, /node.*favorite/i, /favorite.*node/i, /node.*pinned/i, /pinned.*node/i];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key || !patterns.some((pattern) => pattern.test(key))) {
+      continue;
+    }
+    const raw = localStorage.getItem(key) || "";
+    let parsed = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {}
+    candidates.push({
+      key,
+      storage: "localStorage",
+      rawLength: raw.length,
+      summary: summarizeOfficialFavoriteValue(parsed ?? raw),
+    });
+  }
+  return candidates;
+}
+
+async function detectOfficialFavoritesProbe() {
+  const probe = {
+    checkedAt: new Date().toISOString(),
+    localStorage: findLocalOfficialFavoriteCandidates(),
+    backend: null,
+    runtime: {
+      appKeys: limitedKeys(app, /favorite|bookmark|node|library|store/i, 80),
+      extensionManagerKeys: limitedKeys(app?.extensionManager, /favorite|bookmark|node|library|store/i, 80),
+    },
+  };
+  try {
+    const response = await fetchJson("/workspace2/nodes/official-favorites/probe");
+    probe.backend = response.probe || null;
+  } catch (error) {
+    probe.backend = {
+      error: error.message,
+      note: "Backend route may require restarting ComfyUI after installing this probe.",
+    };
+  }
+  probe.found = Boolean(probe.localStorage.length || probe.backend?.found);
+  globalThis.__workspace2OfficialFavoritesProbe = probe;
+  globalThis.__workspace2ProbeOfficialFavorites = detectOfficialFavoritesProbe;
+  console.info("[Workspace2] official favorites probe", probe);
+  return probe;
+}
+
+function isOfficialFavoriteFolderMarker(value) {
+  return typeof value === "string" && value.trim().endsWith("/");
+}
+
+function collectOfficialFavoritesFromProbe(probe) {
+  const seen = new Set();
+  const items = [];
+  const groups = [];
+  const add = (value) => {
+    if (typeof value !== "string") {
+      return;
+    }
+    const nodeType = value.trim();
+    if (!nodeType || isOfficialFavoriteFolderMarker(nodeType) || seen.has(nodeType)) {
+      return;
+    }
+    seen.add(nodeType);
+    items.push(nodeType);
+  };
+  const addList = (items) => {
+    if (!Array.isArray(items)) {
+      return;
+    }
+    for (const item of items) {
+      add(item);
+    }
+  };
+
+  for (const item of probe?.localStorage || []) {
+    addList(item?.sample);
+    addList(item?.nodes);
+  }
+  for (const file of probe?.backend?.files || []) {
+    for (const match of file?.matches || []) {
+      addList(match?.summary?.nodes);
+      if (match?.summary?.looksLikeNodeList) {
+        addList(match?.summary?.sample);
+      }
+      if (Array.isArray(match?.summary?.groups)) {
+        groups.push(...match.summary.groups);
+      }
+    }
+  }
+  return { items, groups };
+}
+
+function resolveOfficialFavoriteType(rawType, nodeMap) {
+  const value = String(rawType || "").trim();
+  if (!value || isOfficialFavoriteFolderMarker(value)) {
+    return "";
+  }
+  if (nodeMap.has(value)) {
+    return value;
+  }
+  const leaf = value.split("/").filter(Boolean).pop() || value;
+  return nodeMap.has(leaf) ? leaf : value;
+}
+
+function collectOfficialFavoriteImportItems(officialFavorites, nodeMap) {
+  const items = [];
+  const seen = new Set();
+  const add = (rawType, groupName = "") => {
+    const nodeType = resolveOfficialFavoriteType(rawType, nodeMap);
+    if (!nodeType || seen.has(nodeType)) {
+      return;
+    }
+    seen.add(nodeType);
+    items.push({
+      type: nodeType,
+      rawType: String(rawType || ""),
+      groupName: String(groupName || "").trim(),
+    });
+  };
+  for (const group of officialFavorites.groups || []) {
+    for (const rawType of group.nodes || []) {
+      add(rawType, group.name);
+    }
+  }
+  for (const rawType of officialFavorites.items || []) {
+    add(rawType, "");
+  }
+  return items;
+}
+
+async function importWorkspace2FavoritesToOfficial(el) {
+  if (!nodesState.library) {
+    await loadNodeLibrary();
+  }
+  const groupCount = Math.max(0, (nodesState.library?.groups || []).length - 1);
+  const nodeCount = (nodesState.library?.favorites || []).length;
+  if (!nodeCount) {
+    alert(t("nodes.noFavoritesToExport"));
+    return;
+  }
+  if (!confirm(t("nodes.confirmImportWorkspace2ToOfficial", { groups: groupCount, nodes: nodeCount }))) {
+    return;
+  }
+  const result = await postJson("/workspace2/nodes/official-favorites/import_from_workspace2", {});
+  alert(t("nodes.importWorkspace2ToOfficialDone", {
+    groups: result.groupCount || 0,
+    nodes: result.nodeCount || 0,
+  }));
+  nodesState.officialFavoritesProbe = null;
+  await detectOfficialFavoritesProbe();
+  renderNodesPanel(el);
+}
+
+function workflowDisplayName(node) {
+  const name = String(node?.name || "");
+  return node?.type === "file" && name.toLowerCase().endsWith(".json") ? name.slice(0, -5) : name;
+}
+
+function detectLocale() {
+  const settingKeys = ["Comfy.Locale", "Comfy_Locale", "Comfy.Locale.value", "Comfy_Locale.value"];
+  const settings = app.ui?.settings;
+  for (const key of settingKeys) {
+    const value = settings?.getSettingValue?.(key)
+      ?? app.extensionManager?.setting?.get?.(key)
+      ?? localStorage.getItem(key);
+    if (value) {
+      return normalizeLocale(value);
+    }
+  }
+  const lang = document.documentElement?.lang || navigator.language || DEFAULT_LOCALE;
+  return normalizeLocale(lang);
+}
+
+function normalizeLocale(locale) {
+  const lang = String(locale || DEFAULT_LOCALE);
+  return String(lang).toLowerCase().startsWith("zh") ? "zh-CN" : DEFAULT_LOCALE;
+}
+
+function cssEscape(value) {
+  if (globalThis.CSS?.escape) {
+    return globalThis.CSS.escape(value);
+  }
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
+function scrollSnapshot(el) {
+  const tree = el?.querySelector?.(".workspace2-tree");
+  const active = document.activeElement;
+  const activeInPanel = active instanceof HTMLElement && el?.contains?.(active);
+  return {
+    top: tree?.scrollTop || 0,
+    activeSelector: activeInPanel ? active.dataset?.workspace2Focus || "" : "",
+    selectionStart: activeInPanel && "selectionStart" in active ? active.selectionStart : null,
+    selectionEnd: activeInPanel && "selectionEnd" in active ? active.selectionEnd : null,
+  };
+}
+
+function restoreScrollSnapshot(el, snapshot) {
+  requestAnimationFrame(() => {
+    const tree = el?.querySelector?.(".workspace2-tree");
+    if (tree) {
+      tree.scrollTop = snapshot?.top || 0;
+    }
+    if (snapshot?.activeSelector) {
+      const active = el?.querySelector?.(`[data-workspace2-focus="${cssEscape(snapshot.activeSelector)}"]`);
+      active?.focus?.();
+      if (active && snapshot.selectionStart !== null && "setSelectionRange" in active) {
+        try {
+          active.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd ?? snapshot.selectionStart);
+        } catch {}
+      }
+    }
+  });
+}
+
+function t(key, values = {}) {
+  const localeFallback = FALLBACK_STRINGS[state.locale]?.[key];
+  const defaultFallback = FALLBACK_STRINGS[DEFAULT_LOCALE]?.[key];
+  const template = localeFallback || state.strings[key] || defaultFallback || key;
+  return String(template).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? "");
+}
+
+function isEditableTarget(target) {
+  return target instanceof HTMLElement
+    && Boolean(target.closest("input, textarea, [contenteditable='true'], [contenteditable='']"));
+}
+
+function setupWorkspaceKeyIsolation() {
+  if (setupWorkspaceKeyIsolation.ready) {
+    return;
+  }
+  setupWorkspaceKeyIsolation.ready = true;
+  const stop = (event) => {
+    if (!event.target?.closest?.(".workspace2-host .workspace2-input")) {
+      return;
+    }
+    event.stopImmediatePropagation();
+  };
+  for (const eventName of ["keydown", "keyup", "keypress"]) {
+    document.addEventListener(eventName, stop, true);
+  }
+}
+
+function setupWorkspaceShortcuts() {
+  if (setupWorkspaceShortcuts.ready) {
+    return;
+  }
+  setupWorkspaceShortcuts.ready = true;
+  const handler = (event) => {
+    if (event.workspace2Handled || event.altKey || event.metaKey || event.repeat) {
+      return;
+    }
+    if (isEditableTarget(event.target)) {
+      return;
+    }
+    if (event.shiftKey && !event.ctrlKey && (event.code === "KeyW" || event.code === "Digit1")) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.workspace2Handled = true;
+      activateWorkspace2Tab(WORKFLOWS_TAB_ID);
+      return;
+    }
+    if (event.shiftKey && !event.ctrlKey && (event.code === "KeyN" || event.code === "Digit2")) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.workspace2Handled = true;
+      activateWorkspace2Tab(NODES_TAB_ID);
+      return;
+    }
+    if (event.shiftKey && !event.ctrlKey && event.code === "KeyG") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      event.workspace2Handled = true;
+      workspace2CanvasGroups.ungroupSelection?.();
+      return;
+    }
+    if (event.ctrlKey && !event.shiftKey && event.code === "KeyG") {
+      if (!isWorkspace2CtrlGCreateEnabled()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      event.workspace2Handled = true;
+      workspace2CanvasGroups.createGroupFromSelection?.();
+    }
+  };
+  document.addEventListener("keydown", handler, true);
+  window.addEventListener("keydown", handler, true);
+}
+
+function isWorkspace2CtrlGCreateEnabled() {
+  return localStorage.getItem(CANVAS_GROUP_CTRL_G_KEY) !== "0";
+}
+
+function notifyCtrlGConflict() {
+  if (Date.now() - (notifyCtrlGConflict.lastShown || 0) < 5000) {
+    return;
+  }
+  notifyCtrlGConflict.lastShown = Date.now();
+  const message = "Ctrl+G is still handled by ComfyUI. Remove the official Ctrl+G binding to use Workspace2 groups.";
+  const toast = app.extensionManager?.toast;
+  if (toast?.addAlert) {
+    toast.addAlert(message);
+  } else if (toast?.add) {
+    toast.add({ severity: "warn", summary: "Workspace2", detail: message, life: 5000 });
+  } else {
+    console.warn(`[Workspace2] ${message}`);
+  }
+}
+
+function registerWorkspace2CanvasGroupCommands() {
+  const commandStore = app.extensionManager?.command;
+  if (!Array.isArray(commandStore?.commands)) {
+    return;
+  }
+  const commands = [
+    {
+      id: "Workspace2.CanvasGroups.CreateGroup",
+      label: "Workspace2: Create canvas group",
+      function: () => {
+        workspace2CanvasGroups.createGroupFromSelection?.();
+      },
+    },
+    {
+      id: "Workspace2.CanvasGroups.UngroupSelection",
+      label: "Workspace2: Ungroup selected canvas group",
+      function: () => {
+        workspace2CanvasGroups.ungroupSelection?.();
+      },
+    },
+  ];
+  for (const command of commands) {
+    if (commandStore.commands.some((existing) => existing?.id === command.id)) {
+      continue;
+    }
+    commandStore.commands.push(command);
+  }
+}
+
+function activateWorkspace2Tab(tabId) {
+  const element = findWorkspace2SidebarTabElement(tabId);
+  if (element) {
+    element.click();
+    return true;
+  }
+
+  const manager = app.extensionManager;
+  const methodNames = [
+    "setActiveSidebarTab",
+    "setSidebarTab",
+    "selectSidebarTab",
+    "openSidebarTab",
+    "activateSidebarTab",
+  ];
+  for (const methodName of methodNames) {
+    if (typeof manager?.[methodName] !== "function") {
+      continue;
+    }
+    try {
+      manager[methodName](tabId);
+      return true;
+    } catch (error) {
+      console.debug(`[Workspace2] ${methodName} failed`, error);
+    }
+  }
+
+  console.debug(`[Workspace2] Sidebar tab not found for shortcut: ${tabId}`);
+  return false;
+}
+
+function findWorkspace2SidebarTabElement(tabId) {
+  const selectors = [
+    `[data-tab-id="${cssEscape(tabId)}"]`,
+    `[data-sidebar-tab-id="${cssEscape(tabId)}"]`,
+    `[data-id="${cssEscape(tabId)}"]`,
+    `[id="${cssEscape(tabId)}"]`,
+  ];
+  for (const selector of selectors) {
+    const element = document.querySelector(selector);
+    if (element instanceof HTMLElement) {
+      return element.closest("button,[role='tab'],[role='button'],.p-tab,.p-button") || element;
+    }
+  }
+
+  const expectedTitle = tabId === WORKFLOWS_TAB_ID
+    ? t("workflows.title")
+    : tabId === NODES_TAB_ID
+      ? t("nodes.title")
+      : t("canvasGroups.title");
+  const candidates = document.querySelectorAll("button,[role='tab'],[role='button'],.p-tab,.p-button");
+  for (const candidate of candidates) {
+    if (!(candidate instanceof HTMLElement)) {
+      continue;
+    }
+    const text = candidate.textContent?.trim();
+    const title = candidate.getAttribute("title") || candidate.getAttribute("aria-label") || "";
+    if (text === expectedTitle || title === expectedTitle) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function isolateComfyKeys(element) {
+  const stop = (event) => event.stopPropagation();
+  for (const eventName of ["keydown", "keyup", "keypress", "compositionstart", "compositionupdate", "compositionend"]) {
+    element.addEventListener(eventName, stop);
+  }
+  element.addEventListener("input", stop);
+  element.addEventListener("beforeinput", stop);
+  element.addEventListener("paste", stop);
+  return element;
+}
+
+async function loadLocale() {
+  state.locale = detectLocale();
+  state.strings = {};
+  try {
+    const response = await fetch(`${api.api_base}/extensions/comfyui-workspace2/locales/${state.locale}.json`);
+    if (!response.ok) {
+      throw new Error(response.statusText);
+    }
+    state.strings = await response.json();
+  } catch (error) {
+    if (state.locale !== DEFAULT_LOCALE) {
+      const response = await fetch(`${api.api_base}/extensions/comfyui-workspace2/locales/${DEFAULT_LOCALE}.json`);
+      state.strings = response.ok ? await response.json() : {};
+    }
+  }
+}
+
+async function refreshLocaleIfChanged() {
+  const nextLocale = detectLocale();
+  if (nextLocale === state.locale) {
+    return;
+  }
+  await loadLocale();
+  if (state.workflowsTarget?.isConnected) {
+    renderPanel(state.workflowsTarget);
+  }
+  if (nodesState.renderTarget?.isConnected) {
+    renderNodesPanel(nodesState.renderTarget);
+  }
+}
+
+function startLocaleWatcher() {
+  if (state.localeTimer) {
+    return;
+  }
+  state.localeTimer = window.setInterval(() => {
+    refreshLocaleIfChanged().catch((error) => {
+      console.debug("[Workspace2] Locale refresh failed", error);
+    });
+  }, 1000);
+}
+
+const DEFAULT_GRAPH = {
+  last_node_id: 9,
+  last_link_id: 9,
+  nodes: [
+    { id: 7, type: "CLIPTextEncode", pos: [413, 389], size: { 0: 425.27801513671875, 1: 180.6060791015625 }, flags: {}, order: 3, mode: 0, inputs: [{ name: "clip", type: "CLIP", link: 5 }], outputs: [{ name: "CONDITIONING", type: "CONDITIONING", links: [6], slot_index: 0 }], properties: {}, widgets_values: ["text, watermark"] },
+    { id: 6, type: "CLIPTextEncode", pos: [415, 186], size: { 0: 422.84503173828125, 1: 164.31304931640625 }, flags: {}, order: 2, mode: 0, inputs: [{ name: "clip", type: "CLIP", link: 3 }], outputs: [{ name: "CONDITIONING", type: "CONDITIONING", links: [4], slot_index: 0 }], properties: {}, widgets_values: ["beautiful scenery nature glass bottle landscape, , purple galaxy bottle,"] },
+    { id: 5, type: "EmptyLatentImage", pos: [473, 609], size: { 0: 315, 1: 106 }, flags: {}, order: 1, mode: 0, outputs: [{ name: "LATENT", type: "LATENT", links: [2], slot_index: 0 }], properties: {}, widgets_values: [512, 512, 1] },
+    { id: 3, type: "KSampler", pos: [863, 186], size: { 0: 315, 1: 262 }, flags: {}, order: 4, mode: 0, inputs: [{ name: "model", type: "MODEL", link: 1 }, { name: "positive", type: "CONDITIONING", link: 4 }, { name: "negative", type: "CONDITIONING", link: 6 }, { name: "latent_image", type: "LATENT", link: 2 }], outputs: [{ name: "LATENT", type: "LATENT", links: [7], slot_index: 0 }], properties: {}, widgets_values: [156680208700286, true, 20, 8, "euler", "normal", 1] },
+    { id: 8, type: "VAEDecode", pos: [1209, 188], size: { 0: 210, 1: 46 }, flags: {}, order: 5, mode: 0, inputs: [{ name: "samples", type: "LATENT", link: 7 }, { name: "vae", type: "VAE", link: 8 }], outputs: [{ name: "IMAGE", type: "IMAGE", links: [9], slot_index: 0 }], properties: {} },
+    { id: 9, type: "SaveImage", pos: [1451, 189], size: { 0: 210, 1: 26 }, flags: {}, order: 6, mode: 0, inputs: [{ name: "images", type: "IMAGE", link: 9 }], properties: {} },
+    { id: 4, type: "CheckpointLoaderSimple", pos: [26, 474], size: { 0: 315, 1: 98 }, flags: {}, order: 0, mode: 0, outputs: [{ name: "MODEL", type: "MODEL", links: [1], slot_index: 0 }, { name: "CLIP", type: "CLIP", links: [3, 5], slot_index: 1 }, { name: "VAE", type: "VAE", links: [8], slot_index: 2 }], properties: {}, widgets_values: ["v1-5-pruned-emaonly.ckpt"] },
+  ],
+  links: [
+    [1, 4, 0, 3, 0, "MODEL"], [2, 5, 0, 3, 3, "LATENT"], [3, 4, 1, 6, 0, "CLIP"], [4, 6, 0, 3, 1, "CONDITIONING"], [5, 4, 1, 7, 0, "CLIP"], [6, 7, 0, 3, 2, "CONDITIONING"], [7, 3, 0, 8, 0, "LATENT"], [8, 4, 2, 8, 1, "VAE"], [9, 8, 0, 9, 0, "IMAGE"],
+  ],
+  groups: [],
+  config: {},
+  extra: {},
+  version: 0.4,
+};
+
+function styles() {
+  if (document.getElementById("workspace2-styles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = "workspace2-styles";
+  style.textContent = `
+    .workspace2-host {
+      height: 100%;
+      max-height: 100%;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .workspace2-panel {
+      --workspace2-tree-font: 12px;
+      --workspace2-folder-font: 12px;
+      --workspace2-node-font: 11px;
+      --workspace2-meta-font: 10px;
+      --workspace2-row-height: 28px;
+      --workspace2-node-row-height: var(--workspace2-row-height);
+      --workspace2-node-row-padding-y: 2px;
+      --workspace2-node-list-gap: 2px;
+      --workspace2-radius: var(--p-border-radius, 6px);
+      --workspace2-radius-sm: calc(var(--workspace2-radius) - 1px);
+      --workspace2-surface: var(--p-content-background, var(--comfy-menu-bg, #202124));
+      --workspace2-control-bg: var(--p-form-field-background, var(--comfy-input-bg, #111));
+      --workspace2-border: var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14)));
+      --workspace2-muted: var(--p-text-muted-color, rgba(255, 255, 255, 0.55));
+      --workspace2-hover: var(--p-list-option-hover-background, rgba(255, 255, 255, 0.075));
+      --workspace2-accent: var(--p-primary-color, var(--accent-color, #0A84FF));
+      --workspace2-accent-soft: color-mix(in srgb, var(--workspace2-accent) 10%, transparent);
+      --workspace2-accent-mid: color-mix(in srgb, var(--workspace2-accent) 18%, transparent);
+      --workspace2-accent-strong: color-mix(in srgb, var(--workspace2-accent) 30%, transparent);
+      --workspace2-accent-border: color-mix(in srgb, var(--workspace2-accent) 42%, transparent);
+      --workspace2-danger: #FF453A;
+      --workspace2-danger-soft: rgba(255, 69, 58, 0.10);
+      --workspace2-danger-mid: rgba(255, 69, 58, 0.22);
+      --workspace2-danger-border: rgba(255, 69, 58, 0.58);
+      box-sizing: border-box;
+      height: 100%;
+      max-height: 100%;
+      min-height: 320px;
+      padding: 10px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--workspace2-surface);
+      font: 12px/1.35 var(--font-family, Arial, sans-serif);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      user-select: none;
+      min-height: 0;
+    }
+    .workspace2-panel.font-medium {
+      --workspace2-tree-font: 13px;
+      --workspace2-folder-font: 13px;
+      --workspace2-node-font: 12px;
+      --workspace2-meta-font: 10.5px;
+      --workspace2-row-height: 31px;
+    }
+    .workspace2-panel.font-large {
+      --workspace2-tree-font: 14px;
+      --workspace2-folder-font: 14px;
+      --workspace2-node-font: 13px;
+      --workspace2-meta-font: 11px;
+      --workspace2-row-height: 34px;
+    }
+    .workspace2-panel.node-spacing-medium {
+      --workspace2-node-row-height: calc(var(--workspace2-row-height) + 4px);
+      --workspace2-node-row-padding-y: 4px;
+      --workspace2-node-list-gap: 4px;
+    }
+    .workspace2-panel.node-spacing-large {
+      --workspace2-node-row-height: calc(var(--workspace2-row-height) + 8px);
+      --workspace2-node-row-padding-y: 5px;
+      --workspace2-node-list-gap: 6px;
+    }
+    .workspace2-panel * { box-sizing: border-box; }
+    .workspace2-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 28px;
+    }
+    .workspace2-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .workspace2-status {
+      opacity: 0.72;
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-toolbar {
+      display: grid;
+      grid-template-columns: minmax(90px, 1fr) repeat(var(--workspace2-toolbar-actions, 6), 30px);
+      gap: 6px;
+      align-items: center;
+    }
+    .workspace2-top {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent);
+      background: var(--workspace2-surface);
+      z-index: 20;
+    }
+    .workspace2-node-top {
+      padding-bottom: 6px;
+      border-bottom: 0;
+    }
+    .workspace2-input,
+    .workspace2-button {
+      min-height: 28px;
+      border: 1px solid var(--workspace2-border);
+      border-radius: var(--workspace2-radius);
+      color: inherit;
+      background: var(--workspace2-control-bg);
+    }
+    .workspace2-input {
+      min-width: 0;
+      padding: 4px 7px;
+      user-select: text;
+    }
+    .workspace2-button {
+      width: 30px;
+      padding: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .workspace2-button:hover,
+    .workspace2-icon-button:hover,
+    .workspace2-menu-item:hover {
+      background: var(--workspace2-hover);
+    }
+    .workspace2-button.is-trash-toggle {
+      border-color: var(--workspace2-accent-border);
+      color: var(--workspace2-accent);
+      background: var(--workspace2-accent-soft);
+    }
+    .workspace2-button.is-trash-toggle:hover,
+    .workspace2-button.is-trash-toggle.is-active {
+      border-color: var(--workspace2-accent);
+      background: var(--workspace2-accent-mid);
+    }
+    .workspace2-node-sort-button[data-sort="alphabetical"] {
+      border-color: var(--workspace2-accent-border);
+      color: var(--workspace2-accent);
+      background: var(--workspace2-accent-soft);
+    }
+    .workspace2-workflow-sort-button:not([data-sort="nameAsc"]) {
+      border-color: var(--workspace2-accent-border);
+      color: var(--workspace2-accent);
+      background: var(--workspace2-accent-soft);
+    }
+    .workspace2-workflow-sort-button.is-custom-order {
+      border-color: var(--workspace2-accent);
+      color: var(--workspace2-accent);
+      background: var(--workspace2-accent-mid);
+    }
+    .workspace2-node-sort-button.is-custom-order {
+      border-color: var(--workspace2-accent);
+      color: var(--workspace2-accent);
+      background: var(--workspace2-accent-mid);
+    }
+    .workspace2-root {
+      min-height: 28px;
+      display: grid;
+      grid-template-columns: 16px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 7px;
+      padding: 4px 6px;
+      border: 1px dashed transparent;
+      border-radius: var(--workspace2-radius-sm);
+      opacity: 0.82;
+      overflow-wrap: anywhere;
+    }
+    .workspace2-root-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-root-label.is-custom::after {
+      content: "custom";
+      margin-left: 6px;
+      padding: 1px 5px;
+      border: 1px solid color-mix(in srgb, var(--workspace2-border) 80%, transparent);
+      border-radius: 999px;
+      font-size: 10px;
+      opacity: .72;
+      text-transform: uppercase;
+    }
+    .workspace2-tree {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: auto;
+      border: 1px dashed transparent;
+      border-radius: var(--workspace2-radius);
+      padding-bottom: 18px;
+      scrollbar-width: thin;
+    }
+    .workspace2-tree.is-drop {
+      border-color: var(--workspace2-accent-border);
+      background: var(--workspace2-accent-soft);
+    }
+    .workspace2-row {
+      min-height: var(--workspace2-row-height);
+      display: grid;
+      grid-template-columns: 16px 18px 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 5px 2px var(--indent);
+      border: 1px solid transparent;
+      border-radius: var(--workspace2-radius-sm);
+      cursor: default;
+      font-size: var(--workspace2-tree-font);
+    }
+    .workspace2-row.is-file {
+      grid-template-columns: 16px 18px minmax(0, 1fr) auto;
+    }
+    .workspace2-row.is-file .workspace2-spacer {
+      display: none;
+    }
+    .workspace2-row:hover {
+      background: var(--workspace2-hover);
+    }
+    .workspace2-row.is-selected {
+      background: var(--workspace2-accent-mid);
+      border-color: var(--workspace2-accent-border);
+    }
+    .workspace2-node-row.is-selected {
+      background: var(--workspace2-accent-mid);
+      border-color: var(--workspace2-accent-border);
+    }
+    .workspace2-row.is-drop,
+    .workspace2-root.is-drop,
+    .workspace2-root-row.is-drop,
+    [data-workspace2-favorite-target].is-drop {
+      border-color: var(--workspace2-accent);
+      background: var(--workspace2-accent-strong);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 30%, transparent);
+    }
+    .workspace2-row.is-drop-region,
+    .workspace2-node-row.is-drop-region,
+    .workspace2-node-folder-header.is-drop-region,
+    .workspace2-node-list.is-drop-region {
+      background: color-mix(in srgb, var(--workspace2-accent) 14%, transparent);
+      box-shadow: inset 2px 0 0 color-mix(in srgb, var(--workspace2-accent) 72%, transparent);
+    }
+    .workspace2-row.is-reorder-before,
+    .workspace2-node-row.is-reorder-before {
+      border-top-color: var(--workspace2-accent);
+      box-shadow: inset 0 2px 0 var(--workspace2-accent);
+    }
+    .workspace2-row.is-reorder-after,
+    .workspace2-node-row.is-reorder-after {
+      border-bottom-color: var(--workspace2-accent);
+      box-shadow: inset 0 -2px 0 var(--workspace2-accent);
+    }
+    .workspace2-disclosure {
+      width: 18px;
+      height: 22px;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      cursor: pointer;
+      opacity: 0.85;
+      padding: 0;
+    }
+    .workspace2-disclosure::before {
+      content: "";
+      display: inline-block;
+      width: 0;
+      height: 0;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-left: 6px solid currentColor;
+      transform: translateY(1px);
+    }
+    .workspace2-disclosure.is-open::before {
+      transform: rotate(90deg) translateX(1px);
+    }
+    .workspace2-spacer {
+      width: 18px;
+      height: 22px;
+    }
+    .workspace2-reorder-spacer {
+      width: 16px;
+      height: 14px;
+      display: inline-block;
+    }
+    .workspace2-folder-icon,
+    .workspace2-file-icon,
+    .workspace2-prime-icon,
+    .workspace2-emoji-icon,
+    .workspace2-reorder-handle {
+      width: 16px;
+      height: 14px;
+      display: inline-block;
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .workspace2-prime-icon,
+    .workspace2-emoji-icon {
+      color: var(--workspace2-icon-color, currentColor);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .workspace2-emoji-icon {
+      font-size: 13px;
+    }
+    .workspace2-folder-icon::before {
+      content: "";
+      position: absolute;
+      left: 2px;
+      top: 3px;
+      width: 6px;
+      height: 3px;
+      border: 1.5px solid currentColor;
+      border-bottom: 0;
+      border-radius: 2px 2px 0 0;
+      opacity: .7;
+    }
+    .workspace2-folder-icon::after {
+      content: "";
+      position: absolute;
+      left: 1px;
+      right: 1px;
+      bottom: 1px;
+      height: 10px;
+      border: 1.5px solid currentColor;
+      border-radius: 2px;
+      opacity: .72;
+    }
+    .workspace2-file-icon::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 5px;
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--workspace2-muted);
+      opacity: 0.9;
+    }
+    .workspace2-reorder-handle {
+      display: inline-grid;
+      place-items: center;
+      cursor: grab;
+      color: var(--workspace2-muted);
+      opacity: 0.85;
+      user-select: none;
+      touch-action: none;
+    }
+    .workspace2-reorder-handle::before {
+      content: "⋮⋮";
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: 0;
+      transform: rotate(90deg);
+    }
+    .workspace2-reorder-handle:hover,
+    .workspace2-row.is-reordering .workspace2-reorder-handle {
+      color: var(--workspace2-accent);
+      opacity: 1;
+    }
+    .workspace2-name {
+      min-width: 0;
+      user-select: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-meta {
+      color: var(--workspace2-muted);
+      opacity: 1;
+      font-size: 9.5px;
+      margin-left: 6px;
+    }
+    .workspace2-actions {
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+    }
+    .workspace2-row:hover .workspace2-actions,
+    .workspace2-row.is-selected .workspace2-actions,
+    .workspace2-node-row:hover .workspace2-actions,
+    .workspace2-node-row.is-selected .workspace2-actions,
+    .workspace2-node-folder-header:hover .workspace2-actions {
+      opacity: 1;
+    }
+    .workspace2-panel.is-dragging,
+    .workspace2-panel.is-dragging * {
+      user-select: none !important;
+      -webkit-user-select: none !important;
+    }
+    .workspace2-icon-button {
+      min-width: 24px;
+      height: 22px;
+      border: 1px solid color-mix(in srgb, var(--workspace2-border) 78%, transparent);
+      border-radius: var(--workspace2-radius-sm);
+      color: inherit;
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 0 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .workspace2-button svg,
+    .workspace2-icon-button svg {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .workspace2-icon-button.is-favorite-active {
+      color: #ffd60a;
+      border-color: rgba(255, 214, 10, 0.45);
+      background: rgba(255, 214, 10, 0.08);
+    }
+    .workspace2-icon-button.is-favorite-active:hover {
+      border-color: rgba(255, 214, 10, 0.65);
+      background: rgba(255, 214, 10, 0.16);
+    }
+    .workspace2-rename-input {
+      width: 100%;
+      min-height: 22px;
+      border: 1px solid var(--workspace2-accent);
+      border-radius: var(--workspace2-radius-sm);
+      color: inherit;
+      background: var(--workspace2-control-bg);
+      padding: 1px 5px;
+      user-select: text;
+    }
+    .workspace2-empty {
+      margin: 12px 4px;
+      opacity: 0.65;
+    }
+    .workspace2-node-section {
+      margin: 8px 0 10px;
+    }
+    .workspace2-node-section-header {
+      min-height: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, auto) 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 5px 3px;
+      color: var(--workspace2-muted);
+      font-size: var(--workspace2-meta-font);
+      font-weight: 400;
+      letter-spacing: 0;
+    }
+    .workspace2-node-section-line {
+      height: 1px;
+      background: color-mix(in srgb, var(--workspace2-border) 52%, transparent);
+      min-width: 12px;
+    }
+    .workspace2-node-section-header .workspace2-meta {
+      font-size: var(--workspace2-meta-font);
+      margin-left: 0;
+    }
+    .workspace2-node-folder-header {
+      min-height: var(--workspace2-row-height);
+      display: grid;
+      grid-template-columns: 18px 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 5px;
+      padding: var(--workspace2-node-row-padding-y) 5px var(--workspace2-node-row-padding-y) var(--indent, 5px);
+      border-radius: var(--workspace2-radius-sm);
+      font-size: var(--workspace2-folder-font);
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .workspace2-node-folder-header .workspace2-folder-icon {
+      width: 16px;
+      height: 14px;
+    }
+    .workspace2-node-folder-header:hover {
+      background: var(--workspace2-hover);
+    }
+    .workspace2-node-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--workspace2-node-list-gap);
+    }
+    .workspace2-node-list > .workspace2-node-row {
+      margin-left: var(--indent, 0px);
+    }
+    .workspace2-node-folder-header + .workspace2-node-list .workspace2-node-row {
+      margin-left: var(--indent, 18px);
+    }
+    .workspace2-node-row {
+      min-height: var(--workspace2-node-row-height);
+      display: grid;
+      grid-template-columns: 16px 8px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 5px;
+      padding: var(--workspace2-node-row-padding-y) 5px var(--workspace2-node-row-padding-y) 8px;
+      border: 1px solid transparent;
+      border-radius: var(--workspace2-radius-sm);
+      font-size: var(--workspace2-node-font);
+      user-select: none;
+    }
+    .workspace2-node-row:hover {
+      background: var(--workspace2-hover);
+    }
+    .workspace2-node-row > svg {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .workspace2-node-row.is-invalid {
+      opacity: 0.55;
+      color: color-mix(in srgb, var(--workspace2-muted) 78%, transparent);
+    }
+    .workspace2-node-row.is-invalid .workspace2-node-dot {
+      opacity: .35;
+    }
+    .workspace2-node-row.is-invalid:hover {
+      background: color-mix(in srgb, var(--workspace2-hover) 45%, transparent);
+    }
+    .workspace2-node-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--workspace2-muted);
+      opacity: 0.85;
+      justify-self: center;
+    }
+    .workspace2-node-category {
+      min-width: 0;
+      color: var(--workspace2-muted);
+      opacity: 1;
+      font-size: var(--workspace2-meta-font);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-node-preview-popover {
+      position: fixed;
+      width: min(248px, calc(100vw - 24px));
+      max-height: min(560px, calc(100vh - 24px));
+      overflow: auto;
+      z-index: 12000;
+      pointer-events: none;
+      border: 1px solid var(--workspace2-border);
+      border-radius: var(--workspace2-radius);
+      padding: 0;
+      background: color-mix(in srgb, var(--workspace2-surface) 97%, transparent);
+      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.42);
+      font-size: 9px;
+      color: var(--p-text-color, var(--fg-color, #f2f2f2));
+    }
+    .workspace2-node-preview-header {
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: color-mix(in srgb, var(--workspace2-border) 48%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 70%, transparent);
+    }
+    .workspace2-node-preview-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border-radius: 50%;
+      background: var(--workspace2-accent);
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+    }
+    .workspace2-node-preview-title {
+      font-size: 9.5px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-node-preview-body {
+      padding: 8px;
+    }
+    .workspace2-node-preview-card {
+      margin-bottom: 7px;
+      overflow: hidden;
+      border: 1px solid color-mix(in srgb, var(--workspace2-border) 82%, transparent);
+      border-radius: var(--workspace2-radius-sm);
+      background: color-mix(in srgb, var(--workspace2-control-bg) 74%, transparent);
+    }
+    .workspace2-node-preview-card-title {
+      min-height: 24px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 7px;
+      background: color-mix(in srgb, var(--workspace2-border) 48%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 70%, transparent);
+      font-weight: 500;
+      font-size: 9px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-node-preview-card-body {
+      padding: 5px 6px 6px;
+    }
+    .workspace2-node-preview-slot-row {
+      min-height: 16px;
+      display: grid;
+      grid-template-columns: 8px minmax(0, 1fr) minmax(24px, 0.45fr) minmax(0, 1fr) 8px;
+      align-items: center;
+      gap: 4px;
+    }
+    .workspace2-node-preview-slot-row + .workspace2-node-preview-slot-row {
+      margin-top: 2px;
+    }
+    .workspace2-node-preview-slot-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-node-preview-slot-name.is-output {
+      text-align: right;
+    }
+    .workspace2-node-preview-slot-type {
+      min-width: 0;
+      opacity: 0.46;
+      overflow: hidden;
+      text-align: center;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-node-preview-widget-row {
+      min-height: 16px;
+      display: grid;
+      grid-template-columns: 9px minmax(0, 1fr) minmax(0, 1fr) 9px;
+      align-items: center;
+      gap: 4px;
+      margin-top: 3px;
+      color: color-mix(in srgb, var(--p-text-color, var(--fg-color, #fff)) 76%, transparent);
+    }
+    .workspace2-node-preview-widget-arrow {
+      opacity: 0.55;
+      text-align: center;
+    }
+    .workspace2-node-preview-meta {
+      opacity: 0.58;
+      overflow-wrap: anywhere;
+      margin-bottom: 4px;
+    }
+    .workspace2-node-preview-desc {
+      opacity: 0.82;
+      margin: 5px 0;
+      line-height: 1.3;
+    }
+    .workspace2-node-preview-section {
+      margin-top: 7px;
+      border-top: 1px solid color-mix(in srgb, var(--workspace2-border) 70%, transparent);
+      padding-top: 5px;
+    }
+    .workspace2-node-preview-section-title {
+      margin-bottom: 5px;
+      color: var(--workspace2-muted);
+      font-size: 8.5px;
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+    .workspace2-node-preview-row {
+      min-height: 18px;
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr) minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+    }
+    .workspace2-node-preview-row + .workspace2-node-preview-row {
+      margin-top: 3px;
+    }
+    .workspace2-node-preview-port {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--workspace2-preview-port, #888);
+    }
+    .workspace2-node-preview-port.is-widget {
+      border-radius: 2px;
+    }
+    .workspace2-node-preview-port.is-output {
+      justify-self: end;
+    }
+    .workspace2-node-preview-name,
+    .workspace2-node-preview-type {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-node-preview-type {
+      opacity: 0.62;
+      text-align: right;
+    }
+    .workspace2-canvas-group-list {
+      flex: 1 1 auto;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .workspace2-canvas-group-row {
+      min-height: 34px;
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      padding: 5px;
+      border: 1px solid transparent;
+      border-radius: var(--workspace2-radius-sm);
+      font-size: var(--workspace2-tree-font);
+    }
+    .workspace2-canvas-group-row:hover {
+      background: var(--workspace2-hover);
+    }
+    .workspace2-canvas-group-row.is-bypassed {
+      opacity: 0.72;
+    }
+    .workspace2-canvas-group-swatch {
+      width: 8px;
+      height: 20px;
+      border-radius: 999px;
+      background: var(--workspace2-group-color, var(--workspace2-accent));
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18);
+    }
+    .workspace2-canvas-group-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-canvas-group-meta {
+      color: var(--workspace2-muted);
+      font-size: var(--workspace2-meta-font);
+      white-space: nowrap;
+    }
+    .workspace2-trash-list {
+      flex: 1 1 auto;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .workspace2-trash-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 6px;
+      align-items: center;
+      min-height: 38px;
+      padding: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+      font-size: var(--workspace2-tree-font);
+    }
+    .workspace2-trash-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .workspace2-trash-meta {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      opacity: 0.62;
+      font-size: var(--workspace2-meta-font);
+    }
+    .workspace2-root-row {
+      min-height: 32px;
+      height: 32px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 156px;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      border: 1px solid color-mix(in srgb, var(--workspace2-accent) 24%, var(--workspace2-border));
+      border-radius: var(--workspace2-radius);
+      opacity: 0.96;
+      background: color-mix(in srgb, var(--workspace2-accent) 7%, transparent);
+      font-size: 12px;
+    }
+    .workspace2-root-row:hover,
+    .workspace2-panel.is-dragging .workspace2-root-row {
+      background: var(--workspace2-accent-mid);
+      border-color: var(--workspace2-accent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 18%, transparent);
+    }
+    .workspace2-root-row.is-drop {
+      background: var(--workspace2-accent-strong);
+      border-color: var(--workspace2-accent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 28%, transparent), 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 18%, transparent);
+    }
+    .workspace2-root-row .workspace2-name {
+      font-weight: 500;
+    }
+    .workspace2-root-target {
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      overflow: hidden;
+    }
+    .workspace2-root-target svg {
+      width: 15px;
+      height: 15px;
+      flex: 0 0 15px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .workspace2-font-control {
+      height: 28px;
+      width: 156px;
+      min-width: 156px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: center;
+      gap: 5px;
+      position: relative;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      white-space: nowrap;
+    }
+    .workspace2-font-control span {
+      display: none;
+      width: 18px;
+      opacity: .72;
+      font-size: 11px;
+      text-align: center;
+    }
+    .workspace2-font-slider {
+      width: 100%;
+      min-width: 0;
+      accent-color: var(--accent-color, #8ab4f8);
+    }
+    .workspace2-slider-value {
+      position: absolute;
+      right: 0;
+      top: -22px;
+      min-width: 34px;
+      padding: 2px 6px;
+      border-radius: var(--workspace2-radius-sm);
+      color: var(--p-text-color, var(--fg-color, #fff));
+      background: color-mix(in srgb, var(--workspace2-control-bg) 92%, black);
+      border: 1px solid color-mix(in srgb, var(--workspace2-border) 80%, transparent);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+      font-size: 10px;
+      line-height: 1.2;
+      text-align: center;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(2px);
+      transition: opacity 120ms ease, transform 120ms ease;
+      z-index: 2;
+    }
+    .workspace2-scale-default-mark {
+      position: absolute;
+      left: 50%;
+      top: 7px;
+      width: 1px;
+      height: 14px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--workspace2-muted) 72%, transparent);
+      pointer-events: none;
+      transform: translateX(-50%);
+    }
+    .workspace2-font-control.is-adjusting .workspace2-slider-value,
+    .workspace2-node-density.is-adjusting .workspace2-slider-value,
+    .workspace2-font-control:focus-within .workspace2-slider-value,
+    .workspace2-node-density:focus-within .workspace2-slider-value {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .workspace2-node-settings {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 6px;
+    }
+    .workspace2-node-density {
+      width: 156px;
+      min-width: 156px;
+      height: 28px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
+      position: relative;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      font-size: var(--workspace2-meta-font);
+      white-space: nowrap;
+    }
+    .workspace2-node-root-row {
+      grid-template-columns: minmax(0, 1fr) 156px;
+    }
+    .workspace2-node-density input {
+      width: 100%;
+      min-width: 0;
+      accent-color: var(--workspace2-accent);
+    }
+    .workspace2-node-density span:last-child {
+      display: none;
+      opacity: .72;
+      text-align: right;
+    }
+    .workspace2-node-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      min-height: 27px;
+      padding: 8px 0 0;
+      border: 0;
+      border-top: 1px solid color-mix(in srgb, var(--workspace2-border) 72%, transparent);
+      border-radius: 0;
+      background: transparent;
+    }
+    .workspace2-node-tab {
+      min-width: 0;
+      min-height: 23px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      border: 0;
+      border-radius: var(--workspace2-radius-sm);
+      color: var(--workspace2-muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: var(--workspace2-meta-font);
+      opacity: .72;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 3px 6px;
+    }
+    .workspace2-node-tab::before {
+      display: none;
+      content: none;
+    }
+    .workspace2-node-tab:hover {
+      background: var(--workspace2-hover);
+      opacity: .9;
+    }
+    .workspace2-node-tab.is-active {
+      background: var(--workspace2-accent-soft);
+      color: var(--workspace2-accent);
+      opacity: 1;
+      font-weight: 500;
+    }
+    .workspace2-node-tab.is-active::before {
+      background: currentColor;
+      box-shadow: inset 0 0 0 2px var(--workspace2-control-bg);
+    }
+    .workspace2-node-range {
+      height: 28px;
+      display: grid;
+      grid-template-columns: auto minmax(44px, 1fr) 18px;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      padding: 0 7px;
+      border: 1px solid var(--workspace2-border);
+      border-radius: var(--workspace2-radius-sm);
+      background: var(--workspace2-control-bg);
+      white-space: nowrap;
+      font-size: var(--workspace2-meta-font);
+    }
+    .workspace2-node-range input {
+      min-width: 0;
+      width: 100%;
+      accent-color: var(--workspace2-accent);
+    }
+    .workspace2-node-range span:last-child {
+      opacity: .72;
+      text-align: right;
+    }
+    .workspace2-empty-trash-row {
+      color: var(--workspace2-danger);
+      border-color: var(--workspace2-danger-border);
+      background: var(--workspace2-danger-soft);
+    }
+    .workspace2-empty-trash-row:hover {
+      background: var(--workspace2-danger-mid);
+      border-color: var(--workspace2-danger);
+    }
+    .workspace2-context {
+      position: fixed;
+      z-index: 100000;
+      min-width: 160px;
+      padding: 4px;
+      border: 1px solid var(--border-color, #555);
+      border-radius: 6px;
+      background: var(--comfy-menu-bg, #202124);
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    .workspace2-menu-item {
+      display: block;
+      width: 100%;
+      min-height: 28px;
+      border: 0;
+      border-radius: 4px;
+      color: inherit;
+      background: transparent;
+      text-align: left;
+      padding: 5px 9px;
+      cursor: pointer;
+    }
+    .workspace2-menu-divider {
+      height: 1px;
+      margin: 4px 6px;
+      background: color-mix(in srgb, var(--workspace2-border) 80%, transparent);
+    }
+    .workspace2-menu-check-item {
+      position: relative;
+      padding-left: 25px;
+    }
+    .workspace2-menu-check-item.is-active::before {
+      content: "✓";
+      position: absolute;
+      left: 9px;
+      top: 5px;
+      color: var(--workspace2-accent);
+      font-weight: 700;
+    }
+    .workspace2-menu-item.is-active {
+      color: var(--workspace2-accent);
+      background: var(--workspace2-accent-soft);
+    }
+    .workspace2-menu-item:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .workspace2-personalize-panel {
+      position: fixed;
+      z-index: 100002;
+      width: 282px;
+      padding: 10px;
+      border: 1px solid var(--workspace2-border, rgba(255,255,255,.14));
+      border-radius: 10px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--workspace2-surface, var(--comfy-menu-bg, #202124));
+      box-shadow: 0 14px 34px rgba(0,0,0,.42);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font: 12px/1.35 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-personalize-title {
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .workspace2-personalize-preview {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 32px;
+      padding: 6px 8px;
+      border: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--workspace2-hover, rgba(255,255,255,.075)) 60%, transparent);
+    }
+    .workspace2-personalize-preview-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-personalize-label {
+      color: var(--workspace2-muted, rgba(255,255,255,.55));
+      font-size: 11px;
+    }
+    .workspace2-personalize-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 5px;
+    }
+    .workspace2-personalize-choice,
+    .workspace2-personalize-swatch {
+      min-width: 0;
+      height: 25px;
+      border: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 80%, transparent);
+      border-radius: 7px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .workspace2-personalize-choice.is-active,
+    .workspace2-personalize-swatch.is-active {
+      border-color: var(--workspace2-accent, #0A84FF);
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--workspace2-accent, #0A84FF) 45%, transparent);
+    }
+    .workspace2-personalize-swatch {
+      background: var(--workspace2-swatch-color, transparent);
+    }
+    .workspace2-personalize-color-row {
+      display: grid;
+      grid-template-columns: 1fr 38px;
+      gap: 7px;
+      align-items: center;
+    }
+    .workspace2-personalize-color-row input[type="color"] {
+      width: 38px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid var(--workspace2-border, rgba(255,255,255,.14));
+      border-radius: 7px;
+      background: transparent;
+    }
+    .workspace2-personalize-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .workspace2-personalize-actions button {
+      min-height: 27px;
+      border: 1px solid var(--workspace2-border, rgba(255,255,255,.14));
+      border-radius: 7px;
+      color: inherit;
+      background: var(--workspace2-control-bg, #111);
+      cursor: pointer;
+      padding: 3px 9px;
+    }
+    .workspace2-personalize-actions button.is-primary {
+      border-color: var(--workspace2-accent, #0A84FF);
+      background: var(--workspace2-accent, #0A84FF);
+      color: white;
+    }
+    .workspace2-drag-ghost {
+      position: fixed;
+      z-index: 100001;
+      pointer-events: none;
+      max-width: 280px;
+      padding: 5px 9px;
+      border: 1px solid var(--accent-color, #8ab4f8);
+      border-radius: 5px;
+      color: var(--fg-color, #ddd);
+      background: var(--comfy-menu-bg, #202124);
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      opacity: 0.92;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  `;
+  document.head.append(style);
+}
+
+async function fetchJson(path, options) {
+  const response = await api.fetchApi(path, options);
+  const data = await response.json();
+  if (!response.ok || data.ok === false) {
+    throw new Error(data.error || response.statusText);
+  }
+  return data;
+}
+
+async function postJson(path, body) {
+  return fetchJson(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function refreshOfficialWorkflows() {
+  try {
+    await app.extensionManager?.workflow?.syncWorkflows?.();
+  } catch (error) {
+    console.debug("[Workspace2] Official workflow refresh failed", error);
+  }
+}
+
+async function loadWorkflows() {
+  state.status = t("status.loading");
+  const data = await fetchJson("/workspace2/workflows");
+  state.items = data.items || [];
+  state.root = data.root || "";
+  state.officialRoot = data.official_root || "";
+  state.folderMeta = data.folder_meta || {};
+  state.isOfficialRoot = data.is_official_root !== false;
+  state.signature = workflowSignature(state.items);
+  state.status = t("status.items", { count: state.items.length });
+}
+
+function workflowSignature(items) {
+  return items
+    .map((item) => `${item.type}:${item.path}:${item.updated_at || 0}:${item.size_bytes || 0}`)
+    .sort()
+    .join("|");
+}
+
+function trashSignature(items) {
+  return items
+    .map((item) => `${item.id}:${item.status}:${item.original_path}:${item.deleted_at || ""}`)
+    .sort()
+    .join("|");
+}
+
+function parentPath(path) {
+  const index = path.lastIndexOf("/");
+  return index === -1 ? "" : path.slice(0, index);
+}
+
+function normalizeMetaPath(path) {
+  return String(path || "").replace(/\\/g, "/");
+}
+
+function isPrimeIconClass(icon) {
+  return /^pi(\s|$)/.test(String(icon || "").trim());
+}
+
+function applyDecoratedIcon(element, icon, color, fallbackClass) {
+  const value = String(icon || "").trim();
+  element.className = "";
+  element.textContent = "";
+  element.style.removeProperty("--workspace2-icon-color");
+  if (color) {
+    element.style.setProperty("--workspace2-icon-color", String(color));
+  }
+  if (value && !isPrimeIconClass(value)) {
+    element.className = "workspace2-emoji-icon";
+    element.textContent = value;
+    return;
+  }
+  element.className = `workspace2-prime-icon ${value || fallbackClass}`;
+}
+
+const PERSONALIZE_EMOJIS = ["📁", "⭐", "🔖", "🏷️", "🔥", "🖼️", "🎨", "🧩", "⚙️", "📦", "📝", "❤️", "💡", "🎬", "🧠", "✨"];
+const PERSONALIZE_COLORS = ["", "#0A84FF", "#30D158", "#FF9F0A", "#FF453A", "#BF5AF2", "#FF375F", "#FFD60A", "#8E8E93"];
+
+function closePersonalizationPanel() {
+  const panel = document.querySelector(".workspace2-personalize-panel");
+  if (panel?.workspace2CloseHandler) {
+    document.removeEventListener("pointerdown", panel.workspace2CloseHandler, true);
+    document.removeEventListener("keydown", panel.workspace2CloseHandler, true);
+  }
+  panel?.remove();
+}
+
+function clampFloatingPanel(left, top, width = 282, height = 360) {
+  const margin = 10;
+  return {
+    left: Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - width - margin)),
+    top: Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin)),
+  };
+}
+
+function openPersonalizationPanel(options) {
+  closePersonalizationPanel();
+  const {
+    title = t("folder.personalizeTitle"),
+    name = "",
+    icon = "",
+    color = "",
+    anchor = null,
+    onApply,
+    onReset,
+  } = options || {};
+  let selectedIcon = String(icon || "").trim();
+  let selectedColor = String(color || "").trim();
+
+  const panel = document.createElement("div");
+  panel.className = "workspace2-personalize-panel";
+  const anchorRect = anchor?.getBoundingClientRect?.();
+  const x = Number(anchor?.clientX ?? anchorRect?.left ?? window.innerWidth / 2);
+  const y = Number(anchor?.clientY ?? anchorRect?.bottom ?? window.innerHeight / 2);
+  const pos = clampFloatingPanel(x, y);
+  panel.style.left = `${pos.left}px`;
+  panel.style.top = `${pos.top}px`;
+  panel.addEventListener("pointerdown", (event) => event.stopPropagation(), true);
+  panel.addEventListener("click", (event) => event.stopPropagation());
+  panel.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  const heading = document.createElement("div");
+  heading.className = "workspace2-personalize-title";
+  heading.textContent = title;
+
+  const preview = document.createElement("div");
+  preview.className = "workspace2-personalize-preview";
+  const previewIcon = document.createElement("span");
+  const previewName = document.createElement("div");
+  previewName.className = "workspace2-personalize-preview-name";
+  previewName.textContent = name || title;
+  preview.append(previewIcon, previewName);
+
+  const iconLabel = document.createElement("div");
+  iconLabel.className = "workspace2-personalize-label";
+  iconLabel.textContent = t("folder.personalizeIcon");
+  const iconGrid = document.createElement("div");
+  iconGrid.className = "workspace2-personalize-grid";
+
+  const colorLabel = document.createElement("div");
+  colorLabel.className = "workspace2-personalize-label";
+  colorLabel.textContent = t("folder.personalizeColor");
+  const colorGrid = document.createElement("div");
+  colorGrid.className = "workspace2-personalize-grid";
+
+  const colorRow = document.createElement("div");
+  colorRow.className = "workspace2-personalize-color-row";
+  const colorText = document.createElement("div");
+  colorText.className = "workspace2-personalize-label";
+  colorText.textContent = "Color";
+  const colorInput = document.createElement("input");
+  colorInput.type = "color";
+  colorInput.value = /^#[0-9a-f]{6}$/i.test(selectedColor) ? selectedColor : "#0A84FF";
+  colorRow.append(colorText, colorInput);
+
+  const refresh = () => {
+    applyDecoratedIcon(previewIcon, selectedIcon, selectedColor, DEFAULT_FOLDER_ICON_CLASS);
+    iconGrid.querySelectorAll("button").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.icon === selectedIcon);
+    });
+    colorGrid.querySelectorAll("button").forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.color === selectedColor);
+    });
+  };
+
+  const defaultIcon = document.createElement("button");
+  defaultIcon.type = "button";
+  defaultIcon.className = "workspace2-personalize-choice";
+  defaultIcon.textContent = "∅";
+  defaultIcon.title = t("folder.personalizeDefault");
+  defaultIcon.dataset.icon = "";
+  defaultIcon.addEventListener("click", () => {
+    selectedIcon = "";
+    refresh();
+  });
+  iconGrid.append(defaultIcon);
+  for (const emoji of PERSONALIZE_EMOJIS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace2-personalize-choice";
+    button.textContent = emoji;
+    button.dataset.icon = emoji;
+    button.addEventListener("click", () => {
+      selectedIcon = emoji;
+      refresh();
+    });
+    iconGrid.append(button);
+  }
+
+  for (const swatch of PERSONALIZE_COLORS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace2-personalize-swatch";
+    button.title = swatch || t("folder.personalizeDefault");
+    button.dataset.color = swatch;
+    if (swatch) {
+      button.style.setProperty("--workspace2-swatch-color", swatch);
+    } else {
+      button.textContent = "∅";
+    }
+    button.addEventListener("click", () => {
+      selectedColor = swatch;
+      if (swatch) {
+        colorInput.value = swatch;
+      }
+      refresh();
+    });
+    colorGrid.append(button);
+  }
+  colorInput.addEventListener("input", () => {
+    selectedColor = colorInput.value;
+    refresh();
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "workspace2-personalize-actions";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = t("folder.personalizeCancel");
+  cancel.addEventListener("click", closePersonalizationPanel);
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.textContent = t("folder.personalizeReset");
+  reset.addEventListener("click", async () => {
+    try {
+      await onReset?.();
+      closePersonalizationPanel();
+    } catch (error) {
+      console.error("[Workspace2] personalize reset failed", error);
+    }
+  });
+  const apply = document.createElement("button");
+  apply.type = "button";
+  apply.className = "is-primary";
+  apply.textContent = t("folder.personalizeApply");
+  apply.addEventListener("click", async () => {
+    try {
+      await onApply?.({ icon: selectedIcon, color: selectedColor });
+      closePersonalizationPanel();
+    } catch (error) {
+      console.error("[Workspace2] personalize apply failed", error);
+    }
+  });
+  actions.append(cancel, reset, apply);
+
+  panel.append(heading, preview, iconLabel, iconGrid, colorLabel, colorGrid, colorRow, actions);
+  document.body.append(panel);
+  refresh();
+
+  panel.workspace2CloseHandler = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closePersonalizationPanel();
+      return;
+    }
+    if (event.type === "pointerdown" && !panel.contains(event.target)) {
+      closePersonalizationPanel();
+    }
+  };
+  setTimeout(() => {
+    document.addEventListener("pointerdown", panel.workspace2CloseHandler, true);
+    document.addEventListener("keydown", panel.workspace2CloseHandler, true);
+  }, 0);
+}
+
+function workflowFolderMeta(path) {
+  return state.folderMeta?.[normalizeMetaPath(path)] || {};
+}
+
+async function saveWorkflowFolderMeta(el, path, patch) {
+  const key = normalizeMetaPath(path);
+  const nextMeta = { ...(state.folderMeta || {}) };
+  const nextValue = { ...(nextMeta[key] || {}), ...patch };
+  for (const field of ["icon", "color"]) {
+    if (!String(nextValue[field] || "").trim()) {
+      delete nextValue[field];
+    }
+  }
+  if (nextValue.icon || nextValue.color) {
+    nextMeta[key] = nextValue;
+  } else {
+    delete nextMeta[key];
+  }
+  const data = await postJson("/workspace2/folder-meta", { folder_meta: nextMeta });
+  state.folderMeta = data.folder_meta || nextMeta;
+  renderPanel(el);
+}
+
+async function changeWorkflowFolderIcon(el, item) {
+  const meta = workflowFolderMeta(item.path);
+  const value = window.prompt(t("folder.promptIcon"), meta.icon || "");
+  if (value === null) {
+    return;
+  }
+  await saveWorkflowFolderMeta(el, item.path, { icon: value.trim() });
+}
+
+async function changeWorkflowFolderColor(el, item) {
+  const meta = workflowFolderMeta(item.path);
+  const value = window.prompt(t("folder.promptColor"), meta.color || "");
+  if (value === null) {
+    return;
+  }
+  await saveWorkflowFolderMeta(el, item.path, { color: value.trim() });
+}
+
+async function resetWorkflowFolderStyle(el, item) {
+  await saveWorkflowFolderMeta(el, item.path, { icon: "", color: "" });
+}
+
+function personalizeWorkflowFolder(el, item, anchor = null) {
+  const meta = workflowFolderMeta(item.path);
+  openPersonalizationPanel({
+    title: t("folder.personalizeTitle"),
+    name: item.name,
+    icon: meta.icon || "",
+    color: meta.color || "",
+    anchor,
+    onApply: async (value) => {
+      await saveWorkflowFolderMeta(el, item.path, {
+        icon: value.icon,
+        color: value.color,
+      });
+    },
+    onReset: async () => {
+      await resetWorkflowFolderStyle(el, item);
+    },
+  });
+}
+
+function readWorkflowCustomOrder() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WORKFLOW_ORDER_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveWorkflowCustomOrder() {
+  localStorage.setItem(WORKFLOW_ORDER_KEY, JSON.stringify(state.customOrder || {}));
+}
+
+function buildTree() {
+  const root = {
+    type: "folder",
+    name: "Root",
+    path: "",
+    children: [],
+  };
+  const folders = new Map([["", root]]);
+
+  for (const item of state.items) {
+    if (item.type !== "folder") {
+      continue;
+    }
+    folders.set(item.path, { ...item, children: [] });
+  }
+
+  const sortedFolders = [...folders.values()]
+    .filter((item) => item.path)
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  for (const folder of sortedFolders) {
+    const parent = folders.get(parentPath(folder.path)) || root;
+    parent.children.push(folder);
+  }
+
+  for (const item of state.items) {
+    if (item.type !== "file") {
+      continue;
+    }
+    const parent = folders.get(parentPath(item.path)) || root;
+    parent.children.push({ ...item, children: [] });
+  }
+
+  sortTree(root);
+  return root;
+}
+
+function sortTree(node) {
+  node.children.sort((a, b) => {
+    if (state.folderFirst && a.type !== b.type) {
+      return a.type === "folder" ? -1 : 1;
+    }
+    if (state.customOrderEnabled) {
+      return compareWorkflowItems(a, b, node.path || "");
+    }
+    if (a.type !== b.type) {
+      return a.type === "folder" ? -1 : 1;
+    }
+    return compareWorkflowItems(a, b);
+  });
+  for (const child of node.children) {
+    if (child.type === "folder") {
+      sortTree(child);
+    }
+  }
+}
+
+function compareWorkflowItems(a, b, parent = "") {
+  const nameCompare = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  const updatedA = Number(a.updated_at || 0);
+  const updatedB = Number(b.updated_at || 0);
+  if (state.customOrderEnabled) {
+    const order = Array.isArray(state.customOrder?.[parent]) ? state.customOrder[parent] : [];
+    const indexA = order.indexOf(a.path);
+    const indexB = order.indexOf(b.path);
+    if (indexA !== -1 || indexB !== -1) {
+      if (indexA === -1) {
+        return 1;
+      }
+      if (indexB === -1) {
+        return -1;
+      }
+      return indexA - indexB;
+    }
+    if (a.type !== b.type) {
+      return a.type === "folder" ? -1 : 1;
+    }
+  }
+  if (state.sort === "nameDesc") {
+    return -nameCompare;
+  }
+  if (state.sort === "updatedDesc") {
+    return (updatedB - updatedA) || nameCompare;
+  }
+  if (state.sort === "updatedAsc") {
+    return (updatedA - updatedB) || nameCompare;
+  }
+  return nameCompare;
+}
+
+function matchesQuery(node, query) {
+  if (!query) {
+    return true;
+  }
+  if (node.path.toLowerCase().includes(query)) {
+    return true;
+  }
+  return node.children?.some((child) => matchesQuery(child, query));
+}
+
+function visibleChildren(node) {
+  const query = state.query.trim().toLowerCase();
+  if (!query) {
+    return node.children;
+  }
+  return node.children.filter((child) => matchesQuery(child, query));
+}
+
+function getTreeScrollTop(el) {
+  return el.querySelector(".workspace2-tree")?.scrollTop || 0;
+}
+
+function restoreTreeScrollTop(el, scrollTop) {
+  if (!Number.isFinite(scrollTop)) {
+    return;
+  }
+  requestAnimationFrame(() => {
+    const tree = el.querySelector(".workspace2-tree");
+    if (tree) {
+      tree.scrollTop = scrollTop;
+    }
+  });
+}
+
+async function refreshPanel(el, options = {}) {
+  await loadWorkflows();
+  renderPanel(el);
+  restoreTreeScrollTop(el, options.scrollTop);
+}
+
+function handleError(el, error) {
+  state.status = t("status.error", { message: error.message });
+  renderPanel(el);
+}
+
+function officialWorkflowPath(path) {
+  return `workflows/${String(path || "").replace(/^\/+/, "")}`;
+}
+
+async function openWorkflowFromOfficialStore(path) {
+  if (!state.isOfficialRoot) {
+    return false;
+  }
+
+  const workflowStore = app.extensionManager?.workflow;
+  if (!workflowStore?.syncWorkflows || !workflowStore?.getWorkflowByPath) {
+    return false;
+  }
+
+  await workflowStore.syncWorkflows();
+  const workflow = workflowStore.getWorkflowByPath(officialWorkflowPath(path));
+  if (!workflow) {
+    return false;
+  }
+
+  const loadFromRemote = !workflow.isLoaded;
+  if (loadFromRemote && typeof workflow.load === "function") {
+    await workflow.load();
+  }
+
+  const workflowData = workflow.activeState || (workflow.content ? JSON.parse(workflow.content) : null);
+  if (!workflowData) {
+    return false;
+  }
+
+  await app.loadGraphData(workflowData, true, true, workflow, {
+    checkForRerouteMigration: false,
+    deferWarnings: true,
+    skipAssetScans: !loadFromRemote,
+  });
+  return true;
+}
+
+async function openWorkflow(path) {
+  let opened = false;
+  try {
+    opened = await openWorkflowFromOfficialStore(path);
+  } catch (error) {
+    console.debug("[Workspace2] Official workflow open failed; using fallback", error);
+  }
+
+  if (!opened) {
+    const data = await fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`);
+    await app.loadGraphData(data.workflow);
+  }
+  state.selectedPath = path;
+}
+
+async function openWorkflowLocation(path) {
+  await postJson("/workspace2/open_item_location", { path });
+}
+
+async function setRootPath(el) {
+  const nextPath = window.prompt(
+    t("prompt.rootPath"),
+    state.root || state.officialRoot || "",
+  );
+  if (nextPath === null) {
+    return;
+  }
+
+  const data = await postJson("/workspace2/root/set", { root_path: nextPath.trim() });
+  state.root = data.root || state.root;
+  state.isOfficialRoot = data.is_official_root !== false;
+  state.selectedPath = "";
+  state.expanded = new Set([""]);
+  state.status = state.isOfficialRoot ? t("status.rootOfficial") : t("status.rootChanged");
+  await refreshPanel(el);
+  await refreshOfficialWorkflows();
+}
+
+async function createFolder(el, parent = "") {
+  const name = uniqueWorkflowFolderName(parent);
+  const path = joinPath(parent, name);
+  await postJson("/workspace2/folder/create", {
+    parent_path: parent,
+    name,
+  });
+  state.expanded.add(parent);
+  state.selectedPath = path;
+  state.editingPath = path;
+  state.status = t("status.folderCreated");
+  await refreshPanel(el);
+  await refreshOfficialWorkflows();
+}
+
+function selectedFolderPath() {
+  const selected = state.items.find((item) => item.path === state.selectedPath);
+  return selected?.type === "folder" ? selected.path : "";
+}
+
+function joinPath(parent, name) {
+  return parent ? `${parent}/${name}` : name;
+}
+
+function uniqueWorkflowFolderName(parent, baseName = t("folder.defaultName")) {
+  const existing = new Set(
+    state.items
+      .filter((item) => item.type === "folder" && parentPath(item.path) === parent)
+      .map((item) => item.name.toLowerCase()),
+  );
+  let name = baseName;
+  let index = 2;
+  while (existing.has(name.toLowerCase())) {
+    name = `${baseName} ${index}`;
+    index += 1;
+  }
+  return name;
+}
+
+function uniqueWorkflowPath(parent, baseName = "New Workflow") {
+  const existing = new Set(state.items.map((item) => item.path.toLowerCase()));
+  let name = `${baseName}.json`;
+  let path = joinPath(parent, name);
+  let index = 2;
+  while (existing.has(path.toLowerCase())) {
+    name = `${baseName} ${index}.json`;
+    path = joinPath(parent, name);
+    index += 1;
+  }
+  return path;
+}
+
+async function createWorkflow(el, parent = selectedFolderPath()) {
+  const path = uniqueWorkflowPath(parent);
+  await postJson("/workspace2/workflow/save", {
+    path,
+    workflow: JSON.parse(JSON.stringify(DEFAULT_GRAPH)),
+  });
+  state.expanded.add(parent);
+  state.selectedPath = path;
+  state.status = t("status.workflowCreated");
+  await refreshPanel(el);
+  await refreshOfficialWorkflows();
+  await openWorkflow(path);
+}
+
+async function renameItem(el, item, newName) {
+  if (!newName || newName === item.name) {
+    state.editingPath = "";
+    renderPanel(el);
+    return;
+  }
+  await postJson("/workspace2/rename", {
+    path: item.path,
+    new_name: newName,
+  });
+  state.editingPath = "";
+  state.status = t("status.renamed");
+  await refreshPanel(el);
+  await refreshOfficialWorkflows();
+}
+
+async function moveItem(el, sourcePath, targetFolder) {
+  await postJson("/workspace2/move", {
+    source_path: sourcePath,
+    target_folder: targetFolder,
+  });
+  state.expanded.add(targetFolder);
+  state.status = targetFolder ? t("status.movedTo", { target: targetFolder }) : t("status.movedToRoot");
+  await refreshPanel(el);
+  await refreshOfficialWorkflows();
+}
+
+async function moveToTrash(el, item) {
+  const scrollTop = getTreeScrollTop(el);
+  await postJson("/workspace2/trash/move", { path: item.path });
+  state.selectedPath = "";
+  state.status = t("status.movedToTrash");
+  await refreshPanel(el, { scrollTop });
+  await refreshOfficialWorkflows();
+}
+
+async function loadTrash() {
+  const data = await fetchJson("/workspace2/trash/list");
+  state.trashItems = data.items || [];
+  state.trashSignature = trashSignature(state.trashItems);
+  state.status = t("status.trashedItems", { count: state.trashItems.length });
+}
+
+async function pollForExternalChanges(el) {
+  try {
+    if (state.showTrash) {
+      const data = await fetchJson("/workspace2/trash/list");
+      const items = data.items || [];
+      const nextSignature = trashSignature(items);
+      if (nextSignature !== state.trashSignature) {
+        state.trashItems = items;
+        state.trashSignature = nextSignature;
+        state.status = t("status.trashedItems", { count: items.length });
+        renderPanel(el);
+      }
+      return;
+    }
+
+    const data = await fetchJson("/workspace2/workflows");
+    const items = data.items || [];
+    const nextSignature = workflowSignature(items);
+    if (nextSignature !== state.signature) {
+      state.items = items;
+      state.root = data.root || state.root;
+      state.officialRoot = data.official_root || state.officialRoot;
+      state.folderMeta = data.folder_meta || state.folderMeta || {};
+      state.isOfficialRoot = data.is_official_root !== false;
+      state.signature = nextSignature;
+      state.status = t("status.items", { count: items.length });
+      renderPanel(el);
+    }
+  } catch (error) {
+    state.status = t("status.refreshError", { message: error.message });
+    renderPanel(el);
+  }
+}
+
+function startAutoRefresh(el) {
+  state.refreshTarget = el;
+  if (state.refreshTimer) {
+    return;
+  }
+  state.refreshTimer = setInterval(() => {
+    if (state.refreshTarget) {
+      pollForExternalChanges(state.refreshTarget);
+    }
+  }, 4000);
+  window.addEventListener("focus", () => {
+    if (state.refreshTarget) {
+      pollForExternalChanges(state.refreshTarget);
+    }
+  });
+}
+
+async function restoreTrashItem(el, trashId, restoreMode = "original") {
+  await postJson("/workspace2/trash/restore", {
+    trash_id: trashId,
+    restore_mode: restoreMode,
+  });
+  await loadTrash();
+  await loadWorkflows();
+  await refreshOfficialWorkflows();
+  renderPanel(el);
+}
+
+async function restoreTrashItemSmart(el, item) {
+  try {
+    await restoreTrashItem(el, item.id, "original");
+  } catch (error) {
+    if (String(error.message || "").includes("already exists")) {
+      await restoreTrashItem(el, item.id, "copy_name");
+      return;
+    }
+    throw error;
+  }
+}
+
+async function moveTrashItemToSystemTrash(el, item) {
+  if (!window.confirm(t("trash.confirmSystemDelete", { name: item.name }))) {
+    return;
+  }
+  await postJson("/workspace2/trash/system_delete", { trash_id: item.id });
+  state.status = t("status.systemDeleted");
+  await loadTrash();
+  renderPanel(el);
+}
+
+async function emptyTrash(el) {
+  if (!state.trashItems.length) {
+    return;
+  }
+  if (!window.confirm(t("trash.confirmEmpty", { count: state.trashItems.length }))) {
+    return;
+  }
+  const result = await postJson("/workspace2/trash/empty", {});
+  await loadTrash();
+  state.status = result.errors?.length
+    ? t("status.systemTrashPartial", { count: result.errors.length })
+    : t("status.systemTrashDone");
+  renderPanel(el);
+}
+
+function iconSvg(name) {
+  const paths = {
+    folderPlus: '<path d="M3 7h5l2 2h11v9a2 2 0 0 1-2 2H3z"/><path d="M12 14h6"/><path d="M15 11v6"/>',
+    filePlus: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6"/><path d="M12 12v6"/>',
+    refresh: '<path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 16h6v6"/><path d="M3 12A9 9 0 0 1 18.4 5.6L21 8"/><path d="M21 8h-6V2"/>',
+    folderOpen: '<path d="M3 7h5l2 2h11"/><path d="M3 7v13h16l3-9H6l-3 9"/>',
+    trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    trashPage: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    systemTrash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11l4 4"/><path d="M14 11l-4 4"/>',
+    files: '<path d="M8 2h8l4 4v12a2 2 0 0 1-2 2H8z"/><path d="M16 2v5h5"/><path d="M4 6v16h12"/>',
+    open: '<path d="M7 17L17 7"/><path d="M8 7h9v9"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
+    palette: '<path d="M12 3a9 9 0 0 0 0 18h1.5a1.8 1.8 0 0 0 1.3-3.1 1.8 1.8 0 0 1 1.3-3h1.9A3 3 0 0 0 21 12a9 9 0 0 0-9-9z"/><circle cx="7.5" cy="10" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="14" cy="7.5" r="1"/><circle cx="16.5" cy="10" r="1"/>',
+    badge: '<path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/>',
+    restore: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/>',
+    copy: '<path d="M8 8h12v12H8z"/><path d="M4 16V4h12"/>',
+    target: '<circle cx="12" cy="12" r="7"/><path d="M12 3v4"/><path d="M12 17v4"/><path d="M3 12h4"/><path d="M17 12h4"/>',
+    rootArrow: '<path d="M3 12h13a5 5 0 0 1 5 5v3"/><path d="M3 12l5-5"/><path d="M3 12l5 5"/>',
+    sort: '<path d="M11 5H4"/><path d="M11 9H7"/><path d="M11 13H9"/><path d="M15 3v18"/><path d="M15 21l4-4"/><path d="M15 21l-4-4"/>',
+    sync: '<path d="M21 12a9 9 0 0 1-14.6 7"/><path d="M3 12A9 9 0 0 1 17.6 5"/><path d="M17 2v4h4"/><path d="M7 22v-4H3"/>',
+    arrowsUpDown: '<path d="M8 3v14"/><path d="M4 13l4 4 4-4"/><path d="M16 21V7"/><path d="M12 11l4-4 4 4"/>',
+    download: '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+    upload: '<path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/>',
+    star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
+    starFilled: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z" fill="currentColor"/>',
+  };
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = paths[name] || paths.files;
+  return svg;
+}
+
+function toolbarButton(iconName, title, onClick) {
+  const element = document.createElement("button");
+  element.className = "workspace2-button";
+  element.type = "button";
+  element.title = title;
+  element.setAttribute("aria-label", title);
+  element.append(iconSvg(iconName));
+  element.addEventListener("click", onClick);
+  return element;
+}
+
+function iconButton(iconName, title, onClick) {
+  const element = document.createElement("button");
+  element.className = "workspace2-icon-button";
+  element.type = "button";
+  element.title = title;
+  element.setAttribute("aria-label", title);
+  element.append(iconSvg(iconName));
+  element.addEventListener("click", (event) => {
+    if (nodesState.suppressClick) {
+      nodesState.suppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    event.stopPropagation();
+    onClick(event);
+  });
+  return element;
+}
+
+function emptyNodeLibrary() {
+  return {
+    version: 2,
+    groups: [
+      {
+        id: NODE_DEFAULT_GROUP_ID,
+        name: t("nodes.defaultGroup"),
+        order: 0,
+        collapsed: false,
+      },
+    ],
+    favorites: [],
+    settings: {
+      searchMode: "basic",
+      enablePinyinSearch: false,
+      enableFuzzySearch: false,
+      sortMode: "manual",
+      showOriginalCategory: true,
+      showNodeType: true,
+    },
+    migration: {
+      nSidebarImported: false,
+      nSidebarImportedAt: 0,
+    },
+  };
+}
+
+function normalizeNodeLibrary(library) {
+  const fallback = emptyNodeLibrary();
+  if (!library || typeof library !== "object") {
+    return fallback;
+  }
+  const groups = (Array.isArray(library.groups) && library.groups.length ? library.groups : fallback.groups).map((group, index) => ({
+    id: String(group.id || `group-${index}`),
+    name: String(group.name || group.id || `Group ${index + 1}`),
+    parentId: String(group.parentId || ""),
+    order: Number(group.order ?? index),
+    collapsed: Boolean(group.collapsed),
+    icon: String(group.icon || ""),
+    color: String(group.color || ""),
+  }));
+  if (!groups.some((group) => group.id === NODE_DEFAULT_GROUP_ID)) {
+    groups.unshift(fallback.groups[0]);
+  }
+  const groupIds = new Set(groups.map((group) => group.id));
+  for (const group of groups) {
+    if (group.id === NODE_DEFAULT_GROUP_ID || !groupIds.has(group.parentId) || group.parentId === group.id) {
+      group.parentId = "";
+    }
+  }
+  const favorites = Array.isArray(library.favorites)
+    ? library.favorites
+        .filter((favorite) => favorite?.type)
+        .map((favorite, index) => ({
+          type: String(favorite.type),
+          title: String(favorite.title || favorite.type),
+          alias: String(favorite.alias || ""),
+          groupId: groupIds.has(favorite.groupId) ? favorite.groupId : NODE_DEFAULT_GROUP_ID,
+          order: Number(favorite.order ?? index),
+          rating: Number(favorite.rating || 0),
+          useCount: Number(favorite.useCount || 0),
+          lastUsed: Number(favorite.lastUsed || 0),
+          addedAt: Number(favorite.addedAt || Date.now()),
+          invalid: Boolean(favorite.invalid),
+          source: String(favorite.source || "manual"),
+        }))
+    : [];
+  return {
+    ...fallback,
+    ...library,
+    groups,
+    favorites,
+    settings: { ...fallback.settings, ...(library.settings || {}) },
+    migration: { ...fallback.migration, ...(library.migration || {}) },
+  };
+}
+
+async function loadNodeLibrary() {
+  nodesState.loading = true;
+  nodesState.error = "";
+  try {
+    const [libraryData, objectInfoData] = await Promise.all([
+      fetchJson("/workspace2/nodes/library"),
+      fetchJson("/object_info"),
+    ]);
+    nodesState.library = normalizeNodeLibrary(libraryData.library);
+    nodesState.objectInfo = objectInfoData || {};
+  } catch (error) {
+    nodesState.error = error.message;
+    nodesState.library = emptyNodeLibrary();
+    nodesState.objectInfo = {};
+  } finally {
+    nodesState.loading = false;
+  }
+}
+
+async function saveNodeLibrary(el) {
+  const data = await postJson("/workspace2/nodes/library", { library: nodesState.library });
+  nodesState.library = normalizeNodeLibrary(data.library);
+  if (el) {
+    renderNodesPanel(el);
+  }
+}
+
+function backupNodeLibrary() {
+  const library = normalizeNodeLibrary(nodesState.library || emptyNodeLibrary());
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+  const blob = new Blob([JSON.stringify(library, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `workspace2-node-favorites-${stamp}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function readJsonFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        resolve(JSON.parse(String(reader.result || "")));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => reject(reader.error || new Error("Failed to read file."));
+    reader.readAsText(file, "utf-8");
+  });
+}
+
+async function restoreNodeLibraryFromFile(el) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json,.json";
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+    try {
+      const parsed = await readJsonFile(file);
+      if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.groups) || !Array.isArray(parsed.favorites)) {
+        alert(t("nodes.restoreInvalidBackup"));
+        return;
+      }
+      const library = normalizeNodeLibrary(parsed);
+      const groupCount = Math.max(0, library.groups.length - 1);
+      const nodeCount = library.favorites.length;
+      if (!confirm(t("nodes.confirmRestoreBackup", { groups: groupCount, nodes: nodeCount }))) {
+        return;
+      }
+      nodesState.library = library;
+      await saveNodeLibrary(el);
+      alert(t("nodes.restoreBackupDone", { groups: groupCount, nodes: nodeCount }));
+    } catch (error) {
+      alert(t("nodes.restoreBackupFailed", { message: error.message || String(error) }));
+    }
+  }, { once: true });
+  input.click();
+}
+
+function normalizeNodeCategory(category) {
+  return String(category || "").replace(/\\/g, "/").split("/").filter(Boolean);
+}
+
+function firstSpecType(spec) {
+  if (Array.isArray(spec)) {
+    const type = spec[0];
+    if (Array.isArray(type)) {
+      return "COMBO";
+    }
+    return String(type || "");
+  }
+  return String(spec || "");
+}
+
+function inputSpecOptions(spec) {
+  if (!Array.isArray(spec)) {
+    return {};
+  }
+  const options = spec.find((item) => item && typeof item === "object" && !Array.isArray(item));
+  return options || {};
+}
+
+function inputSpecDefault(spec) {
+  const options = inputSpecOptions(spec);
+  if (Object.prototype.hasOwnProperty.call(options, "default")) {
+    return options.default;
+  }
+  const type = Array.isArray(spec) ? spec[0] : spec;
+  if (Array.isArray(type) && type.length) {
+    return type[0];
+  }
+  return "";
+}
+
+function isWidgetInputSpec(spec) {
+  const type = Array.isArray(spec) ? spec[0] : spec;
+  if (Array.isArray(type)) {
+    return true;
+  }
+  const options = inputSpecOptions(spec);
+  return Boolean(options.forceInput === false || options.defaultInput === false);
+}
+
+function collectInputTypes(input) {
+  const values = [];
+  for (const section of ["required", "optional", "hidden"]) {
+    for (const spec of Object.values(input?.[section] || {})) {
+      const type = firstSpecType(spec);
+      if (type) {
+        values.push(type);
+      }
+    }
+  }
+  return values;
+}
+
+function collectInputNames(input) {
+  return [
+    ...Object.keys(input?.required || {}),
+    ...Object.keys(input?.optional || {}),
+    ...Object.keys(input?.hidden || {}),
+  ];
+}
+
+function collectOutputTypes(definition) {
+  const output = definition?.output;
+  if (Array.isArray(output)) {
+    return output.map((value) => String(value || "")).filter(Boolean);
+  }
+  return output ? [String(output)] : [];
+}
+
+function collectOutputNames(definition) {
+  const names = definition?.output_name;
+  if (Array.isArray(names)) {
+    return names.map((value) => String(value || "")).filter(Boolean);
+  }
+  if (typeof names === "string") {
+    return [names];
+  }
+  return collectOutputTypes(definition);
+}
+
+function collectPreviewInputs(definition) {
+  const input = definition?.input || {};
+  const values = [];
+  for (const section of ["required", "optional"]) {
+    for (const [name, spec] of Object.entries(input?.[section] || {})) {
+      if (isWidgetInputSpec(spec)) {
+        continue;
+      }
+      values.push({
+        name,
+        type: firstSpecType(spec) || t("nodes.uncategorized"),
+        optional: section === "optional",
+      });
+    }
+  }
+  return values;
+}
+
+function collectPreviewWidgets(definition) {
+  const input = definition?.input || {};
+  const values = [];
+  for (const section of ["required", "optional"]) {
+    for (const [name, spec] of Object.entries(input?.[section] || {})) {
+      if (!isWidgetInputSpec(spec)) {
+        continue;
+      }
+      values.push({
+        name,
+        type: firstSpecType(spec) || t("nodes.uncategorized"),
+        value: inputSpecDefault(spec),
+        optional: section === "optional",
+      });
+    }
+  }
+  return values;
+}
+
+function collectPreviewOutputs(definition) {
+  const names = collectOutputNames(definition);
+  const types = collectOutputTypes(definition);
+  return (names.length ? names : types).map((name, index) => ({
+    name: name || types[index] || t("nodes.uncategorized"),
+    type: types[index] || name || t("nodes.uncategorized"),
+  }));
+}
+
+function nodeSourceFor(definition) {
+  const pythonModule = String(definition?.python_module || "");
+  const root = pythonModule.split(".")[0] || "";
+  if (definition?.essentials_category) {
+    return NODE_SOURCE.ESSENTIALS;
+  }
+  if (CORE_NODE_MODULES.has(root)) {
+    return NODE_SOURCE.CORE;
+  }
+  if (root === "blueprint") {
+    return NODE_SOURCE.BLUEPRINT;
+  }
+  if (root === "custom_nodes") {
+    return NODE_SOURCE.CUSTOM;
+  }
+  return NODE_SOURCE.UNKNOWN;
+}
+
+function canonicalEssentialsCategory(category) {
+  const normalized = String(category || "").trim().toLowerCase();
+  return ESSENTIALS_CATEGORY_ORDER.find((item) => item.toLowerCase() === normalized) || "";
+}
+
+function resolveEssentialsCategory(node) {
+  if (!node || !isComfyCoreNode(node)) {
+    return "";
+  }
+  return canonicalEssentialsCategory(node.essentialsCategory) || ESSENTIALS_CATEGORY_MAP.get(node.type) || "";
+}
+
+function essentialsCategoryLabel(category) {
+  const key = `nodes.essentials.${String(category || "").replace(/\s+/g, "_").toLowerCase()}`;
+  return t(key);
+}
+
+function wrapObjectInfoNode(type, definition) {
+  const categoryParts = normalizeNodeCategory(definition?.category || "");
+  const inputTypes = collectInputTypes(definition?.input || {});
+  const outputTypes = collectOutputTypes(definition);
+  const pythonModule = String(definition?.python_module || "");
+  const node = {
+    type,
+    title: definition?.display_name || definition?.name || type,
+    category: categoryParts.join("/") || t("nodes.uncategorized"),
+    categoryParts,
+    categoryRoot: categoryParts[0] || t("nodes.uncategorized"),
+    description: definition?.description || definition?.help || "",
+    searchAliases: Array.isArray(definition?.search_aliases) ? definition.search_aliases : [],
+    inputs: collectInputNames(definition?.input || {}),
+    inputTypes,
+    outputs: collectOutputNames(definition),
+    outputTypes,
+    pythonModule,
+    mainCategory: definition?.main_category || "",
+    essentialsCategory: definition?.essentials_category || "",
+    apiNode: Boolean(definition?.api_node)
+      || String(definition?.category || "").toLowerCase().startsWith("api node")
+      || String(definition?.category || "").toLowerCase().startsWith("partner/"),
+    isGlobal: Boolean(definition?.isGlobal),
+    source: nodeSourceFor(definition),
+    definition,
+  };
+  return node;
+}
+
+function wrapRegisteredNode(type, definition) {
+  const categoryParts = normalizeNodeCategory(definition?.category || "");
+  return {
+    type,
+    title: definition?.title || definition?.name || type,
+    category: categoryParts.join("/") || t("nodes.uncategorized"),
+    categoryParts,
+    categoryRoot: categoryParts[0] || t("nodes.uncategorized"),
+    description: "",
+    searchAliases: [],
+    inputs: [],
+    inputTypes: [],
+    outputs: [],
+    outputTypes: [],
+    pythonModule: "",
+    mainCategory: "",
+    essentialsCategory: "",
+    apiNode: false,
+    isGlobal: false,
+    source: NODE_SOURCE.UNKNOWN,
+    definition,
+  };
+}
+
+function getNodeDefinitions() {
+  if (nodesState.objectInfo && Object.keys(nodesState.objectInfo).length) {
+    return Object.entries(nodesState.objectInfo)
+      .map(([type, definition]) => wrapObjectInfoNode(type, definition))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  }
+  const registered = globalThis.LiteGraph?.registered_node_types || {};
+  return Object.entries(registered)
+    .map(([type, definition]) => wrapRegisteredNode(type, definition))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function getNodeDefinitionMap() {
+  return new Map(getNodeDefinitions().map((node) => [node.type, node]));
+}
+
+function getFavorite(type) {
+  return nodesState.library?.favorites?.find((favorite) => favorite.type === type) || null;
+}
+
+function nodeMatchesQuery(node, query, groupName = "") {
+  if (!query) {
+    return true;
+  }
+  return nodeSearchScore(node, query, groupName) < 999;
+}
+
+function nodeSearchScore(node, query, groupName = "") {
+  const normalized = String(query || "").trim().toLowerCase();
+  if (!normalized) {
+    return 0;
+  }
+  const alias = String(node.alias || "").toLowerCase();
+  const title = String(node.title || "").toLowerCase();
+  const type = String(node.type || "").toLowerCase();
+  const category = String(node.category || "").toLowerCase();
+  const group = String(groupName || "").toLowerCase();
+  const aliases = Array.isArray(node.searchAliases) ? node.searchAliases.join(" ").toLowerCase() : "";
+  const io = [
+    ...(node.inputs || []),
+    ...(node.outputs || []),
+    ...(node.inputTypes || []),
+    ...(node.outputTypes || []),
+  ].join(" ").toLowerCase();
+  const description = String(node.description || "").toLowerCase();
+
+  const ranked = [
+    [alias, 0],
+    [title, 1],
+    [type, 2],
+    [aliases, 3],
+    [category, 4],
+    [group, 5],
+    [io, 6],
+    [description, 8],
+  ];
+  for (const [value, rank] of ranked) {
+    if (value === normalized) {
+      return rank;
+    }
+  }
+  for (const [value, rank] of ranked) {
+    if (value && value.includes(normalized)) {
+      return rank + 20;
+    }
+  }
+  return 999;
+}
+
+function sortNodeSearchResults(nodes, query, groupName = "") {
+  const normalized = String(query || "").trim().toLowerCase();
+  if (!normalized) {
+    return nodes.sort((a, b) => a.title.localeCompare(b.title));
+  }
+  return nodes.sort((a, b) => {
+    const diff = nodeSearchScore(a, normalized, groupName) - nodeSearchScore(b, normalized, groupName);
+    return diff || a.title.localeCompare(b.title);
+  });
+}
+
+function nodeSearchText(node, groupName = "") {
+  return [node.title, node.type, node.alias, node.category, node.pythonModule, groupName, ...(node.searchAliases || [])]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function favoriteDisplayNode(favorite, nodeMap) {
+  const definition = nodeMap.get(favorite.type);
+  return {
+    ...favorite,
+    title: favorite.alias || favorite.title || definition?.title || favorite.type,
+    category: definition?.category || t("nodes.invalid"),
+    definition: definition?.definition || null,
+    type: favorite.type,
+    invalid: !definition,
+  };
+}
+
+async function createNodeGroup(el, parentId = "") {
+  const normalizedParentId = parentId && parentId !== NODE_DEFAULT_GROUP_ID ? String(parentId) : "";
+  const id = `group-${Date.now().toString(36)}`;
+  const order = nodesState.library.groups.length;
+  nodesState.library.groups.push({
+    id,
+    name: uniqueNodeGroupName(),
+    parentId: normalizedParentId,
+    order,
+    collapsed: false,
+  });
+  if (normalizedParentId) {
+    nodesState.expanded.add(normalizedParentId);
+  }
+  nodesState.expanded.add(id);
+  nodesState.editingGroupId = id;
+  await saveNodeLibrary(el);
+}
+
+function uniqueNodeGroupName(baseName = t("nodes.defaultGroupName")) {
+  const existing = new Set((nodesState.library?.groups || []).map((group) => String(group.name || "").toLowerCase()));
+  let name = baseName;
+  let index = 2;
+  while (existing.has(name.toLowerCase())) {
+    name = `${baseName} ${index}`;
+    index += 1;
+  }
+  return name;
+}
+
+async function changeNodeGroupIcon(el, group) {
+  const value = window.prompt(t("folder.promptIcon"), group.icon || "");
+  if (value === null) {
+    return;
+  }
+  group.icon = value.trim();
+  await saveNodeLibrary(el);
+}
+
+async function changeNodeGroupColor(el, group) {
+  const value = window.prompt(t("folder.promptColor"), group.color || "");
+  if (value === null) {
+    return;
+  }
+  group.color = value.trim();
+  await saveNodeLibrary(el);
+}
+
+async function resetNodeGroupStyle(el, group) {
+  group.icon = "";
+  group.color = "";
+  await saveNodeLibrary(el);
+}
+
+function personalizeNodeGroup(el, group, anchor = null) {
+  openPersonalizationPanel({
+    title: t("folder.personalizeTitle"),
+    name: group.name,
+    icon: group.icon || "",
+    color: group.color || "",
+    anchor,
+    onApply: async (value) => {
+      group.icon = value.icon;
+      group.color = value.color;
+      await saveNodeLibrary(el);
+    },
+    onReset: async () => {
+      await resetNodeGroupStyle(el, group);
+    },
+  });
+}
+
+async function renameNodeGroup(el, group) {
+  nodesState.editingGroupId = group.id;
+  renderNodesPanel(el);
+}
+
+async function commitNodeGroupRename(el, group, value) {
+  const name = String(value || "").trim();
+  if (!name || name === group.name) {
+    nodesState.editingGroupId = "";
+    renderNodesPanel(el);
+    return;
+  }
+  group.name = name;
+  nodesState.editingGroupId = "";
+  await saveNodeLibrary(el);
+}
+
+async function deleteNodeGroup(el, group) {
+  if (group.id === NODE_DEFAULT_GROUP_ID) {
+    return;
+  }
+  const confirmed = window.confirm(t("nodes.confirmDeleteGroup", { name: group.name }));
+  if (!confirmed) {
+    return;
+  }
+  for (const favorite of nodesState.library.favorites) {
+    if (favorite.groupId === group.id) {
+      favorite.groupId = NODE_DEFAULT_GROUP_ID;
+    }
+  }
+  nodesState.library.groups = nodesState.library.groups.filter((item) => item.id !== group.id);
+  normalizeFavoriteOrders(NODE_DEFAULT_GROUP_ID);
+  await saveNodeLibrary(el);
+}
+
+async function addFavoriteNode(el, node, groupId = NODE_DEFAULT_GROUP_ID, beforeType = "") {
+  if (getFavorite(node.type)) {
+    await moveFavoriteToGroup(el, node.type, groupId, beforeType);
+    return;
+  }
+  const favorite = {
+    type: node.type,
+    title: node.title || node.type,
+    alias: "",
+    groupId,
+    order: 0,
+    rating: 0,
+    useCount: 0,
+    lastUsed: 0,
+    addedAt: Date.now(),
+    invalid: false,
+    source: "manual",
+  };
+  nodesState.library.favorites.push(favorite);
+  const targetItems = nodesState.library.favorites
+    .filter((item) => item.groupId === groupId && item.type !== node.type)
+    .sort((a, b) => a.order - b.order);
+  const beforeIndex = beforeType ? targetItems.findIndex((item) => item.type === beforeType) : -1;
+  const insertIndex = beforeIndex >= 0 ? beforeIndex : targetItems.length;
+  targetItems.splice(insertIndex, 0, favorite);
+  targetItems.forEach((item, index) => {
+    item.order = index;
+  });
+  await saveNodeLibrary(el);
+}
+
+async function removeFavoriteNode(el, type) {
+  nodesState.library.favorites = nodesState.library.favorites.filter((favorite) => favorite.type !== type);
+  await saveNodeLibrary(el);
+}
+
+async function editFavoriteAlias(el, favorite) {
+  const current = favorite.alias || "";
+  const alias = window.prompt(t("nodes.promptAlias"), current);
+  if (alias === null) {
+    return;
+  }
+  const item = getFavorite(favorite.type);
+  if (!item) {
+    return;
+  }
+  item.alias = alias.trim();
+  await saveNodeLibrary(el);
+}
+
+function normalizeFavoriteOrders(groupId) {
+  nodesState.library.favorites
+    .filter((favorite) => favorite.groupId === groupId)
+    .sort((a, b) => a.order - b.order)
+    .forEach((favorite, index) => {
+      favorite.order = index;
+    });
+}
+
+async function moveFavoriteToGroup(el, type, targetGroupId, beforeType = "") {
+  const favorite = getFavorite(type);
+  if (!favorite) {
+    return;
+  }
+  const sourceGroupId = favorite.groupId;
+  if (sourceGroupId === targetGroupId && beforeType === type) {
+    return;
+  }
+  favorite.groupId = targetGroupId;
+  normalizeFavoriteOrders(sourceGroupId);
+  const targetItems = nodesState.library.favorites
+    .filter((item) => item.groupId === targetGroupId && item.type !== type)
+    .sort((a, b) => a.order - b.order);
+  const beforeIndex = beforeType ? targetItems.findIndex((item) => item.type === beforeType) : -1;
+  const insertIndex = beforeIndex >= 0 ? beforeIndex : targetItems.length;
+  targetItems.splice(insertIndex, 0, favorite);
+  targetItems.forEach((item, index) => {
+    item.order = index;
+  });
+  await saveNodeLibrary(el);
+}
+
+function getNodeGroup(groupId) {
+  return (nodesState.library?.groups || []).find((group) => group.id === groupId) || null;
+}
+
+function isNodeGroupDescendant(groupId, possibleAncestorId) {
+  let current = getNodeGroup(groupId);
+  const visited = new Set();
+  while (current?.parentId) {
+    if (current.parentId === possibleAncestorId) {
+      return true;
+    }
+    if (visited.has(current.parentId)) {
+      return false;
+    }
+    visited.add(current.parentId);
+    current = getNodeGroup(current.parentId);
+  }
+  return false;
+}
+
+async function moveNodeGroupToParent(el, groupId, targetParentId = "") {
+  const group = getNodeGroup(groupId);
+  if (!group || group.id === NODE_DEFAULT_GROUP_ID) {
+    return;
+  }
+  const normalizedParentId = targetParentId && targetParentId !== NODE_DEFAULT_GROUP_ID ? String(targetParentId) : "";
+  if (normalizedParentId === group.id || isNodeGroupDescendant(normalizedParentId, group.id)) {
+    return;
+  }
+  if (group.parentId === normalizedParentId) {
+    return;
+  }
+  group.parentId = normalizedParentId;
+  const siblings = (nodesState.library.groups || [])
+    .filter((item) => item.id !== group.id && item.id !== NODE_DEFAULT_GROUP_ID && (item.parentId || "") === normalizedParentId)
+    .sort((a, b) => a.order - b.order);
+  group.order = siblings.length ? Math.max(...siblings.map((item) => Number(item.order) || 0)) + 1 : 0;
+  if (normalizedParentId) {
+    nodesState.expanded.add(normalizedParentId);
+  }
+  await saveNodeLibrary(el);
+}
+
+function readFavoriteDrag(event) {
+  const raw = event.dataTransfer?.getData(FAVORITE_DRAG_TYPE);
+  if (!raw) {
+    return null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function makeFavoriteGroupDropTarget(el, target, groupId, beforeType = "") {
+  target.dataset.workspace2FavoriteTarget = groupId;
+  target.dataset.workspace2FavoriteBefore = beforeType;
+  target.dataset.workspace2GroupTarget = groupId === NODE_DEFAULT_GROUP_ID ? "" : groupId;
+  target.addEventListener("dragover", (event) => {
+    const dragged = readFavoriteDrag(event);
+    if (!dragged?.type) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    target.classList.add("is-drop");
+  });
+  target.addEventListener("dragleave", () => {
+    target.classList.remove("is-drop");
+  });
+  target.addEventListener("drop", async (event) => {
+    const dragged = readFavoriteDrag(event);
+    target.classList.remove("is-drop");
+    if (!dragged?.type) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      await moveFavoriteToGroup(el, dragged.type, groupId, beforeType);
+    } catch (error) {
+      nodesState.error = error.message;
+      renderNodesPanel(el);
+    }
+  });
+}
+
+function makeFavoriteDragSource(row, favorite) {
+  row.dataset.workspace2FavoriteSource = favorite.type;
+}
+
+function groupedNodes(nodes) {
+  const groups = new Map();
+  for (const node of nodes) {
+    const key = nodeGroupLabel(node);
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(node);
+  }
+  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function nodePackageName(node) {
+  const parts = String(node?.pythonModule || "").split(".");
+  if (parts[0] === "custom_nodes" && parts[1]) {
+    return parts[1].split("@")[0];
+  }
+  return "";
+}
+
+function nodeGroupLabel(node) {
+  if (isComfyCoreNode(node)) {
+    const root = String(node.categoryRoot || "").trim().toLowerCase();
+    const key = COMFY_CATEGORY_LABEL_KEYS.get(root);
+    return key ? t(key) : node.categoryRoot || t("nodes.uncategorized");
+  }
+  return nodePackageName(node) || node.categoryRoot || t("nodes.uncategorized");
+}
+
+function isComfyCoreNode(node) {
+  return node?.source === NODE_SOURCE.CORE;
+}
+
+function isHiddenOfficialNodeSection(node) {
+  return node?.source === NODE_SOURCE.BLUEPRINT || node?.apiNode;
+}
+
+function officialNodeCategoryParts(node) {
+  const parts = String(node?.category || "")
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!isComfyCoreNode(node)) {
+    const packageName = nodePackageName(node) || t("nodes.uncategorized");
+    return [packageName, ...parts.filter((part) => part !== packageName)];
+  }
+  if (!parts.length) {
+    return [t("nodes.uncategorized")];
+  }
+  const root = parts[0].toLowerCase();
+  const key = COMFY_CATEGORY_LABEL_KEYS.get(root);
+  return [key ? t(key) : parts[0], ...parts.slice(1)];
+}
+
+function createNodeTreeFolder(key, label) {
+  return {
+    key,
+    label,
+    type: "folder",
+    children: [],
+    childMap: new Map(),
+    totalLeaves: 0,
+  };
+}
+
+function buildOfficialNodeTree(sectionId, nodes) {
+  const root = createNodeTreeFolder(sectionId, "");
+  for (const node of nodes) {
+    let current = root;
+    for (const part of officialNodeCategoryParts(node)) {
+      const folderKey = `${current.key}/${part}`;
+      if (!current.childMap.has(part)) {
+        const folder = createNodeTreeFolder(folderKey, part);
+        current.childMap.set(part, folder);
+        current.children.push(folder);
+      }
+      current = current.childMap.get(part);
+    }
+    current.children.push({
+      key: `${current.key}/${node.type}`,
+      label: node.title || node.type,
+      type: "node",
+      node,
+      totalLeaves: 1,
+    });
+  }
+  finalizeOfficialNodeTree(root);
+  sortOfficialNodeTree(root);
+  return root;
+}
+
+function finalizeOfficialNodeTree(node) {
+  if (node.type === "node") {
+    node.totalLeaves = 1;
+    return 1;
+  }
+  node.totalLeaves = node.children.reduce((sum, child) => sum + finalizeOfficialNodeTree(child), 0);
+  delete node.childMap;
+  return node.totalLeaves;
+}
+
+function isUnknownNodeFolder(child) {
+  return child?.type === "folder" && String(child.label || "") === t("nodes.uncategorized");
+}
+
+function sortOfficialNodeTree(node) {
+  if (node.type === "node" || !node.children) {
+    return;
+  }
+  node.children.sort((a, b) => {
+    const unknownA = isUnknownNodeFolder(a);
+    const unknownB = isUnknownNodeFolder(b);
+    if (unknownA !== unknownB) {
+      return unknownA ? -1 : 1;
+    }
+    if (a.type !== b.type) {
+      return a.type === "folder" ? -1 : 1;
+    }
+    if (nodesState.customOrderEnabled) {
+      const order = Array.isArray(nodesState.customOrder?.[node.key]) ? nodesState.customOrder[node.key] : [];
+      const orderKeyA = a.type === "node" ? a.node?.type : a.key;
+      const orderKeyB = b.type === "node" ? b.node?.type : b.key;
+      const indexA = order.indexOf(orderKeyA);
+      const indexB = order.indexOf(orderKeyB);
+      if (indexA !== -1 || indexB !== -1) {
+        if (indexA === -1) {
+          return 1;
+        }
+        if (indexB === -1) {
+          return -1;
+        }
+        return indexA - indexB;
+      }
+    }
+    if (nodesState.sort !== "alphabetical") {
+      return 0;
+    }
+    return String(a.label || "").localeCompare(String(b.label || ""));
+  });
+  for (const child of node.children) {
+    sortOfficialNodeTree(child);
+  }
+}
+
+function renderOfficialNodeTree(el, section, tree, favoriteTypes, depth = 0) {
+  for (const child of tree.children || []) {
+    if (child.type === "node") {
+      section.append(renderAllNodeRow(el, child.node, favoriteTypes.has(child.node.type), depth, tree.key));
+    } else {
+      renderOfficialNodeFolder(el, section, child, favoriteTypes, depth);
+    }
+  }
+}
+
+function renderOfficialNodeFolder(el, section, folder, favoriteTypes, depth) {
+  const query = nodesState.query.trim();
+  const groupOpen = nodesState.expanded.has(folder.key) || Boolean(query);
+  const categoryHeader = document.createElement("div");
+  categoryHeader.className = "workspace2-node-folder-header";
+  categoryHeader.style.paddingLeft = `${8 + depth * 24}px`;
+  categoryHeader.addEventListener("click", (event) => {
+    if (event.target.closest("button,input")) {
+      return;
+    }
+    event.stopPropagation();
+    toggleNodeGroup(el, folder.key);
+  });
+
+  const disclosure = document.createElement("button");
+  disclosure.className = `workspace2-disclosure ${groupOpen ? "is-open" : ""}`;
+  disclosure.type = "button";
+  disclosure.title = groupOpen ? t("folder.collapse") : t("folder.expand");
+  disclosure.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleNodeGroup(el, folder.key);
+  });
+
+  const icon = document.createElement("span");
+  applyDecoratedIcon(icon, "", "", groupOpen ? DEFAULT_FOLDER_OPEN_ICON_CLASS : DEFAULT_FOLDER_ICON_CLASS);
+  const name = document.createElement("div");
+  name.className = "workspace2-name";
+  name.textContent = folder.label;
+  const meta = document.createElement("div");
+  meta.className = "workspace2-meta";
+  meta.textContent = String(folder.totalLeaves);
+  categoryHeader.append(disclosure, icon, name, meta);
+  section.append(categoryHeader);
+
+  if (groupOpen) {
+    renderOfficialNodeTree(el, section, folder, favoriteTypes, depth + 1);
+  }
+}
+
+function renderTopSectionHeader(el, section, sectionId, titleText, countText) {
+  const header = document.createElement("div");
+  header.className = "workspace2-node-section-header";
+  const title = document.createElement("div");
+  title.className = "workspace2-name";
+  title.textContent = titleText;
+  const line = document.createElement("div");
+  line.className = "workspace2-node-section-line";
+  const count = document.createElement("div");
+  count.className = "workspace2-meta";
+  count.textContent = countText;
+  header.append(title, line, count);
+  section.append(header);
+}
+
+function parseLocalJson(key, fallback) {
+  const value = localStorage.getItem(key);
+  if (!value) {
+    return fallback;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === typeof fallback ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function localNSidebarPreview() {
+  const pinned = parseLocalJson("sb_pinnedItems", []);
+  const categoryMap = parseLocalJson("sb_categoryNodeMap", {});
+  const groups = Object.entries(categoryMap)
+    .filter(([, nodes]) => Array.isArray(nodes))
+    .map(([name, nodes], index) => ({
+      name,
+      order: index,
+      nodes: nodes.map(String).filter(Boolean),
+    }));
+  const nodeSet = new Set(pinned.map(String).filter(Boolean));
+  for (const group of groups) {
+    for (const nodeType of group.nodes) {
+      nodeSet.add(nodeType);
+    }
+  }
+  return {
+    found: pinned.length > 0 || groups.length > 0,
+    sourcePath: "browser localStorage",
+    pinned: pinned.map(String).filter(Boolean),
+    groups,
+    nodes: [...nodeSet],
+    summary: {
+      pinnedCount: pinned.length,
+      groupCount: groups.length,
+      nodeCount: nodeSet.size,
+    },
+  };
+}
+
+function mergeNSidebarPreviews(filePreview, localPreview) {
+  const previews = [filePreview, localPreview].filter((preview) => preview?.found);
+  const groups = [];
+  const groupKey = new Set();
+  const pinned = [];
+  const pinnedSet = new Set();
+  for (const preview of previews) {
+    for (const nodeType of preview.pinned || []) {
+      if (!pinnedSet.has(nodeType)) {
+        pinnedSet.add(nodeType);
+        pinned.push(nodeType);
+      }
+    }
+    for (const group of preview.groups || []) {
+      const key = group.name;
+      const existing = groups.find((item) => item.name === key);
+      if (existing) {
+        const nodes = new Set(existing.nodes);
+        for (const nodeType of group.nodes || []) {
+          nodes.add(nodeType);
+        }
+        existing.nodes = [...nodes];
+        continue;
+      }
+      if (!groupKey.has(key)) {
+        groupKey.add(key);
+        groups.push({ ...group, nodes: [...(group.nodes || [])] });
+      }
+    }
+  }
+  const nodeSet = new Set(pinned);
+  for (const group of groups) {
+    for (const nodeType of group.nodes) {
+      nodeSet.add(nodeType);
+    }
+  }
+  return {
+    found: previews.length > 0,
+    sourcePath: previews.map((preview) => preview.sourcePath).filter(Boolean).join(" + "),
+    pinned,
+    groups,
+    nodes: [...nodeSet],
+    summary: {
+      pinnedCount: pinned.length,
+      groupCount: groups.length,
+      nodeCount: nodeSet.size,
+    },
+    checkedPaths: filePreview?.checkedPaths || [],
+  };
+}
+
+async function loadNSidebarPreview() {
+  nodesState.nSidebarLoading = true;
+  try {
+    let filePreview = { found: false, pinned: [], groups: [], nodes: [], summary: {} };
+    try {
+      const data = await fetchJson("/workspace2/nodes/n-sidebar/preview");
+      filePreview = data.preview || filePreview;
+    } catch {
+      // The backend route exists after a ComfyUI restart. LocalStorage migration can still work without it.
+    }
+    nodesState.nSidebarPreview = mergeNSidebarPreviews(filePreview, localNSidebarPreview());
+  } finally {
+    nodesState.nSidebarLoading = false;
+  }
+}
+
+function findOrCreateImportedGroup(name) {
+  const existing = nodesState.library.groups.find((group) => group.name === name);
+  if (existing) {
+    return existing.id;
+  }
+  const id = `n-sidebar-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  nodesState.library.groups.push({
+    id,
+    name,
+    order: nodesState.library.groups.length,
+    collapsed: false,
+  });
+  nodesState.expanded.add(id);
+  return id;
+}
+
+async function importNSidebarPreview(el) {
+  const preview = nodesState.nSidebarPreview;
+  if (!preview?.found || !nodesState.library) {
+    return;
+  }
+  const nodeMap = getNodeDefinitionMap();
+  const existingTypes = new Set(nodesState.library.favorites.map((favorite) => favorite.type));
+  const addImportedFavorite = (nodeType, groupId, order) => {
+    if (!nodeType || existingTypes.has(nodeType)) {
+      return;
+    }
+    const definition = nodeMap.get(nodeType);
+    existingTypes.add(nodeType);
+    nodesState.library.favorites.push({
+      type: nodeType,
+      title: definition?.title || nodeType,
+      alias: "",
+      groupId,
+      order,
+      rating: 0,
+      useCount: 0,
+      lastUsed: 0,
+      addedAt: Date.now(),
+      invalid: !definition,
+      source: "n-sidebar-migration",
+    });
+  };
+
+  preview.pinned.forEach((nodeType, index) => addImportedFavorite(nodeType, NODE_DEFAULT_GROUP_ID, index));
+  for (const group of preview.groups) {
+    const groupId = findOrCreateImportedGroup(group.name);
+    group.nodes.forEach((nodeType, index) => addImportedFavorite(nodeType, groupId, index));
+  }
+  nodesState.library.migration.nSidebarImported = true;
+  nodesState.library.migration.nSidebarImportedAt = Date.now();
+  await saveNodeLibrary(el);
+}
+
+async function importOfficialFavorites(el) {
+  if (!nodesState.library) {
+    await loadNodeLibrary();
+  }
+  nodesState.officialFavoritesLoading = true;
+  try {
+    const probe = await detectOfficialFavoritesProbe();
+    nodesState.officialFavoritesProbe = probe;
+    const officialFavorites = collectOfficialFavoritesFromProbe(probe);
+    const nodeMap = getNodeDefinitionMap();
+    const importItems = collectOfficialFavoriteImportItems(officialFavorites, nodeMap);
+    const officialTypes = importItems.map((item) => item.type);
+    const existingFavorites = new Map((nodesState.library?.favorites || []).map((favorite) => [favorite.type, favorite]));
+    const existingGroupByName = new Map((nodesState.library?.groups || []).map((group) => [group.name, group.id]));
+    const newTypes = officialTypes.filter((nodeType) => !existingFavorites.has(nodeType));
+    const movableTypes = importItems.filter((item) => {
+      if (!item.groupName || !existingFavorites.has(item.type)) {
+        return false;
+      }
+      const targetGroupId = existingGroupByName.get(item.groupName);
+      return !targetGroupId || (existingFavorites.get(item.type).groupId || NODE_DEFAULT_GROUP_ID) !== targetGroupId;
+    });
+    if (!officialTypes.length) {
+      alert(t("nodes.officialFavoritesNone"));
+      return;
+    }
+    if (!newTypes.length && !movableTypes.length) {
+      alert(t("nodes.officialFavoritesNoNew", { count: officialTypes.length }));
+      return;
+    }
+    const confirmed = confirm(t("nodes.confirmImportOfficialFavorites", {
+      total: officialTypes.length,
+      newCount: newTypes.length + movableTypes.length,
+    }));
+    if (!confirmed) {
+      return;
+    }
+
+    const now = Date.now();
+    const addFavorite = (nodeType, groupId, order) => {
+      if (!nodeType) {
+        return false;
+      }
+      const existing = existingFavorites.get(nodeType);
+      if (existing) {
+        const currentGroupId = existing.groupId || NODE_DEFAULT_GROUP_ID;
+        if (currentGroupId !== groupId) {
+          existing.groupId = groupId;
+          existing.order = order;
+          return true;
+        }
+        return false;
+      }
+      const definition = nodeMap.get(nodeType);
+      nodesState.library.favorites.push({
+        type: nodeType,
+        title: definition?.title || nodeType,
+        alias: "",
+        groupId,
+        order,
+        rating: 0,
+        useCount: 0,
+        lastUsed: 0,
+        addedAt: now,
+        invalid: !definition,
+        source: "official-favorites-sync",
+      });
+      existingFavorites.set(nodeType, nodesState.library.favorites[nodesState.library.favorites.length - 1]);
+      return true;
+    };
+
+    let importedCount = 0;
+    const orderByGroup = new Map();
+    const nextOrderForGroup = (groupId) => {
+      if (!orderByGroup.has(groupId)) {
+        orderByGroup.set(groupId, nodesState.library.favorites.filter((favorite) => (favorite.groupId || NODE_DEFAULT_GROUP_ID) === groupId).length);
+      }
+      const order = orderByGroup.get(groupId);
+      orderByGroup.set(groupId, order + 1);
+      return order;
+    };
+    for (const item of importItems) {
+      const groupId = item.groupName ? findOrCreateImportedGroup(item.groupName) : NODE_DEFAULT_GROUP_ID;
+      if (addFavorite(item.type, groupId, nextOrderForGroup(groupId))) {
+        importedCount += 1;
+      }
+    }
+    nodesState.library.migration.officialFavoritesImported = true;
+    nodesState.library.migration.officialFavoritesImportedAt = now;
+    nodesState.expanded.add(NODE_DEFAULT_GROUP_ID);
+    await saveNodeLibrary(el);
+    alert(t("nodes.officialFavoritesImported", { count: importedCount }));
+  } catch (error) {
+    nodesState.error = error.message;
+    renderNodesPanel(el);
+  } finally {
+    nodesState.officialFavoritesLoading = false;
+  }
+}
+
+function closeOfficialFavoritesMenu() {
+  if (nodesState.officialFavoritesMenuCloseHandler) {
+    window.removeEventListener("pointerdown", nodesState.officialFavoritesMenuCloseHandler, true);
+    document.removeEventListener("pointerdown", nodesState.officialFavoritesMenuCloseHandler, true);
+    window.removeEventListener("click", nodesState.officialFavoritesMenuCloseHandler, true);
+    document.removeEventListener("click", nodesState.officialFavoritesMenuCloseHandler, true);
+    window.removeEventListener("keydown", nodesState.officialFavoritesMenuCloseHandler, true);
+    nodesState.officialFavoritesMenuCloseHandler = null;
+  }
+  nodesState.officialFavoritesMenuElement?.remove();
+  nodesState.officialFavoritesMenuElement = null;
+}
+
+function openOfficialFavoritesMenu(el, anchor) {
+  closeOfficialFavoritesMenu();
+  const panel = anchor?.closest?.(".workspace2-panel") || el.querySelector(".workspace2-panel");
+  if (!panel) {
+    return;
+  }
+
+  const rect = anchor.getBoundingClientRect();
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 220))}px`;
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.addEventListener("click", (event) => event.stopPropagation());
+  menu.addEventListener("pointerdown", (event) => event.stopPropagation());
+  menu.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  const fromOfficial = document.createElement("button");
+  fromOfficial.className = "workspace2-menu-item";
+  fromOfficial.type = "button";
+  fromOfficial.textContent = t("nodes.importOfficialToWorkspace2");
+  fromOfficial.addEventListener("click", async () => {
+    closeOfficialFavoritesMenu();
+    await importOfficialFavorites(el);
+  });
+  menu.append(fromOfficial);
+
+  const divider = document.createElement("div");
+  divider.className = "workspace2-menu-divider";
+  menu.append(divider);
+
+  const toOfficial = document.createElement("button");
+  toOfficial.className = "workspace2-menu-item";
+  toOfficial.type = "button";
+  toOfficial.textContent = t("nodes.importWorkspace2ToOfficial");
+  toOfficial.title = t("nodes.importWorkspace2ToOfficialTitle");
+  toOfficial.addEventListener("click", async () => {
+    closeOfficialFavoritesMenu();
+    await importWorkspace2FavoritesToOfficial(el);
+  });
+  menu.append(toOfficial);
+
+  const backupDivider = document.createElement("div");
+  backupDivider.className = "workspace2-menu-divider";
+  menu.append(backupDivider);
+
+  const backup = document.createElement("button");
+  backup.className = "workspace2-menu-item";
+  backup.type = "button";
+  backup.textContent = t("nodes.backupFavorites");
+  backup.addEventListener("click", () => {
+    closeOfficialFavoritesMenu();
+    backupNodeLibrary();
+  });
+  menu.append(backup);
+
+  const restore = document.createElement("button");
+  restore.className = "workspace2-menu-item";
+  restore.type = "button";
+  restore.textContent = t("nodes.restoreFavorites");
+  restore.addEventListener("click", async () => {
+    closeOfficialFavoritesMenu();
+    await restoreNodeLibraryFromFile(el);
+  });
+  menu.append(restore);
+
+  panel.append(menu);
+  nodesState.officialFavoritesMenuElement = menu;
+  nodesState.officialFavoritesMenuCloseHandler = (event) => {
+    if (event.type === "keydown" && event.key !== "Escape") {
+      return;
+    }
+    if (menu.contains(event.target) || anchor.contains(event.target)) {
+      return;
+    }
+    closeOfficialFavoritesMenu();
+  };
+  setTimeout(() => {
+    window.addEventListener("pointerdown", nodesState.officialFavoritesMenuCloseHandler, true);
+    document.addEventListener("pointerdown", nodesState.officialFavoritesMenuCloseHandler, true);
+    window.addEventListener("click", nodesState.officialFavoritesMenuCloseHandler, true);
+    document.addEventListener("click", nodesState.officialFavoritesMenuCloseHandler, true);
+    window.addEventListener("keydown", nodesState.officialFavoritesMenuCloseHandler, true);
+  }, 0);
+}
+
+function makeNodeCanvasDragSource(row, node) {
+  row.draggable = false;
+  row.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.target.closest("button,input,.workspace2-reorder-handle")) {
+      return;
+    }
+    event.preventDefault();
+    const drag = {
+      node: {
+        type: node.type,
+        title: node.title || node.type,
+      },
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      ghost: null,
+      onMove: null,
+      onUp: null,
+      onCancel: null,
+    };
+    drag.onMove = (moveEvent) => updateNodePointerDrag(moveEvent);
+    drag.onUp = (upEvent) => commitNodePointerDrag(upEvent);
+    drag.onCancel = () => finishNodePointerDrag();
+    nodesState.pointerDrag = drag;
+    document.addEventListener("pointermove", drag.onMove, true);
+    document.addEventListener("pointerup", drag.onUp, true);
+    document.addEventListener("pointercancel", drag.onCancel, true);
+    row.setPointerCapture?.(event.pointerId);
+  });
+}
+
+function clearNodeReorderHighlights() {
+  document.querySelectorAll(".workspace2-node-row.is-reorder-before, .workspace2-node-row.is-reorder-after").forEach((row) => {
+    row.classList.remove("is-reorder-before", "is-reorder-after");
+  });
+}
+
+function finishNodeReorderDrag() {
+  const drag = nodesState.reorderDrag;
+  if (drag) {
+    document.removeEventListener("pointermove", drag.onMove, true);
+    document.removeEventListener("pointerup", drag.onUp, true);
+    document.removeEventListener("pointercancel", drag.onCancel, true);
+    drag.row?.classList.remove("is-reordering");
+    drag.ghost?.remove();
+  }
+  clearNodeReorderHighlights();
+  setDraggingVisual(false);
+  nodesState.reorderDrag = null;
+}
+
+function nodeReorderRowAtPoint(clientX, clientY) {
+  const previousGhostDisplay = nodesState.reorderDrag?.ghost?.style.display;
+  if (nodesState.reorderDrag?.ghost) {
+    nodesState.reorderDrag.ghost.style.display = "none";
+  }
+  const element = document.elementFromPoint(clientX, clientY);
+  if (nodesState.reorderDrag?.ghost) {
+    nodesState.reorderDrag.ghost.style.display = previousGhostDisplay || "";
+  }
+  return element?.closest?.(".workspace2-node-row[data-workspace2-node-type]") || null;
+}
+
+function updateNodeReorderDrag(event) {
+  const drag = nodesState.reorderDrag;
+  if (!drag) {
+    return;
+  }
+  const dx = event.clientX - drag.startX;
+  const dy = event.clientY - drag.startY;
+  if (!drag.active && Math.hypot(dx, dy) < 4) {
+    return;
+  }
+  if (!drag.active) {
+    drag.active = true;
+    nodesState.suppressClick = true;
+    setDraggingVisual(true);
+    drag.row.classList.add("is-reordering");
+    drag.ghost = document.createElement("div");
+    drag.ghost.className = "workspace2-drag-ghost";
+    drag.ghost.textContent = drag.title;
+    document.body.append(drag.ghost);
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  drag.ghost.style.left = `${event.clientX + 12}px`;
+  drag.ghost.style.top = `${event.clientY + 10}px`;
+
+  clearNodeReorderHighlights();
+  const targetRow = nodeReorderRowAtPoint(event.clientX, event.clientY);
+  const targetType = targetRow?.dataset.workspace2NodeType || "";
+  if (!targetRow || targetType === drag.type) {
+    drag.targetType = "";
+    drag.placement = "";
+    return;
+  }
+  if (drag.kind === "favorite") {
+    if (targetRow.dataset.workspace2FavoriteRegion !== drag.groupId) {
+      drag.targetType = "";
+      drag.placement = "";
+      return;
+    }
+  } else if (targetRow.dataset.workspace2NodeParentKey !== drag.parentKey) {
+    drag.targetType = "";
+    drag.placement = "";
+    return;
+  }
+
+  const rect = targetRow.getBoundingClientRect();
+  drag.targetType = targetType;
+  drag.placement = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  targetRow.classList.add(drag.placement === "before" ? "is-reorder-before" : "is-reorder-after");
+}
+
+async function commitNodeReorderDrag(el, event) {
+  const drag = nodesState.reorderDrag;
+  if (!drag) {
+    return;
+  }
+  updateNodeReorderDrag(event);
+  const shouldReorder = drag.active && drag.targetType && drag.placement;
+  const sourceType = drag.type;
+  const targetType = drag.targetType;
+  const placement = drag.placement;
+  const groupId = drag.groupId;
+  const parentKey = drag.parentKey;
+  const kind = drag.kind;
+  finishNodeReorderDrag();
+  if (!shouldReorder) {
+    return;
+  }
+
+  if (kind === "favorite") {
+    const items = nodesState.library.favorites
+      .filter((favorite) => (favorite.groupId || NODE_DEFAULT_GROUP_ID) === groupId)
+      .sort((a, b) => a.order - b.order);
+    const next = items.filter((favorite) => favorite.type !== sourceType);
+    const targetIndex = next.findIndex((favorite) => favorite.type === targetType);
+    if (targetIndex === -1) {
+      return;
+    }
+    const source = items.find((favorite) => favorite.type === sourceType);
+    if (!source) {
+      return;
+    }
+    next.splice(placement === "before" ? targetIndex : targetIndex + 1, 0, source);
+    next.forEach((favorite, index) => {
+      favorite.order = index;
+    });
+    await saveNodeLibrary(el);
+    return;
+  }
+
+  const rows = [...el.querySelectorAll(`.workspace2-node-row[data-workspace2-node-parent-key="${cssEscape(parentKey)}"]`)];
+  const order = rows.map((row) => row.dataset.workspace2NodeType).filter(Boolean);
+  const nextOrder = order.filter((type) => type !== sourceType);
+  const targetIndex = nextOrder.indexOf(targetType);
+  if (targetIndex === -1) {
+    return;
+  }
+  nextOrder.splice(placement === "before" ? targetIndex : targetIndex + 1, 0, sourceType);
+  nodesState.customOrder[parentKey] = nextOrder;
+  saveNodeCustomOrder();
+  renderNodesPanel(el);
+}
+
+function beginNodeReorderDrag(el, handle, row, options) {
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || !nodesState.customOrderEnabled) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const onMove = (moveEvent) => updateNodeReorderDrag(moveEvent);
+    const onUp = (upEvent) => {
+      commitNodeReorderDrag(el, upEvent).catch((error) => {
+        nodesState.error = error.message;
+        renderNodesPanel(el);
+      });
+    };
+    const onCancel = () => finishNodeReorderDrag();
+    nodesState.reorderDrag = {
+      ...options,
+      row,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      targetType: "",
+      placement: "",
+      ghost: null,
+      onMove,
+      onUp,
+      onCancel,
+    };
+    document.addEventListener("pointermove", onMove, true);
+    document.addEventListener("pointerup", onUp, true);
+    document.addEventListener("pointercancel", onCancel, true);
+    handle.setPointerCapture?.(event.pointerId);
+  });
+}
+
+function clearFavoriteDropHighlights() {
+  document.querySelectorAll("[data-workspace2-favorite-target].is-drop, [data-workspace2-group-target].is-drop, [data-workspace2-favorite-region].is-drop-region").forEach((target) => {
+    target.classList.remove("is-drop", "is-drop-region");
+  });
+}
+
+function highlightFavoriteDropRegion(groupId) {
+  document.querySelectorAll(`[data-workspace2-favorite-region="${cssEscape(groupId)}"]`).forEach((target) => {
+    target.classList.add("is-drop-region");
+  });
+}
+
+function finishNodePointerDrag() {
+  const drag = nodesState.pointerDrag;
+  if (drag) {
+    document.removeEventListener("pointermove", drag.onMove, true);
+    document.removeEventListener("pointerup", drag.onUp, true);
+    document.removeEventListener("pointercancel", drag.onCancel, true);
+    drag.ghost?.remove();
+  }
+  clearFavoriteDropHighlights();
+  setDraggingVisual(false);
+  nodesState.pointerDrag = null;
+  nodesState.draggingNode = null;
+}
+
+function finishNodeGroupPointerDrag() {
+  const drag = nodesState.groupDrag;
+  if (drag) {
+    document.removeEventListener("pointermove", drag.onMove, true);
+    document.removeEventListener("pointerup", drag.onUp, true);
+    document.removeEventListener("pointercancel", drag.onCancel, true);
+    drag.ghost?.remove();
+  }
+  clearFavoriteDropHighlights();
+  setDraggingVisual(false);
+  nodesState.groupDrag = null;
+}
+
+function validNodeGroupDropTarget(draggedGroupId, targetGroupId) {
+  const normalizedTarget = targetGroupId && targetGroupId !== NODE_DEFAULT_GROUP_ID ? String(targetGroupId) : "";
+  if (!draggedGroupId || draggedGroupId === NODE_DEFAULT_GROUP_ID) {
+    return false;
+  }
+  if (normalizedTarget === draggedGroupId) {
+    return false;
+  }
+  if (normalizedTarget && isNodeGroupDescendant(normalizedTarget, draggedGroupId)) {
+    return false;
+  }
+  return true;
+}
+
+function findNodeGroupDropTargetAt(event, draggedGroupId) {
+  const dropElement = document.elementFromPoint(event.clientX, event.clientY);
+  const target = dropElement?.closest?.("[data-workspace2-group-target]");
+  if (!target) {
+    return null;
+  }
+  const targetGroupId = target.dataset.workspace2GroupTarget || "";
+  if (!validNodeGroupDropTarget(draggedGroupId, targetGroupId)) {
+    return null;
+  }
+  return target;
+}
+
+function updateNodeGroupPointerDrag(event) {
+  const drag = nodesState.groupDrag;
+  if (!drag) {
+    return;
+  }
+  const dx = event.clientX - drag.startX;
+  const dy = event.clientY - drag.startY;
+  if (!drag.active && Math.hypot(dx, dy) < 4) {
+    return;
+  }
+  if (!drag.active) {
+    drag.active = true;
+    nodesState.suppressClick = true;
+    setDraggingVisual(true);
+    drag.ghost = document.createElement("div");
+    drag.ghost.className = "workspace2-drag-ghost";
+    drag.ghost.textContent = drag.group.name;
+    document.body.append(drag.ghost);
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  drag.ghost.style.left = `${event.clientX + 12}px`;
+  drag.ghost.style.top = `${event.clientY + 10}px`;
+
+  clearFavoriteDropHighlights();
+  const target = findNodeGroupDropTargetAt(event, drag.group.id);
+  if (target) {
+    target.classList.add("is-drop");
+    highlightFavoriteDropRegion(target.dataset.workspace2GroupTarget || NODE_DEFAULT_GROUP_ID);
+  }
+  drag.ghost.style.borderColor = target ? "var(--workspace2-accent)" : "var(--border-color, #555)";
+}
+
+async function commitNodeGroupPointerDrag(event) {
+  const drag = nodesState.groupDrag;
+  if (!drag) {
+    return;
+  }
+  updateNodeGroupPointerDrag(event);
+  const target = findNodeGroupDropTargetAt(event, drag.group.id);
+  const targetGroupId = target?.dataset.workspace2GroupTarget || "";
+  const shouldMove = drag.active && target;
+  finishNodeGroupPointerDrag();
+  if (!shouldMove) {
+    return;
+  }
+  try {
+    await moveNodeGroupToParent(nodesState.renderTarget, drag.group.id, targetGroupId);
+  } catch (error) {
+    nodesState.error = error.message;
+    if (nodesState.renderTarget) {
+      renderNodesPanel(nodesState.renderTarget);
+    }
+  }
+}
+
+function makeNodeGroupDragSource(el, header, group) {
+  header.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.target.closest("button,input,.workspace2-actions,.workspace2-disclosure")) {
+      return;
+    }
+    const onMove = (moveEvent) => updateNodeGroupPointerDrag(moveEvent);
+    const onUp = (upEvent) => commitNodeGroupPointerDrag(upEvent);
+    const onCancel = () => finishNodeGroupPointerDrag();
+    nodesState.groupDrag = {
+      group,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      ghost: null,
+      onMove,
+      onUp,
+      onCancel,
+    };
+    document.addEventListener("pointermove", onMove, true);
+    document.addEventListener("pointerup", onUp, true);
+    document.addEventListener("pointercancel", onCancel, true);
+    header.setPointerCapture?.(event.pointerId);
+  });
+}
+
+function updateNodePointerDrag(event) {
+  const drag = nodesState.pointerDrag;
+  if (!drag) {
+    return;
+  }
+  const dx = event.clientX - drag.startX;
+  const dy = event.clientY - drag.startY;
+  if (!drag.active && Math.hypot(dx, dy) < 4) {
+    return;
+  }
+  if (!drag.active) {
+    drag.active = true;
+    nodesState.suppressClick = true;
+    nodesState.draggingNode = drag.node;
+    setDraggingVisual(true);
+    drag.ghost = document.createElement("div");
+    drag.ghost.className = "workspace2-drag-ghost";
+    drag.ghost.textContent = drag.node.title;
+    document.body.append(drag.ghost);
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  drag.ghost.style.left = `${event.clientX + 12}px`;
+  drag.ghost.style.top = `${event.clientY + 10}px`;
+
+  clearFavoriteDropHighlights();
+  const dropElement = document.elementFromPoint(event.clientX, event.clientY);
+  const favoriteTarget = dropElement?.closest?.("[data-workspace2-favorite-target]");
+  if (favoriteTarget) {
+    favoriteTarget.classList.add("is-drop");
+    highlightFavoriteDropRegion(favoriteTarget.dataset.workspace2FavoriteTarget || NODE_DEFAULT_GROUP_ID);
+  }
+  drag.ghost.style.borderColor = favoriteTarget || isCanvasDropTarget(dropElement)
+    ? "var(--workspace2-accent)"
+    : "var(--border-color, #555)";
+}
+
+async function commitNodePointerDrag(event) {
+  const drag = nodesState.pointerDrag;
+  if (!drag) {
+    return;
+  }
+  updateNodePointerDrag(event);
+  const dropElement = document.elementFromPoint(event.clientX, event.clientY);
+  const favoriteTarget = dropElement?.closest?.("[data-workspace2-favorite-target]");
+  const shouldFavorite = drag.active && favoriteTarget;
+  const shouldCreate = drag.active && !shouldFavorite && isCanvasDropTarget(dropElement);
+  const nodeType = drag.node.type;
+  const pos = shouldCreate ? canvasPositionFromClient(event.clientX, event.clientY) : null;
+  const targetGroupId = favoriteTarget?.dataset.workspace2FavoriteTarget || NODE_DEFAULT_GROUP_ID;
+  const beforeType = favoriteTarget?.dataset.workspace2FavoriteBefore || "";
+  finishNodePointerDrag();
+  if (shouldFavorite) {
+    try {
+      if (getFavorite(nodeType)) {
+        await moveFavoriteToGroup(nodesState.renderTarget, nodeType, targetGroupId, beforeType);
+      } else {
+        await addFavoriteNode(nodesState.renderTarget, drag.node, targetGroupId, beforeType);
+      }
+    } catch (error) {
+      nodesState.error = error.message;
+      if (nodesState.renderTarget) {
+        renderNodesPanel(nodesState.renderTarget);
+      }
+    }
+    return;
+  }
+  if (!shouldCreate) {
+    return;
+  }
+  try {
+    await addNodeToCanvas(nodesState.renderTarget, nodeType, pos);
+  } catch (error) {
+    nodesState.error = error.message;
+    if (nodesState.renderTarget) {
+      renderNodesPanel(nodesState.renderTarget);
+    }
+  }
+}
+
+function readDraggedNode(event) {
+  const raw = event.dataTransfer?.getData(NODE_DRAG_TYPE);
+  if (raw) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return nodesState.draggingNode;
+    }
+  }
+  const comfyNodeType = event.dataTransfer?.getData(COMFY_NODE_DRAG_TYPE);
+  if (comfyNodeType) {
+    return { type: comfyNodeType, title: comfyNodeType };
+  }
+  return nodesState.draggingNode;
+}
+
+function isCanvasDropTarget(target) {
+  return target instanceof HTMLCanvasElement || target?.closest?.("canvas");
+}
+
+function canvasPositionFromClient(clientX, clientY) {
+  const canvas = app.canvas;
+  const canvasElement = canvas?.canvas || app.canvasEl || document.querySelector("canvas");
+  if (!canvasElement) {
+    return null;
+  }
+  const rect = canvasElement.getBoundingClientRect();
+  const offset = [clientX - rect.left, clientY - rect.top];
+  if (typeof canvas.convertCanvasToOffset === "function") {
+    return canvas.convertCanvasToOffset(offset);
+  }
+  const ds = canvas.ds || canvasElement.data?.ds;
+  if (ds?.scale && ds.offset?.length >= 2) {
+    return [
+      offset[0] / ds.scale - ds.offset[0],
+      offset[1] / ds.scale - ds.offset[1],
+    ];
+  }
+  return offset;
+}
+
+async function recordNodeUse(el, nodeType) {
+  const favorite = getFavorite(nodeType);
+  if (!favorite) {
+    return;
+  }
+  favorite.useCount = Number(favorite.useCount || 0) + 1;
+  favorite.lastUsed = Date.now();
+  await saveNodeLibrary(el);
+}
+
+async function addNodeToCanvas(el, nodeType, pos) {
+  if (!globalThis.LiteGraph?.createNode || !app.graph || !pos) {
+    throw new Error(t("nodes.canvasUnavailable"));
+  }
+  const node = globalThis.LiteGraph.createNode(nodeType);
+  if (!node) {
+    throw new Error(t("nodes.createFailed", { type: nodeType }));
+  }
+  node.pos = [pos[0], pos[1]];
+  app.graph.add(node);
+  app.canvas?.setDirty?.(true, true);
+  node.onAdded?.();
+  app.graph.change?.();
+  await recordNodeUse(el, nodeType);
+}
+
+function updatePendingNodeUi() {
+  const target = nodesState.renderTarget;
+  if (!target?.isConnected) {
+    return;
+  }
+  const selectedType = nodesState.pendingNode?.type || "";
+  const status = target.querySelector("[data-workspace2-nodes-status]");
+  if (status) {
+    const nodeTypes = getNodeDefinitions();
+    status.textContent = nodesState.pendingNode
+      ? t("nodes.pendingPlace", { name: nodesState.pendingNode.title })
+      : t("nodes.status", { count: nodeTypes.length });
+  }
+  target.querySelectorAll(".workspace2-node-row.is-selected").forEach((row) => {
+    row.classList.remove("is-selected");
+  });
+  if (!selectedType) {
+    return;
+  }
+  target.querySelectorAll(`[data-workspace2-node-type="${cssEscape(selectedType)}"]`).forEach((row) => {
+    row.classList.add("is-selected");
+  });
+}
+
+function setPendingNode(node) {
+  nodesState.pendingNode = node
+    ? {
+        type: node.type,
+        title: node.title || node.type,
+        category: node.category || "",
+        definition: node.definition || null,
+      }
+    : null;
+  if (!nodesState.pendingNode) {
+    hideNodePreview();
+  }
+  updatePendingNodeUi();
+}
+
+async function placePendingNodeAt(clientX, clientY) {
+  if (!nodesState.pendingNode) {
+    return false;
+  }
+  const pos = canvasPositionFromClient(clientX, clientY);
+  const nodeType = nodesState.pendingNode.type;
+  setPendingNode(null);
+  await addNodeToCanvas(nodesState.renderTarget, nodeType, pos);
+  return true;
+}
+
+function pendingNodePreviewData() {
+  if (!nodesState.pendingNode) {
+    return null;
+  }
+  const definition = getNodeDefinitionMap().get(nodesState.pendingNode.type);
+  return {
+    ...definition,
+    ...nodesState.pendingNode,
+    title: nodesState.pendingNode.title || definition?.title || nodesState.pendingNode.type,
+    category: definition?.category || nodesState.pendingNode.category || t("nodes.uncategorized"),
+    definition: definition?.definition || nodesState.pendingNode.definition || {},
+  };
+}
+
+function showPendingNodeCanvasPreview(event) {
+  const node = pendingNodePreviewData();
+  if (!node) {
+    hideNodePreview();
+    return;
+  }
+  const preview = nodesState.previewPopover;
+  if (nodesState.previewNode?.type === node.type && preview?.isConnected && !preview.hidden) {
+    positionNodePreviewPopover(preview, event, { followCursor: true });
+    return;
+  }
+  showNodePreview(node, event, { followCursor: true });
+}
+
+function setupNodeCanvasDrop() {
+  if (nodesState.canvasDropReady) {
+    return;
+  }
+  nodesState.canvasDropReady = true;
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && nodesState.pendingNode) {
+      event.stopPropagation();
+      setPendingNode(null);
+    }
+  }, true);
+
+  document.addEventListener("click", async (event) => {
+    if (!nodesState.pendingNode || !isCanvasDropTarget(event.target)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      await placePendingNodeAt(event.clientX, event.clientY);
+    } catch (error) {
+      nodesState.error = error.message;
+      if (nodesState.renderTarget) {
+        renderNodesPanel(nodesState.renderTarget);
+      }
+    }
+  }, true);
+
+  document.addEventListener("mousemove", (event) => {
+    if (!nodesState.pendingNode) {
+      return;
+    }
+    if (!isCanvasDropTarget(event.target)) {
+      hideNodePreview();
+      return;
+    }
+    showPendingNodeCanvasPreview(event);
+  }, true);
+
+  document.addEventListener("dragover", (event) => {
+    if (!nodesState.draggingNode || !isCanvasDropTarget(event.target)) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  });
+
+  document.addEventListener("drop", async (event) => {
+    const dragged = readDraggedNode(event);
+    if (!dragged || !isCanvasDropTarget(event.target)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const pos = canvasPositionFromClient(event.clientX, event.clientY);
+    try {
+      await addNodeToCanvas(nodesState.renderTarget, dragged.type, pos);
+    } catch (error) {
+      nodesState.error = error.message;
+      if (nodesState.renderTarget) {
+        renderNodesPanel(nodesState.renderTarget);
+      }
+    } finally {
+      nodesState.draggingNode = null;
+    }
+  });
+}
+
+function fontControl(el) {
+  const current = normalizeWorkflowFontScale(state.fontScale);
+  state.fontScale = current;
+
+  const wrap = document.createElement("label");
+  wrap.className = "workspace2-font-control";
+  wrap.title = t("font.size");
+
+  const slider = document.createElement("input");
+  slider.className = "workspace2-font-slider";
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = "100";
+  slider.step = "1";
+  slider.value = String(current);
+  isolateComfyKeys(slider);
+  slider.setAttribute("aria-label", t("font.size"));
+  const valueLabel = createSliderValueLabel(workflowScaleLabel(current));
+  const defaultMark = document.createElement("span");
+  defaultMark.className = "workspace2-scale-default-mark";
+
+  slider.addEventListener("click", (event) => event.stopPropagation());
+  slider.addEventListener("input", () => {
+    state.fontScale = snapUiScaleValue(slider.value);
+    slider.value = String(state.fontScale);
+    localStorage.setItem(FONT_SCALE_KEY, String(state.fontScale));
+    valueLabel.textContent = workflowScaleLabel(state.fontScale);
+    showSliderValue(wrap);
+    const panel = el.querySelector(".workspace2-panel");
+    if (panel) {
+      applyWorkflowUiScale(panel);
+    }
+  });
+  slider.addEventListener("pointerup", () => hideSliderValueSoon(wrap));
+  slider.addEventListener("change", () => hideSliderValueSoon(wrap));
+  slider.addEventListener("blur", () => hideSliderValueSoon(wrap));
+
+  wrap.append(defaultMark, slider, valueLabel);
+  return wrap;
+}
+
+function normalizeWorkflowFontScale(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function snapUiScaleValue(value) {
+  const normalized = normalizeWorkflowFontScale(value);
+  return Math.abs(normalized - 50) <= 3 ? 50 : normalized;
+}
+
+function createSliderValueLabel(text) {
+  const valueLabel = document.createElement("span");
+  valueLabel.className = "workspace2-slider-value";
+  valueLabel.textContent = text;
+  return valueLabel;
+}
+
+function showSliderValue(wrap) {
+  clearTimeout(wrap._workspace2SliderValueTimer);
+  wrap.classList.add("is-adjusting");
+}
+
+function hideSliderValueSoon(wrap) {
+  clearTimeout(wrap._workspace2SliderValueTimer);
+  wrap._workspace2SliderValueTimer = window.setTimeout(() => {
+    wrap.classList.remove("is-adjusting");
+  }, 700);
+}
+
+function formatPx(value) {
+  return `${Math.round(Number.parseFloat(value) * 10) / 10}px`;
+}
+
+function workflowScaleLabel(value) {
+  return formatPx(workflowUiScaleVars(value).treeFont);
+}
+
+function nodeScaleLabel(value) {
+  return formatPx(nodeUiScaleVars(value).nodeFont);
+}
+
+function readWorkflowFontScale() {
+  const raw = localStorage.getItem(FONT_SCALE_KEY);
+  if (raw === null) {
+    localStorage.setItem(FONT_SCALE_KEY, "50");
+    localStorage.setItem(FONT_SCALE_LINEAR_KEY, "1");
+    return 50;
+  }
+  const value = Number(raw);
+  if (localStorage.getItem(FONT_SCALE_LINEAR_KEY) !== "1" && Number.isInteger(value) && value >= 0 && value <= 2) {
+    const migrated = value * 50;
+    localStorage.setItem(FONT_SCALE_KEY, String(migrated));
+    localStorage.setItem(FONT_SCALE_LINEAR_KEY, "1");
+    return migrated;
+  }
+  localStorage.setItem(FONT_SCALE_LINEAR_KEY, "1");
+  return normalizeWorkflowFontScale(value);
+}
+
+function workflowUiScaleVars(value) {
+  const scale = normalizeWorkflowFontScale(value) / 100;
+  return {
+    treeFont: `${11 + scale * 6}px`,
+    folderFont: `${11.5 + scale * 6}px`,
+    nodeFont: `${10.5 + scale * 5.5}px`,
+    metaFont: `${9 + scale * 3}px`,
+    rowHeight: `${28 + scale * 14}px`,
+  };
+}
+
+function applyWorkflowUiScale(panel) {
+  state.fontScale = normalizeWorkflowFontScale(state.fontScale);
+  const vars = workflowUiScaleVars(state.fontScale);
+  panel.style.setProperty("--workspace2-tree-font", vars.treeFont);
+  panel.style.setProperty("--workspace2-folder-font", vars.folderFont);
+  panel.style.setProperty("--workspace2-node-font", vars.nodeFont);
+  panel.style.setProperty("--workspace2-meta-font", vars.metaFont);
+  panel.style.setProperty("--workspace2-row-height", vars.rowHeight);
+}
+
+function clampNodeUiScale(value) {
+  return Math.max(0, Math.min(100, Number(value) || 0));
+}
+
+function nodeUiScaleVars(value) {
+  const base = workflowUiScaleVars(clampNodeUiScale(value));
+  const scale = clampNodeUiScale(value) / 100;
+  return {
+    treeFont: base.treeFont,
+    folderFont: `${12 + scale * 6}px`,
+    nodeFont: `${11 + scale * 5}px`,
+    metaFont: base.metaFont,
+    rowHeight: base.rowHeight,
+    nodePaddingY: `${2 + scale * 3}px`,
+    nodeGap: `${2 + scale * 2}px`,
+  };
+}
+
+function applyNodeUiScale(panel) {
+  nodesState.uiScale = clampNodeUiScale(nodesState.uiScale);
+  const vars = nodeUiScaleVars(nodesState.uiScale);
+  panel.style.setProperty("--workspace2-tree-font", vars.treeFont);
+  panel.style.setProperty("--workspace2-folder-font", vars.folderFont);
+  panel.style.setProperty("--workspace2-node-font", vars.nodeFont);
+  panel.style.setProperty("--workspace2-meta-font", vars.metaFont);
+  panel.style.setProperty("--workspace2-row-height", vars.rowHeight);
+  panel.style.setProperty("--workspace2-node-row-height", vars.rowHeight);
+  panel.style.setProperty("--workspace2-node-row-padding-y", vars.nodePaddingY);
+  panel.style.setProperty("--workspace2-node-list-gap", vars.nodeGap);
+}
+
+function nodesDensityControl(el) {
+  nodesState.uiScale = clampNodeUiScale(nodesState.uiScale);
+  const wrap = document.createElement("label");
+  wrap.className = "workspace2-node-density";
+  wrap.title = t("nodes.uiScaleTitle");
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = "100";
+  slider.step = "1";
+  slider.value = String(nodesState.uiScale);
+  isolateComfyKeys(slider);
+  slider.setAttribute("aria-label", t("nodes.uiScaleTitle"));
+  const valueLabel = createSliderValueLabel(nodeScaleLabel(nodesState.uiScale));
+  const defaultMark = document.createElement("span");
+  defaultMark.className = "workspace2-scale-default-mark";
+
+  slider.addEventListener("click", (event) => event.stopPropagation());
+
+  slider.addEventListener("input", () => {
+    nodesState.uiScale = snapUiScaleValue(slider.value);
+    slider.value = String(nodesState.uiScale);
+    localStorage.setItem(NODE_UI_SCALE_KEY, String(nodesState.uiScale));
+    valueLabel.textContent = nodeScaleLabel(nodesState.uiScale);
+    showSliderValue(wrap);
+    const panel = el.querySelector(".workspace2-panel");
+    if (panel) {
+      applyNodeUiScale(panel);
+    }
+  });
+  slider.addEventListener("pointerup", () => hideSliderValueSoon(wrap));
+  slider.addEventListener("change", () => hideSliderValueSoon(wrap));
+  slider.addEventListener("blur", () => hideSliderValueSoon(wrap));
+
+  wrap.append(defaultMark, slider, valueLabel);
+  return wrap;
+}
+
+function nodesFavoriteRootRow(el) {
+  return createRootActionRow({
+    className: "workspace2-node-root-row",
+    title: t("nodes.moveToFavoriteRootTitle"),
+    icon: "rootArrow",
+    text: t("nodes.moveToFavoriteRoot"),
+    control: nodesDensityControl(el),
+    setupDrop: (row) => {
+      makeFavoriteGroupDropTarget(el, row, NODE_DEFAULT_GROUP_ID);
+      row.dataset.workspace2GroupTarget = "";
+    },
+  });
+}
+
+function nodesViewTabs(el) {
+  const defaults = defaultNodeVisibleSections();
+  nodesState.visibleSections = { ...defaults, ...(nodesState.visibleSections || {}) };
+  if (!Object.values(nodesState.visibleSections).some(Boolean)) {
+    nodesState.visibleSections = defaults;
+  }
+  const tabs = document.createElement("div");
+  tabs.className = "workspace2-node-tabs workspace2-node-filter-row";
+  for (const section of NODE_SECTION_FILTERS) {
+    const active = nodesState.visibleSections[section] !== false;
+    const label = t(`nodes.view.${section}`);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `workspace2-node-tab ${active ? "is-active" : ""}`;
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.textContent = label;
+    button.title = t(active ? "nodes.filterHide" : "nodes.filterShow", { section: label });
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const next = {
+        ...nodesState.visibleSections,
+        [section]: nodesState.visibleSections[section] === false,
+      };
+      if (!Object.values(next).some(Boolean)) {
+        return;
+      }
+      nodesState.visibleSections = next;
+      saveNodeVisibleSections();
+      renderNodesPanel(el);
+    });
+    tabs.append(button);
+  }
+  return tabs;
+}
+
+function nodesSortButton(el) {
+  if (!NODE_SORTS.includes(nodesState.sort)) {
+    nodesState.sort = "original";
+  }
+  const label = t(`nodes.sort.${nodesState.sort}`);
+  const button = toolbarButton("sort", t("nodes.sortTitle", { sort: label }), (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (nodesState.sortMenuElement) {
+      closeNodeSortMenu();
+      return;
+    }
+    openNodeSortMenu(el, event.currentTarget);
+  });
+  button.classList.add("workspace2-node-sort-button");
+  button.dataset.sort = nodesState.sort;
+  button.classList.toggle("is-custom-order", nodesState.customOrderEnabled);
+  return button;
+}
+
+function closeNodeSortMenu() {
+  if (nodesState.sortMenuCloseHandler) {
+    window.removeEventListener("pointerdown", nodesState.sortMenuCloseHandler, true);
+    document.removeEventListener("pointerdown", nodesState.sortMenuCloseHandler, true);
+    window.removeEventListener("click", nodesState.sortMenuCloseHandler, true);
+    document.removeEventListener("click", nodesState.sortMenuCloseHandler, true);
+    window.removeEventListener("keydown", nodesState.sortMenuCloseHandler, true);
+    nodesState.sortMenuCloseHandler = null;
+  }
+  nodesState.sortMenuElement?.remove();
+  nodesState.sortMenuElement = null;
+}
+
+function openNodeSortMenu(el, anchor) {
+  closeNodeSortMenu();
+  const panel = anchor?.closest?.(".workspace2-panel") || el.querySelector(".workspace2-panel");
+  if (!panel) {
+    return;
+  }
+
+  const rect = anchor.getBoundingClientRect();
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 180))}px`;
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.addEventListener("click", (event) => event.stopPropagation());
+  menu.addEventListener("pointerdown", (event) => event.stopPropagation());
+  menu.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  for (const sort of NODE_SORTS) {
+    const option = document.createElement("button");
+    option.className = `workspace2-menu-item${sort === nodesState.sort ? " is-active" : ""}`;
+    option.type = "button";
+    option.textContent = t(`nodes.sort.${sort}`);
+    option.addEventListener("click", () => {
+      nodesState.sort = sort;
+      localStorage.setItem(NODE_SORT_KEY, nodesState.sort);
+      closeNodeSortMenu();
+      renderNodesPanel(el);
+    });
+    menu.append(option);
+  }
+
+  const divider = document.createElement("div");
+  divider.className = "workspace2-menu-divider";
+  menu.append(divider);
+
+  const custom = document.createElement("button");
+  custom.className = `workspace2-menu-item workspace2-menu-check-item${nodesState.customOrderEnabled ? " is-active" : ""}`;
+  custom.type = "button";
+  custom.textContent = t("nodes.customOrder");
+  custom.addEventListener("click", () => {
+    nodesState.customOrderEnabled = !nodesState.customOrderEnabled;
+    localStorage.setItem(NODE_CUSTOM_ORDER_ENABLED_KEY, nodesState.customOrderEnabled ? "1" : "0");
+    closeNodeSortMenu();
+    renderNodesPanel(el);
+  });
+  menu.append(custom);
+
+  panel.append(menu);
+  nodesState.sortMenuElement = menu;
+  nodesState.sortMenuCloseHandler = (event) => {
+    if (event.type === "keydown" && event.key !== "Escape") {
+      return;
+    }
+    if (menu.contains(event.target) || anchor.contains(event.target)) {
+      return;
+    }
+    closeNodeSortMenu();
+  };
+  setTimeout(() => {
+    window.addEventListener("pointerdown", nodesState.sortMenuCloseHandler, true);
+    document.addEventListener("pointerdown", nodesState.sortMenuCloseHandler, true);
+    window.addEventListener("click", nodesState.sortMenuCloseHandler, true);
+    document.addEventListener("click", nodesState.sortMenuCloseHandler, true);
+    window.addEventListener("keydown", nodesState.sortMenuCloseHandler, true);
+  }, 0);
+}
+
+function workflowSortButton(el) {
+  if (!WORKFLOW_SORTS.includes(state.sort)) {
+    state.sort = "nameAsc";
+  }
+  const label = t(`workflows.sort.${state.sort}`);
+  const button = toolbarButton("sort", t("workflows.sortTitle", { sort: label }), (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (state.sortMenuElement) {
+      closeWorkflowSortMenu();
+      return;
+    }
+    openWorkflowSortMenu(el, event.currentTarget);
+  });
+  button.classList.add("workspace2-workflow-sort-button");
+  button.dataset.sort = state.sort;
+  button.classList.toggle("is-custom-order", state.customOrderEnabled);
+  return button;
+}
+
+function closeWorkflowSortMenu() {
+  if (state.sortMenuCloseHandler) {
+    window.removeEventListener("pointerdown", state.sortMenuCloseHandler, true);
+    document.removeEventListener("pointerdown", state.sortMenuCloseHandler, true);
+    window.removeEventListener("click", state.sortMenuCloseHandler, true);
+    document.removeEventListener("click", state.sortMenuCloseHandler, true);
+    window.removeEventListener("keydown", state.sortMenuCloseHandler, true);
+    state.sortMenuCloseHandler = null;
+  }
+  state.sortMenuElement?.remove();
+  state.sortMenuElement = null;
+}
+
+function openWorkflowSortMenu(el, anchor) {
+  closeWorkflowSortMenu();
+  const panel = anchor?.closest?.(".workspace2-panel") || el.querySelector(".workspace2-panel");
+  if (!panel) {
+    return;
+  }
+
+  const rect = anchor.getBoundingClientRect();
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 180))}px`;
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.addEventListener("click", (event) => event.stopPropagation());
+  menu.addEventListener("pointerdown", (event) => event.stopPropagation());
+  menu.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  for (const sort of WORKFLOW_SORTS) {
+    const option = document.createElement("button");
+    option.className = `workspace2-menu-item${sort === state.sort ? " is-active" : ""}`;
+    option.type = "button";
+    option.textContent = t(`workflows.sort.${sort}`);
+    option.addEventListener("click", () => {
+      state.sort = sort;
+      localStorage.setItem(WORKFLOW_SORT_KEY, state.sort);
+      closeWorkflowSortMenu();
+      renderPanel(el);
+    });
+    menu.append(option);
+  }
+
+  const divider = document.createElement("div");
+  divider.className = "workspace2-menu-divider";
+  menu.append(divider);
+
+  const folderFirst = document.createElement("button");
+  folderFirst.className = `workspace2-menu-item workspace2-menu-check-item${state.folderFirst ? " is-active" : ""}`;
+  folderFirst.type = "button";
+  folderFirst.textContent = t("workflows.folderFirst");
+  folderFirst.addEventListener("click", () => {
+    state.folderFirst = !state.folderFirst;
+    localStorage.setItem(WORKFLOW_FOLDER_FIRST_KEY, state.folderFirst ? "1" : "0");
+    closeWorkflowSortMenu();
+    renderPanel(el);
+  });
+  menu.append(folderFirst);
+
+  const custom = document.createElement("button");
+  custom.className = `workspace2-menu-item workspace2-menu-check-item${state.customOrderEnabled ? " is-active" : ""}`;
+  custom.type = "button";
+  custom.textContent = t("workflows.customOrder");
+  custom.addEventListener("click", () => {
+    state.customOrderEnabled = !state.customOrderEnabled;
+    localStorage.setItem(WORKFLOW_CUSTOM_ORDER_KEY, state.customOrderEnabled ? "1" : "0");
+    closeWorkflowSortMenu();
+    renderPanel(el);
+  });
+  menu.append(custom);
+
+  panel.append(menu);
+  state.sortMenuElement = menu;
+  state.sortMenuCloseHandler = (event) => {
+    if (event.type === "keydown" && event.key !== "Escape") {
+      return;
+    }
+    if (menu.contains(event.target) || anchor.contains(event.target)) {
+      return;
+    }
+    closeWorkflowSortMenu();
+  };
+  setTimeout(() => {
+    window.addEventListener("pointerdown", state.sortMenuCloseHandler, true);
+    document.addEventListener("pointerdown", state.sortMenuCloseHandler, true);
+    window.addEventListener("click", state.sortMenuCloseHandler, true);
+    document.addEventListener("click", state.sortMenuCloseHandler, true);
+    window.addEventListener("keydown", state.sortMenuCloseHandler, true);
+  }, 0);
+}
+
+function prepareWorkspaceHost(el) {
+  el.innerHTML = "";
+  el.classList.add("workspace2-host");
+  el.style.height = "100%";
+  el.style.maxHeight = "100%";
+  el.style.overflow = "hidden";
+  el.style.minHeight = "0";
+}
+
+function createPanelHeader(titleText, statusText, options = {}) {
+  const header = document.createElement("div");
+  header.className = "workspace2-header";
+
+  const title = document.createElement("div");
+  title.className = "workspace2-title";
+  title.textContent = titleText;
+
+  const status = document.createElement("div");
+  status.className = "workspace2-status";
+  status.textContent = statusText;
+  if (options.statusDataset) {
+    status.dataset[options.statusDataset] = "1";
+  }
+
+  header.append(title, status);
+  return header;
+}
+
+function createSearchToolbar({ focusKey, placeholder, value, onInput, buttons = [] }) {
+  const toolbar = document.createElement("div");
+  toolbar.className = "workspace2-toolbar";
+  toolbar.style.setProperty("--workspace2-toolbar-actions", String(buttons.length));
+
+  const search = document.createElement("input");
+  search.className = "workspace2-input";
+  search.dataset.workspace2Focus = focusKey;
+  search.placeholder = placeholder;
+  search.value = value;
+  isolateComfyKeys(search);
+  search.addEventListener("click", (event) => event.stopPropagation());
+  let isComposing = false;
+  search.addEventListener("compositionstart", () => {
+    isComposing = true;
+  });
+  search.addEventListener("compositionend", () => {
+    isComposing = false;
+    onInput(search.value);
+  });
+  search.addEventListener("input", (event) => {
+    if (isComposing || event.isComposing) {
+      return;
+    }
+    onInput(search.value);
+  });
+
+  toolbar.append(search, ...buttons);
+  return toolbar;
+}
+
+function createRootActionRow({ className = "", title, icon, text, control, setupDrop, onClick }) {
+  const row = document.createElement("div");
+  row.className = `workspace2-root-row ${className}`.trim();
+  if (title) {
+    row.title = title;
+  }
+
+  const target = document.createElement("div");
+  target.className = "workspace2-root-target";
+  target.append(iconSvg(icon));
+
+  const label = document.createElement("div");
+  label.className = "workspace2-name";
+  label.textContent = text;
+  target.append(label);
+
+  if (typeof setupDrop === "function") {
+    setupDrop(row, target);
+  }
+  if (typeof onClick === "function") {
+    row.addEventListener("click", onClick);
+  }
+
+  row.append(target);
+  if (control) {
+    row.append(control);
+  }
+  return row;
+}
+
+function readDragItem(event) {
+  const raw = event.dataTransfer?.getData(DRAG_TYPE);
+  if (!raw) {
+    const plain = event.dataTransfer?.getData("text/plain");
+    if (!plain) {
+      return state.draggingItem;
+    }
+    try {
+      return JSON.parse(plain);
+    } catch {
+      return state.draggingItem;
+    }
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return state.draggingItem;
+  }
+}
+
+function canDrop(dragged, targetFolder) {
+  if (!dragged || dragged.path === targetFolder) {
+    return false;
+  }
+  if (dragged.type === "folder" && targetFolder.startsWith(`${dragged.path}/`)) {
+    return false;
+  }
+  return parentPath(dragged.path) !== targetFolder;
+}
+
+function makeDropTarget(el, target, targetFolder) {
+  target.dataset.workspace2DropTarget = targetFolder;
+  target.addEventListener("dragover", (event) => {
+    const dragged = state.draggingItem;
+    if (!canDrop(dragged, targetFolder)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    target.classList.add("is-drop");
+  });
+  target.addEventListener("dragleave", () => {
+    target.classList.remove("is-drop");
+  });
+  target.addEventListener("drop", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    target.classList.remove("is-drop");
+    const dragged = readDragItem(event);
+    if (!canDrop(dragged, targetFolder)) {
+      return;
+    }
+    try {
+      await moveItem(el, dragged.path, targetFolder);
+    } catch (error) {
+      handleError(el, error);
+    } finally {
+      state.draggingItem = null;
+    }
+  });
+}
+
+function workflowDropTargetElement(targetFolder) {
+  if (!targetFolder) {
+    return document.querySelector(".workspace2-tree[data-workspace2-drop-target]");
+  }
+  return document.querySelector(`[data-workspace2-item-path="${cssEscape(targetFolder)}"]`);
+}
+
+function highlightWorkflowDropRegion(targetFolder) {
+  const targetElement = workflowDropTargetElement(targetFolder);
+  targetElement?.classList.add("is-drop");
+  if (!targetFolder) {
+    return;
+  }
+  document.querySelectorAll("[data-workspace2-item-path]").forEach((row) => {
+    const rowPath = row.dataset.workspace2ItemPath || "";
+    if (rowPath.startsWith(`${targetFolder}/`)) {
+      row.classList.add("is-drop-region");
+    }
+  });
+}
+
+function clearPointerDropHighlights() {
+  document.querySelectorAll(".workspace2-row.is-drop, .workspace2-root.is-drop, .workspace2-root-row.is-drop, .workspace2-tree.is-drop, .workspace2-row.is-drop-region, .workspace2-row.is-reorder-before, .workspace2-row.is-reorder-after").forEach((node) => {
+    node.classList.remove("is-drop", "is-drop-region", "is-reorder-before", "is-reorder-after");
+  });
+}
+
+function setDraggingVisual(active) {
+  document.querySelectorAll(".workspace2-panel").forEach((node) => {
+    node.classList.toggle("is-dragging", active);
+  });
+}
+
+function finishPointerDrag() {
+  if (state.pointerDrag) {
+    document.removeEventListener("pointermove", state.pointerDrag.onMove, true);
+    document.removeEventListener("pointerup", state.pointerDrag.onUp, true);
+    document.removeEventListener("pointercancel", state.pointerDrag.onCancel, true);
+  }
+  clearPointerDropHighlights();
+  setDraggingVisual(false);
+  state.draggingItem = null;
+  state.pointerDrag?.ghost?.remove();
+  state.pointerDrag = null;
+}
+
+function finishWorkflowReorderDrag() {
+  const drag = state.reorderDrag;
+  if (drag) {
+    document.removeEventListener("pointermove", drag.onMove, true);
+    document.removeEventListener("pointerup", drag.onUp, true);
+    document.removeEventListener("pointercancel", drag.onCancel, true);
+    drag.row?.classList.remove("is-reordering");
+    drag.ghost?.remove();
+  }
+  clearPointerDropHighlights();
+  setDraggingVisual(false);
+  state.reorderDrag = null;
+}
+
+function workflowRowAtPoint(clientX, clientY) {
+  const previousGhostDisplay = state.reorderDrag?.ghost?.style.display;
+  if (state.reorderDrag?.ghost) {
+    state.reorderDrag.ghost.style.display = "none";
+  }
+  const element = document.elementFromPoint(clientX, clientY);
+  if (state.reorderDrag?.ghost) {
+    state.reorderDrag.ghost.style.display = previousGhostDisplay || "";
+  }
+  return element?.closest?.(".workspace2-row[data-workspace2-item-path]") || null;
+}
+
+function updateWorkflowReorderDrag(event) {
+  const drag = state.reorderDrag;
+  if (!drag) {
+    return;
+  }
+
+  const dx = event.clientX - drag.startX;
+  const dy = event.clientY - drag.startY;
+  if (!drag.active && Math.hypot(dx, dy) < 4) {
+    return;
+  }
+
+  if (!drag.active) {
+    drag.active = true;
+    state.suppressClick = true;
+    setDraggingVisual(true);
+    drag.row.classList.add("is-reordering");
+    drag.ghost = document.createElement("div");
+    drag.ghost.className = "workspace2-drag-ghost";
+    drag.ghost.textContent = drag.item.name;
+    document.body.append(drag.ghost);
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  drag.ghost.style.left = `${event.clientX + 12}px`;
+  drag.ghost.style.top = `${event.clientY + 10}px`;
+
+  clearPointerDropHighlights();
+  const targetRow = workflowRowAtPoint(event.clientX, event.clientY);
+  const targetPath = targetRow?.dataset.workspace2ItemPath || "";
+  const targetParent = targetRow?.dataset.workspace2ParentPath || "";
+  if (!targetRow || targetPath === drag.item.path || targetParent !== drag.parentPath) {
+    drag.targetPath = "";
+    drag.placement = "";
+    return;
+  }
+
+  const rect = targetRow.getBoundingClientRect();
+  drag.targetPath = targetPath;
+  drag.placement = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  targetRow.classList.add(drag.placement === "before" ? "is-reorder-before" : "is-reorder-after");
+}
+
+function commitWorkflowReorderDrag(el, event) {
+  const drag = state.reorderDrag;
+  if (!drag) {
+    return;
+  }
+
+  updateWorkflowReorderDrag(event);
+  const shouldReorder = drag.active && drag.targetPath && drag.placement;
+  const sourcePath = drag.item.path;
+  const targetPath = drag.targetPath;
+  const placement = drag.placement;
+  const parent = drag.parentPath;
+  finishWorkflowReorderDrag();
+
+  if (!shouldReorder) {
+    return;
+  }
+
+  const rows = [...el.querySelectorAll(`.workspace2-row[data-workspace2-parent-path="${cssEscape(parent)}"]`)];
+  const order = rows.map((row) => row.dataset.workspace2ItemPath).filter(Boolean);
+  const nextOrder = order.filter((path) => path !== sourcePath);
+  const targetIndex = nextOrder.indexOf(targetPath);
+  if (targetIndex === -1) {
+    return;
+  }
+  nextOrder.splice(placement === "before" ? targetIndex : targetIndex + 1, 0, sourcePath);
+  state.customOrder[parent] = nextOrder;
+  saveWorkflowCustomOrder();
+  renderPanel(el);
+}
+
+function beginWorkflowReorderDrag(el, handle, row, node) {
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || !state.customOrderEnabled || state.editingPath === node.path) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const onMove = (moveEvent) => updateWorkflowReorderDrag(moveEvent);
+    const onUp = (upEvent) => commitWorkflowReorderDrag(el, upEvent);
+    const onCancel = () => finishWorkflowReorderDrag();
+    state.reorderDrag = {
+      item: {
+        type: node.type,
+        path: node.path,
+        name: node.name,
+      },
+      parentPath: parentPath(node.path || ""),
+      row,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      targetPath: "",
+      placement: "",
+      ghost: null,
+      onMove,
+      onUp,
+      onCancel,
+    };
+    document.addEventListener("pointermove", onMove, true);
+    document.addEventListener("pointerup", onUp, true);
+    document.addEventListener("pointercancel", onCancel, true);
+    handle.setPointerCapture?.(event.pointerId);
+  });
+}
+
+function findPointerDropTarget(clientX, clientY) {
+  const previousGhostDisplay = state.pointerDrag?.ghost?.style.display;
+  if (state.pointerDrag?.ghost) {
+    state.pointerDrag.ghost.style.display = "none";
+  }
+  const element = document.elementFromPoint(clientX, clientY);
+  if (state.pointerDrag?.ghost) {
+    state.pointerDrag.ghost.style.display = previousGhostDisplay || "";
+  }
+  const itemRow = element?.closest?.("[data-workspace2-parent-path]") || null;
+  const directTarget = element?.closest?.("[data-workspace2-drop-target]") || null;
+  if (directTarget && !directTarget.classList.contains("workspace2-tree")) {
+    return directTarget;
+  }
+  const parentPathValue = itemRow?.dataset.workspace2ParentPath;
+  if (parentPathValue !== undefined) {
+    return workflowDropTargetElement(parentPathValue);
+  }
+  return directTarget;
+}
+
+function updatePointerDrag(el, event) {
+  const drag = state.pointerDrag;
+  if (!drag) {
+    return;
+  }
+
+  const dx = event.clientX - drag.startX;
+  const dy = event.clientY - drag.startY;
+  if (!drag.active && Math.hypot(dx, dy) < 4) {
+    return;
+  }
+
+  if (!drag.active) {
+    drag.active = true;
+    state.suppressClick = true;
+    state.draggingItem = drag.item;
+    setDraggingVisual(true);
+    drag.ghost = document.createElement("div");
+    drag.ghost.className = "workspace2-drag-ghost";
+    drag.ghost.textContent = drag.item.name;
+    document.body.append(drag.ghost);
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  drag.ghost.style.left = `${event.clientX + 12}px`;
+  drag.ghost.style.top = `${event.clientY + 10}px`;
+
+  clearPointerDropHighlights();
+  const target = findPointerDropTarget(event.clientX, event.clientY);
+  const targetFolder = target?.dataset.workspace2DropTarget ?? null;
+  if (target && canDrop(drag.item, targetFolder)) {
+    drag.targetFolder = targetFolder;
+    highlightWorkflowDropRegion(targetFolder);
+  } else {
+    drag.targetFolder = null;
+  }
+}
+
+async function commitPointerDrag(el, event) {
+  const drag = state.pointerDrag;
+  if (!drag) {
+    return;
+  }
+
+  updatePointerDrag(el, event);
+  const shouldMove = drag.active && drag.targetFolder !== null;
+  const sourcePath = drag.item.path;
+  const targetFolder = drag.targetFolder;
+  finishPointerDrag();
+
+  if (!shouldMove) {
+    return;
+  }
+
+  try {
+    await moveItem(el, sourcePath, targetFolder);
+  } catch (error) {
+    handleError(el, error);
+  }
+}
+
+function beginPointerDrag(el, row, node) {
+  row.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || state.editingPath === node.path) {
+      return;
+    }
+    event.preventDefault();
+    if (event.target.closest("button,input,.workspace2-disclosure,.workspace2-reorder-handle")) {
+      return;
+    }
+    const item = {
+      type: node.type,
+      path: node.path,
+      name: node.name,
+    };
+    const onMove = (moveEvent) => updatePointerDrag(el, moveEvent);
+    const onUp = (upEvent) => commitPointerDrag(el, upEvent);
+    const onCancel = () => finishPointerDrag();
+    state.pointerDrag = {
+      item,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+      targetFolder: null,
+      ghost: null,
+      onMove,
+      onUp,
+      onCancel,
+    };
+    document.addEventListener("pointermove", onMove, true);
+    document.addEventListener("pointerup", onUp, true);
+    document.addEventListener("pointercancel", onCancel, true);
+    row.setPointerCapture?.(event.pointerId);
+  });
+}
+
+function openContextMenu(el, event, item) {
+  event.preventDefault();
+  event.stopPropagation();
+  state.selectedPath = item.path;
+  state.contextMenu = {
+    x: event.clientX,
+    y: event.clientY,
+    item,
+  };
+  const panel = event.currentTarget?.closest?.(".workspace2-panel") || el.querySelector(".workspace2-panel");
+  renderContextMenu(el, panel);
+}
+
+function closeContextMenu() {
+  state.contextMenuElement?.remove();
+  state.contextMenuElement = null;
+  state.contextMenu = null;
+}
+
+function renderContextMenu(el, panel) {
+  state.contextMenuElement?.remove();
+  state.contextMenuElement = null;
+  if (!state.contextMenu) {
+    return;
+  }
+  if (!panel) {
+    return;
+  }
+
+  const { item, x, y } = state.contextMenu;
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  menu.addEventListener("click", (event) => event.stopPropagation());
+  menu.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  const addItem = (label, onClick) => {
+    const button = document.createElement("button");
+    button.className = "workspace2-menu-item";
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", async () => {
+      closeContextMenu();
+      try {
+        await onClick();
+      } catch (error) {
+        handleError(el, error);
+      }
+    });
+    menu.append(button);
+  };
+
+  if (item.type === "folder") {
+    addItem(t("menu.newSubfolder"), () => createFolder(el, item.path));
+    addItem(t("folder.personalize"), () => personalizeWorkflowFolder(el, item, { clientX: x, clientY: y }));
+    addItem(t("folder.resetStyle"), () => resetWorkflowFolderStyle(el, item));
+  } else {
+    addItem(t("menu.open"), () => openWorkflow(item.path));
+  }
+  addItem(t("menu.rename"), () => {
+    state.editingPath = item.path;
+    renderPanel(el);
+  });
+  addItem(t("menu.moveToRoot"), () => moveItem(el, item.path, ""));
+  addItem(t("menu.moveToTrash"), () => moveToTrash(el, item));
+
+  panel.append(menu);
+  state.contextMenuElement = menu;
+}
+
+function renderTrashPanel(el, panel) {
+  const list = document.createElement("div");
+  list.className = "workspace2-trash-list";
+
+  if (!state.trashItems.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-empty";
+    empty.textContent = t("trash.empty");
+    list.append(empty);
+  }
+
+  for (const item of state.trashItems) {
+    const row = document.createElement("div");
+    row.className = "workspace2-trash-item";
+
+    const info = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "workspace2-trash-name";
+    name.textContent = `${item.type === "folder" ? t("trash.folderPrefix") : t("trash.filePrefix")}${item.name}`;
+    const meta = document.createElement("div");
+    meta.className = "workspace2-trash-meta";
+    meta.title = item.original_path;
+    meta.textContent = `${item.original_path} | ${item.deleted_at || ""}`;
+    info.append(name, meta);
+
+    const restore = iconButton("restore", t("trash.restore"), async () => {
+      try {
+        await restoreTrashItemSmart(el, item);
+      } catch (error) {
+        handleError(el, error);
+      }
+    });
+
+    const systemTrash = iconButton("systemTrash", t("trash.systemDelete"), async () => {
+      try {
+        await moveTrashItemToSystemTrash(el, item);
+      } catch (error) {
+        handleError(el, error);
+      }
+    });
+
+    row.append(info, restore, systemTrash);
+    list.append(row);
+  }
+
+  panel.append(list);
+}
+
+function renderNode(el, list, node, depth) {
+  if (!matchesQuery(node, state.query.trim().toLowerCase())) {
+    return;
+  }
+
+  const row = document.createElement("div");
+  row.className = "workspace2-row";
+  row.classList.add(node.type === "folder" ? "is-folder" : "is-file");
+  row.style.setProperty("--indent", `${depth * 16 + 4}px`);
+  row.title = node.path || t("root.unknown");
+  row.dataset.workspace2ItemPath = node.path || "";
+  row.dataset.workspace2ParentPath = parentPath(node.path || "");
+  row.draggable = false;
+  if (state.selectedPath === node.path) {
+    row.classList.add("is-selected");
+  }
+
+  row.addEventListener("click", async (event) => {
+    if (state.suppressClick) {
+      state.suppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (state.editingPath === node.path) {
+      return;
+    }
+    event.stopPropagation();
+    state.selectedPath = node.path;
+    closeContextMenu();
+    if (node.type === "folder") {
+      if (state.expanded.has(node.path)) {
+        state.expanded.delete(node.path);
+      } else {
+        state.expanded.add(node.path);
+      }
+      renderPanel(el);
+      return;
+    }
+    try {
+      await openWorkflow(node.path);
+      renderPanel(el);
+    } catch (error) {
+      handleError(el, error);
+    }
+  });
+  row.addEventListener("contextmenu", (event) => openContextMenu(el, event, node));
+
+  if (node.path) {
+    beginPointerDrag(el, row, node);
+  }
+
+  if (node.type === "folder") {
+    makeDropTarget(el, row, node.path);
+  }
+
+  const disclosure = document.createElement(node.type === "folder" ? "button" : "span");
+  if (node.type === "folder") {
+    disclosure.className = `workspace2-disclosure ${state.expanded.has(node.path) || state.query ? "is-open" : ""}`;
+    disclosure.type = "button";
+    disclosure.title = state.expanded.has(node.path) ? t("folder.collapse") : t("folder.expand");
+    disclosure.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (state.expanded.has(node.path)) {
+        state.expanded.delete(node.path);
+      } else {
+        state.expanded.add(node.path);
+      }
+      renderPanel(el);
+    });
+  } else {
+    disclosure.className = "workspace2-spacer";
+  }
+
+  const reorderHandle = document.createElement("span");
+  if (state.customOrderEnabled && node.path) {
+    reorderHandle.className = "workspace2-reorder-handle";
+    reorderHandle.title = t("workflows.reorderHandle");
+    beginWorkflowReorderDrag(el, reorderHandle, row, node);
+  } else {
+    reorderHandle.className = "workspace2-reorder-spacer";
+  }
+
+  const icon = document.createElement("span");
+  const meta = node.type === "folder" ? workflowFolderMeta(node.path) : {};
+  applyDecoratedIcon(
+    icon,
+    node.type === "folder" ? meta.icon : "",
+    node.type === "folder" ? meta.color : "",
+    node.type === "folder" ? (state.expanded.has(node.path) || state.query ? DEFAULT_FOLDER_OPEN_ICON_CLASS : DEFAULT_FOLDER_ICON_CLASS) : DEFAULT_FILE_ICON_CLASS,
+  );
+
+  const nameCell = document.createElement("div");
+  nameCell.className = "workspace2-name";
+
+  if (state.editingPath === node.path) {
+    const input = document.createElement("input");
+    input.className = "workspace2-rename-input";
+    input.value = workflowDisplayName(node);
+    isolateComfyKeys(input);
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter") {
+        try {
+          await renameItem(el, node, input.value.trim());
+        } catch (error) {
+          handleError(el, error);
+        }
+      }
+      if (event.key === "Escape") {
+        state.editingPath = "";
+        renderPanel(el);
+      }
+    });
+    input.addEventListener("blur", async () => {
+      try {
+        await renameItem(el, node, input.value.trim());
+      } catch (error) {
+        handleError(el, error);
+      }
+    });
+    nameCell.append(input);
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  } else {
+    const name = document.createElement("span");
+    name.textContent = workflowDisplayName(node);
+    nameCell.append(name);
+    if (node.type === "file" && node.size_bytes) {
+      const meta = document.createElement("span");
+      meta.className = "workspace2-meta";
+      meta.textContent = `${Math.ceil(node.size_bytes / 1024)} KB`;
+      nameCell.append(meta);
+    }
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "workspace2-actions";
+
+  if (node.type === "folder") {
+    actions.append(
+      iconButton("folderPlus", t("menu.newSubfolder"), async () => {
+        try {
+          await createFolder(el, node.path);
+        } catch (error) {
+          handleError(el, error);
+        }
+      }),
+    );
+  } else {
+    actions.append(
+      iconButton("folderOpen", t("row.openLocation"), async () => {
+        try {
+          await openWorkflowLocation(node.path);
+        } catch (error) {
+          handleError(el, error);
+        }
+      }),
+    );
+  }
+
+  actions.append(
+    iconButton("edit", t("row.rename"), () => {
+      state.editingPath = node.path;
+      renderPanel(el);
+    }),
+  );
+  actions.append(
+    iconButton("trash", t("row.moveToTrash"), async () => {
+      try {
+        await moveToTrash(el, node);
+      } catch (error) {
+        handleError(el, error);
+      }
+    }),
+  );
+
+  row.append(reorderHandle, disclosure, icon, nameCell, actions);
+  list.append(row);
+
+  if (node.type === "folder" && (state.expanded.has(node.path) || state.query)) {
+    for (const child of visibleChildren(node)) {
+      renderNode(el, list, child, depth + 1);
+    }
+  }
+}
+
+function renderPanel(el) {
+  const snapshot = scrollSnapshot(el);
+  state.workflowsTarget = el;
+  startAutoRefresh(el);
+  styles();
+  setupWorkspaceKeyIsolation();
+  closeContextMenu();
+  closeWorkflowSortMenu();
+  prepareWorkspaceHost(el);
+
+  const panel = document.createElement("div");
+  panel.className = "workspace2-panel";
+  applyWorkflowUiScale(panel);
+  panel.addEventListener("click", () => {
+    closeContextMenu();
+    closeWorkflowSortMenu();
+  });
+
+  const top = document.createElement("div");
+  top.className = "workspace2-top";
+
+  const newFolder = toolbarButton("folderPlus", t("toolbar.newFolder"), async () => {
+    try {
+      await createFolder(el, selectedFolderPath());
+    } catch (error) {
+      handleError(el, error);
+    }
+  });
+
+  const newWorkflow = toolbarButton("filePlus", t("toolbar.newWorkflow"), async () => {
+    try {
+      await createWorkflow(el);
+    } catch (error) {
+      handleError(el, error);
+    }
+  });
+
+  const refresh = toolbarButton("refresh", t("workflows.refresh"), async () => {
+    try {
+      await refreshPanel(el);
+    } catch (error) {
+      handleError(el, error);
+    }
+  });
+
+  const trash = toolbarButton(state.showTrash ? "files" : "trashPage", state.showTrash ? t("toolbar.showFiles") : t("toolbar.showTrash"), async () => {
+    try {
+      state.showTrash = !state.showTrash;
+      if (state.showTrash) {
+        await loadTrash();
+      } else {
+        await loadWorkflows();
+      }
+      renderPanel(el);
+    } catch (error) {
+      handleError(el, error);
+    }
+  });
+  trash.classList.add("is-trash-toggle");
+  if (state.showTrash) {
+    trash.classList.add("is-active");
+  }
+
+  const header = createPanelHeader(t("workflows.title"), state.status);
+  const toolbar = createSearchToolbar({
+    focusKey: "workflow-search",
+    placeholder: t("search.placeholder"),
+    value: state.query,
+    buttons: [newFolder, newWorkflow, refresh, workflowSortButton(el), trash],
+    onInput: (value) => {
+      state.query = value;
+      renderPanel(el);
+    },
+  });
+  top.append(header, toolbar);
+
+  if (state.showTrash) {
+    const emptyTrashRow = createRootActionRow({
+      className: "workspace2-empty-trash-row",
+      title: t("trash.moveAllToSystemTitle"),
+      icon: "systemTrash",
+      text: t("trash.moveToSystem"),
+      control: fontControl(el),
+      onClick: async (event) => {
+        event.stopPropagation();
+        try {
+          await emptyTrash(el);
+        } catch (error) {
+          handleError(el, error);
+        }
+      },
+    });
+    top.append(emptyTrashRow);
+    panel.append(top);
+    renderTrashPanel(el, panel);
+    el.append(panel);
+    return;
+  }
+
+  const tree = document.createElement("div");
+  tree.className = "workspace2-tree";
+  makeDropTarget(el, tree, "");
+
+  const moveRootRow = createRootActionRow({
+    title: t("root.dropTitle"),
+    icon: "rootArrow",
+    text: t("root.move"),
+    control: fontControl(el),
+    setupDrop: (row) => makeDropTarget(el, row, ""),
+  });
+
+  top.append(moveRootRow);
+
+  const root = buildTree();
+  const children = visibleChildren(root);
+  if (!children.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-empty";
+    empty.textContent = state.query ? t("empty.noMatches") : t("empty.noWorkflows");
+    tree.append(empty);
+  } else {
+    for (const child of children) {
+      renderNode(el, tree, child, 0);
+    }
+  }
+
+  panel.append(top, tree);
+  renderContextMenu(el, panel);
+  el.append(panel);
+  restoreScrollSnapshot(el, snapshot);
+}
+
+function canvasGroupsList() {
+  workspace2CanvasGroups.init();
+  if (workspace2CanvasGroups._pendingGroups || workspace2CanvasGroups._needRestore) {
+    workspace2CanvasGroups.restoreGroups?.();
+  }
+  return Object.values(workspace2CanvasGroups.groups || {}).sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id)));
+}
+
+function canvasGroupLabel(group) {
+  return String(group?.title || "").trim() || group?.id || "Group";
+}
+
+function canvasGroupColor(group) {
+  if (group?.bypassed) {
+    return "hsla(280,60%,55%,0.75)";
+  }
+  const hue = Number(group?.colorHue ?? 48);
+  const sat = Number(group?.colorSat ?? 100);
+  const lit = Number(group?.colorLit ?? 55);
+  const alpha = Number(group?.borderOpacity ?? 0.65);
+  return `hsla(${hue},${sat}%,${lit}%,${alpha})`;
+}
+
+function canvasGroupMatches(group, query) {
+  if (!query) {
+    return true;
+  }
+  const text = [group.id, group.title, ...(group.nodeIds || [])].join(" ").toLowerCase();
+  return text.includes(query);
+}
+
+function focusCanvasGroup(group) {
+  const canvas = app?.canvas;
+  const ds = canvas?.ds;
+  const bounds = group?.bounds;
+  if (!canvas?.canvas || !ds || !bounds) {
+    return;
+  }
+  const scale = ds.scale || 1;
+  const centerX = bounds.x + bounds.w / 2;
+  const centerY = bounds.y + bounds.h / 2;
+  ds.offset[0] = canvas.canvas.width / (2 * scale) - centerX;
+  ds.offset[1] = canvas.canvas.height / (2 * scale) - centerY;
+  workspace2CanvasGroups.updatePositions?.();
+  canvas.setDirty?.(true, true);
+  app.graph?.setDirtyCanvas?.(true, true);
+}
+
+function renameCanvasGroup(el, group) {
+  const current = canvasGroupLabel(group);
+  const value = window.prompt(t("canvasGroups.promptRename"), current);
+  if (value === null) {
+    return;
+  }
+  group.title = value.trim();
+  workspace2CanvasGroups.rebuildGroupEl?.(group);
+  workspace2CanvasGroups.syncGroupsToExtra?.();
+  app.graph?.setDirtyCanvas?.(true, true);
+  app.graph?.change?.();
+  renderCanvasGroupsPanel(el);
+}
+
+function deleteCanvasGroup(el, group) {
+  if (!window.confirm(t("canvasGroups.confirmDelete", { name: canvasGroupLabel(group) }))) {
+    return;
+  }
+  workspace2CanvasGroups.removeGroup?.(group.id);
+  renderCanvasGroupsPanel(el);
+}
+
+function renderCanvasGroupRow(el, group) {
+  const row = document.createElement("div");
+  row.className = "workspace2-canvas-group-row";
+  if (group.bypassed) {
+    row.classList.add("is-bypassed");
+  }
+  row.title = group.id;
+
+  const swatch = document.createElement("span");
+  swatch.className = "workspace2-canvas-group-swatch";
+  swatch.style.setProperty("--workspace2-group-color", canvasGroupColor(group));
+
+  const info = document.createElement("div");
+  info.className = "workspace2-name";
+  const title = document.createElement("div");
+  title.className = "workspace2-canvas-group-title";
+  title.textContent = canvasGroupLabel(group);
+  const meta = document.createElement("div");
+  meta.className = "workspace2-canvas-group-meta";
+  meta.textContent = `${t("canvasGroups.nodes", { count: (group.nodeIds || []).length })}${group.bypassed ? " · bypass" : ""}`;
+  info.append(title, meta);
+
+  const actions = document.createElement("div");
+  actions.className = "workspace2-actions";
+  actions.append(
+    iconButton("target", t("canvasGroups.locate"), () => focusCanvasGroup(group)),
+    iconButton("edit", t("canvasGroups.rename"), () => renameCanvasGroup(el, group)),
+    iconButton("restore", t("canvasGroups.toggleBypass"), () => {
+      workspace2CanvasGroups.toggleBypass?.(group.id);
+      renderCanvasGroupsPanel(el);
+    }),
+    iconButton("trash", t("canvasGroups.delete"), () => deleteCanvasGroup(el, group)),
+  );
+
+  row.append(swatch, info, actions);
+  return row;
+}
+
+function renderCanvasGroupsPanel(el) {
+  canvasGroupsState.renderTarget = el;
+  workspace2CanvasGroups.init();
+  styles();
+  setupWorkspaceKeyIsolation();
+  prepareWorkspaceHost(el);
+
+  const panel = document.createElement("div");
+  panel.className = "workspace2-panel";
+
+  const top = document.createElement("div");
+  top.className = "workspace2-top";
+  const groups = canvasGroupsList();
+  const query = canvasGroupsState.query.trim().toLowerCase();
+  const visibleGroups = groups.filter((group) => canvasGroupMatches(group, query));
+  const header = createPanelHeader(t("canvasGroups.title"), t("canvasGroups.status", { count: groups.length }));
+  const create = toolbarButton("folderPlus", t("canvasGroups.create"), () => {
+    workspace2CanvasGroups.createGroupFromSelection?.();
+    renderCanvasGroupsPanel(el);
+  });
+  const refresh = toolbarButton("refresh", t("canvasGroups.refresh"), () => renderCanvasGroupsPanel(el));
+  const toolbar = createSearchToolbar({
+    focusKey: "canvas-groups-search",
+    placeholder: t("canvasGroups.searchPlaceholder"),
+    value: canvasGroupsState.query,
+    buttons: [create, refresh],
+    onInput: (value) => {
+      canvasGroupsState.query = value;
+      renderCanvasGroupsPanel(el);
+    },
+  });
+  top.append(header, toolbar);
+
+  const body = document.createElement("div");
+  body.className = "workspace2-canvas-group-list";
+  if (!visibleGroups.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-empty";
+    empty.textContent = query ? t("canvasGroups.noMatches") : t("canvasGroups.empty");
+    body.append(empty);
+  } else {
+    for (const group of visibleGroups) {
+      body.append(renderCanvasGroupRow(el, group));
+    }
+  }
+
+  panel.append(top, body);
+  el.append(panel);
+}
+function renderNodesPanel(el) {
+  const snapshot = scrollSnapshot(el);
+  nodesState.renderTarget = el;
+  setupNodeCanvasDrop();
+  styles();
+  setupWorkspaceKeyIsolation();
+  hideNodePreview();
+  closeNodeContextMenu();
+  closeNodeSortMenu();
+  closeOfficialFavoritesMenu();
+  prepareWorkspaceHost(el);
+
+  const panel = document.createElement("div");
+  panel.className = "workspace2-panel";
+  applyNodeUiScale(panel);
+
+  const top = document.createElement("div");
+  top.className = "workspace2-top workspace2-node-top";
+
+  const nodeTypes = getNodeDefinitions();
+  const statusText = nodesState.pendingNode
+    ? t("nodes.pendingPlace", { name: nodesState.pendingNode.title })
+    : t("nodes.status", { count: nodeTypes.length });
+
+  const newGroup = toolbarButton("folderPlus", t("nodes.newGroup"), async () => {
+    try {
+      await createNodeGroup(el);
+    } catch (error) {
+      nodesState.error = error.message;
+      renderNodesPanel(el);
+    }
+  });
+
+  const refresh = toolbarButton("refresh", t("nodes.refresh"), async () => {
+    nodesState.library = null;
+    nodesState.objectInfo = null;
+    nodesState.nSidebarPreview = null;
+    nodesState.officialFavoritesProbe = null;
+    await loadNodeLibrary();
+    renderNodesPanel(el);
+  });
+
+  const syncOfficial = toolbarButton("arrowsUpDown", t("nodes.officialFavoritesSyncMenu"), async (event) => {
+    if (nodesState.officialFavoritesLoading) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (nodesState.officialFavoritesMenuElement) {
+      closeOfficialFavoritesMenu();
+      return;
+    }
+    openOfficialFavoritesMenu(el, event.currentTarget);
+  });
+  syncOfficial.disabled = nodesState.officialFavoritesLoading;
+
+  const header = createPanelHeader(t("nodes.title"), statusText, { statusDataset: "workspace2NodesStatus" });
+  const toolbar = createSearchToolbar({
+    focusKey: "nodes-search",
+    placeholder: t("nodes.searchPlaceholder"),
+    value: nodesState.query,
+    buttons: [newGroup, refresh, syncOfficial, nodesSortButton(el)],
+    onInput: (value) => {
+      nodesState.query = value;
+      renderNodesPanel(el);
+    },
+  });
+  top.append(header, toolbar, nodesFavoriteRootRow(el), nodesViewTabs(el));
+
+  const body = document.createElement("div");
+  body.className = "workspace2-tree";
+
+  if (!nodesState.library && !nodesState.loading) {
+    loadNodeLibrary().then(() => renderNodesPanel(el));
+  }
+
+  if (nodesState.loading) {
+    const loading = document.createElement("div");
+    loading.className = "workspace2-empty";
+    loading.textContent = t("status.loading");
+    body.append(loading);
+  } else if (nodesState.error) {
+    const error = document.createElement("div");
+    error.className = "workspace2-empty";
+    error.textContent = t("status.error", { message: nodesState.error });
+    body.append(error);
+  } else if (nodesState.library) {
+    renderNSidebarMigration(el, body);
+    renderNodeCategorySections(el, body);
+  }
+
+  panel.append(top, body);
+  el.append(panel);
+  restoreScrollSnapshot(el, snapshot);
+}
+
+function ensureNodePreviewPopover() {
+  let preview = nodesState.previewPopover;
+  if (preview?.isConnected) {
+    return preview;
+  }
+  preview = document.createElement("div");
+  preview.className = "workspace2-node-preview-popover";
+  preview.hidden = true;
+  document.body.append(preview);
+  nodesState.previewPopover = preview;
+  return preview;
+}
+
+function sidebarLocation() {
+  const value = app.ui?.settings?.getSettingValue?.("Comfy.Sidebar.Location")
+    ?? app.extensionManager?.setting?.get?.("Comfy.Sidebar.Location")
+    ?? localStorage.getItem("Comfy.Sidebar.Location");
+  return String(value || "left").toLowerCase() === "right" ? "right" : "left";
+}
+
+function positionNodePreviewAtCursor(preview, event) {
+  const gap = 16;
+  const rect = preview.getBoundingClientRect();
+  let left = event.clientX + gap;
+  let top = event.clientY + gap;
+  if (left + rect.width > window.innerWidth - 8) {
+    left = Math.max(8, event.clientX - rect.width - gap);
+  }
+  if (top + rect.height > window.innerHeight - 8) {
+    top = Math.max(8, event.clientY - rect.height - gap);
+  }
+  preview.style.left = `${left}px`;
+  preview.style.top = `${top}px`;
+}
+
+function positionNodePreviewPopover(preview, event, options = {}) {
+  if (options.followCursor) {
+    positionNodePreviewAtCursor(preview, event);
+    return;
+  }
+  const gap = 16;
+  const previewWidth = Math.min(248, window.innerWidth - 24);
+  const targetRect = event?.currentTarget?.getBoundingClientRect?.();
+  const panelRect = nodesState.renderTarget?.getBoundingClientRect?.() || targetRect;
+  const clientX = event?.clientX || 0;
+  const clientY = event?.clientY || 0;
+  preview.style.left = "0px";
+  preview.style.top = "0px";
+  preview.style.width = `${previewWidth}px`;
+  const rect = preview.getBoundingClientRect();
+  let left;
+  if (sidebarLocation() === "left") {
+    left = (panelRect?.right ?? clientX) + gap;
+    if (left + previewWidth > window.innerWidth - 8) {
+      left = Math.max(8, (panelRect?.left ?? clientX) - previewWidth - gap);
+    }
+  } else {
+    left = (panelRect?.left ?? clientX) - previewWidth - gap;
+    if (left < 8) {
+      left = Math.min(window.innerWidth - previewWidth - 8, (panelRect?.right ?? clientX) + gap);
+    }
+  }
+  const anchorY = targetRect ? targetRect.top + targetRect.height / 2 : clientY;
+  let top = anchorY - rect.height * 0.3;
+  if (top + rect.height > window.innerHeight - gap) {
+    top = window.innerHeight - rect.height - gap;
+  }
+  top = Math.max(gap, top);
+  preview.style.left = `${left}px`;
+  preview.style.top = `${top}px`;
+}
+
+function showNodePreview(node, event, options = {}) {
+  if (!node || !event) {
+    hideNodePreview();
+    return;
+  }
+  nodesState.previewNode = node;
+  const preview = ensureNodePreviewPopover();
+  preview.innerHTML = "";
+  preview.hidden = false;
+
+  const header = document.createElement("div");
+  header.className = "workspace2-node-preview-header";
+  const dot = document.createElement("div");
+  dot.className = "workspace2-node-preview-dot";
+  const title = document.createElement("div");
+  title.className = "workspace2-node-preview-title";
+  title.textContent = node.title || node.type;
+  header.append(dot, title);
+
+  const body = document.createElement("div");
+  body.className = "workspace2-node-preview-body";
+  const meta = document.createElement("div");
+  meta.className = "workspace2-node-preview-meta";
+  meta.textContent = `${node.type} | ${node.category || t("nodes.uncategorized")}`;
+  body.append(meta);
+
+  if (node.description) {
+    const desc = document.createElement("div");
+    desc.className = "workspace2-node-preview-desc";
+    desc.textContent = node.description;
+    body.append(desc);
+  }
+
+  const definition = node.definition || {};
+  const inputs = collectPreviewInputs(definition);
+  const widgets = collectPreviewWidgets(definition);
+  const outputs = collectPreviewOutputs(definition);
+  appendNodePreviewCard(body, node, inputs, widgets, outputs);
+  preview.append(header, body);
+  positionNodePreviewPopover(preview, event, options);
+}
+
+function moveNodePreview(event) {
+  const preview = nodesState.previewPopover;
+  if (!preview?.isConnected || preview.hidden) {
+    return;
+  }
+  positionNodePreviewPopover(preview, event);
+}
+
+function hideNodePreview() {
+  nodesState.previewNode = null;
+  if (nodesState.previewPopover?.isConnected) {
+    nodesState.previewPopover.hidden = true;
+  }
+}
+
+function closeNodeContextMenu() {
+  nodesState.contextMenuElement?.remove();
+  nodesState.contextMenuElement = null;
+}
+
+function closeNodeContextMenuFromEvent(event) {
+  if (nodesState.contextMenuElement?.contains?.(event.target)) {
+    return;
+  }
+  closeNodeContextMenu();
+}
+
+function copyText(value) {
+  const text = String(value || "");
+  if (!text) {
+    return;
+  }
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+}
+
+function openNodeGroupContextMenu(el, event, group) {
+  event.preventDefault();
+  event.stopPropagation();
+  closeNodeContextMenu();
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  menu.addEventListener("pointerdown", (menuEvent) => menuEvent.stopPropagation());
+  menu.addEventListener("click", (menuEvent) => menuEvent.stopPropagation());
+  menu.addEventListener("contextmenu", (menuEvent) => menuEvent.preventDefault());
+
+  const addItem = (label, handler) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace2-menu-item";
+    button.textContent = label;
+    button.addEventListener("click", async (clickEvent) => {
+      clickEvent.stopPropagation();
+      closeNodeContextMenu();
+      await handler();
+    });
+    menu.append(button);
+  };
+
+  addItem(t("menu.newSubfolder"), async () => createNodeGroup(el, group.id));
+  addItem(t("nodes.renameGroup"), async () => renameNodeGroup(el, group));
+  addItem(t("folder.personalize"), async () => personalizeNodeGroup(el, group, event));
+  addItem(t("folder.resetStyle"), async () => resetNodeGroupStyle(el, group));
+  addItem(t("nodes.deleteGroup"), async () => deleteNodeGroup(el, group));
+
+  document.body.append(menu);
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(event.clientX, window.innerWidth - rect.width - 8);
+  const top = Math.min(event.clientY, window.innerHeight - rect.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+  nodesState.contextMenuElement = menu;
+  window.setTimeout(() => {
+    document.addEventListener("pointerdown", closeNodeContextMenuFromEvent, { once: true, capture: true });
+    document.addEventListener("keydown", closeNodeContextMenuFromEvent, { once: true, capture: true });
+  }, 0);
+}
+
+function openNodeContextMenu(el, event, node, options = {}) {
+  event.preventDefault();
+  event.stopPropagation();
+  closeNodeContextMenu();
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  menu.addEventListener("pointerdown", (menuEvent) => menuEvent.stopPropagation());
+  menu.addEventListener("click", (menuEvent) => menuEvent.stopPropagation());
+  menu.addEventListener("contextmenu", (menuEvent) => menuEvent.preventDefault());
+
+  const addItem = (label, handler) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace2-menu-item";
+    button.textContent = label;
+    button.addEventListener("click", async (clickEvent) => {
+      clickEvent.stopPropagation();
+      closeNodeContextMenu();
+      await handler();
+    });
+    menu.append(button);
+  };
+
+  const favorite = getFavorite(node.type);
+  if (options.favorite) {
+    addItem(t("nodes.editAlias"), async () => editFavoriteAlias(el, options.favorite));
+    addItem(t("nodes.removeFavorite"), async () => removeFavoriteNode(el, options.favorite.type));
+  } else if (favorite) {
+    addItem(t("nodes.removeFavorite"), async () => removeFavoriteNode(el, node.type));
+  } else {
+    addItem(t("nodes.addFavorite"), async () => addFavoriteNode(el, node));
+  }
+  addItem(t("nodes.placeOnCanvas"), async () => setPendingNode(node));
+  addItem(t("nodes.copyNodeName"), async () => copyText(node.title || node.type));
+
+  document.body.append(menu);
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(event.clientX, window.innerWidth - rect.width - 8);
+  const top = Math.min(event.clientY, window.innerHeight - rect.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+  nodesState.contextMenuElement = menu;
+  window.setTimeout(() => {
+    document.addEventListener("pointerdown", closeNodeContextMenuFromEvent, { once: true, capture: true });
+    document.addEventListener("keydown", closeNodeContextMenuFromEvent, { once: true, capture: true });
+  }, 0);
+}
+
+function appendNodePreviewCard(preview, node, inputs, widgets, outputs) {
+  const card = document.createElement("div");
+  card.className = "workspace2-node-preview-card";
+
+  const title = document.createElement("div");
+  title.className = "workspace2-node-preview-card-title";
+  const dot = document.createElement("div");
+  dot.className = "workspace2-node-preview-dot";
+  const titleText = document.createElement("div");
+  titleText.className = "workspace2-node-preview-title";
+  titleText.textContent = node.title || node.type;
+  title.append(dot, titleText);
+
+  const body = document.createElement("div");
+  body.className = "workspace2-node-preview-card-body";
+  const rowCount = Math.max(inputs.length, outputs.length);
+  for (let index = 0; index < rowCount; index += 1) {
+    const input = inputs[index];
+    const output = outputs[index];
+    const row = document.createElement("div");
+    row.className = "workspace2-node-preview-slot-row";
+
+    const inputPort = document.createElement("div");
+    inputPort.className = "workspace2-node-preview-port is-input";
+    inputPort.style.setProperty("--workspace2-preview-port", previewPortColor(input?.type));
+    inputPort.style.visibility = input ? "visible" : "hidden";
+
+    const inputName = document.createElement("div");
+    inputName.className = "workspace2-node-preview-slot-name";
+    inputName.textContent = input ? (input.optional ? `${input.name}?` : input.name) : "";
+
+    const typeText = document.createElement("div");
+    typeText.className = "workspace2-node-preview-slot-type";
+    typeText.textContent = input?.type || output?.type || "";
+
+    const outputName = document.createElement("div");
+    outputName.className = "workspace2-node-preview-slot-name is-output";
+    outputName.textContent = output?.name || "";
+
+    const outputPort = document.createElement("div");
+    outputPort.className = "workspace2-node-preview-port is-output";
+    outputPort.style.setProperty("--workspace2-preview-port", previewPortColor(output?.type));
+    outputPort.style.visibility = output ? "visible" : "hidden";
+
+    row.append(inputPort, inputName, typeText, outputName, outputPort);
+    body.append(row);
+  }
+
+  for (const widget of widgets.slice(0, 8)) {
+    const row = document.createElement("div");
+    row.className = "workspace2-node-preview-widget-row";
+    const leftArrow = document.createElement("div");
+    leftArrow.className = "workspace2-node-preview-widget-arrow";
+    leftArrow.textContent = "◀";
+    const name = document.createElement("div");
+    name.className = "workspace2-node-preview-slot-name";
+    name.textContent = widget.optional ? `${widget.name}?` : widget.name;
+    const value = document.createElement("div");
+    value.className = "workspace2-node-preview-type";
+    value.textContent = previewValue(widget.value) || widget.type;
+    const rightArrow = document.createElement("div");
+    rightArrow.className = "workspace2-node-preview-widget-arrow";
+    rightArrow.textContent = "▶";
+    row.append(leftArrow, name, value, rightArrow);
+    body.append(row);
+  }
+
+  card.append(title, body);
+  preview.append(card);
+}
+
+function previewPortColor(type) {
+  const normalized = String(type || "").toUpperCase();
+  const colors = {
+    IMAGE: "#64b5f6",
+    VAE: "#ff6e6e",
+    LATENT: "#ff9cf9",
+    MASK: "#81c784",
+    CONDITIONING: "#ffa931",
+    CLIP: "#ffd500",
+    MODEL: "#b39ddb",
+    CONTROL_NET: "#a5d6a7",
+    COMBO: "#8ab4f8",
+    STRING: "#8fd7a3",
+    INT: "#f7c56b",
+    FLOAT: "#f7c56b",
+    BOOLEAN: "#f48fb1",
+  };
+  return colors[normalized] || "#8b8b8b";
+}
+
+function previewValue(value) {
+  if (value === undefined || value === null || value === "") {
+    return "";
+  }
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return text.length > 34 ? `${text.slice(0, 31)}...` : text;
+}
+
+function appendNodePreviewSection(preview, label, values, kind) {
+  if (!values.length) {
+    return;
+  }
+  const section = document.createElement("div");
+  section.className = "workspace2-node-preview-section";
+  const title = document.createElement("div");
+  title.className = "workspace2-node-preview-section-title";
+  title.textContent = label;
+  section.append(title);
+  for (const value of values.slice(0, 24)) {
+    const row = document.createElement("div");
+    row.className = "workspace2-node-preview-row";
+    const port = document.createElement("div");
+    port.className = `workspace2-node-preview-port is-${kind}`;
+    port.style.setProperty("--workspace2-preview-port", previewPortColor(value.type));
+    const name = document.createElement("div");
+    name.className = "workspace2-node-preview-name";
+    name.textContent = value.optional ? `${value.name}?` : value.name;
+    const type = document.createElement("div");
+    type.className = "workspace2-node-preview-type";
+    const defaultText = kind === "widget" ? previewValue(value.value) : "";
+    type.textContent = defaultText ? `${value.type} = ${defaultText}` : value.type;
+    if (kind === "output") {
+      row.append(port, type, name);
+    } else {
+      row.append(port, name, type);
+    }
+    section.append(row);
+  }
+  preview.append(section);
+}
+
+function renderNSidebarMigration(el, body) {
+  if (!nodesState.nSidebarPreview && !nodesState.nSidebarLoading) {
+    loadNSidebarPreview().then(() => {
+      if (nodesState.renderTarget) {
+        renderNodesPanel(nodesState.renderTarget);
+      }
+    });
+    return;
+  }
+  if (nodesState.nSidebarLoading || !nodesState.nSidebarPreview?.found) {
+    return;
+  }
+  if (nodesState.library.migration?.nSidebarImported) {
+    return;
+  }
+
+  const preview = nodesState.nSidebarPreview;
+  const section = document.createElement("div");
+  section.className = "workspace2-root-row";
+  section.title = preview.sourcePath || "";
+
+  const info = document.createElement("div");
+  info.className = "workspace2-root-target";
+  info.append(iconSvg("restore"));
+  const text = document.createElement("div");
+  text.className = "workspace2-name";
+  text.textContent = t("nodes.importNSidebarSummary", {
+    groups: preview.summary.groupCount || 0,
+    nodes: preview.summary.nodeCount || 0,
+  });
+  info.append(text);
+
+  const button = iconButton("restore", t("nodes.importNSidebar"), async () => {
+    await importNSidebarPreview(el);
+  });
+
+  section.append(info, button);
+  body.append(section);
+}
+
+function renderFavoriteNodeSections(el, body) {
+  const sectionId = "__bookmarked__";
+  const nodeMap = getNodeDefinitionMap();
+  const query = nodesState.query.trim().toLowerCase();
+  const section = document.createElement("div");
+  section.className = "workspace2-node-section";
+
+  renderTopSectionHeader(el, section, sectionId, t("nodes.categoryBookmarked"), String(nodesState.library.favorites.length));
+  body.append(section);
+
+  const allFavorites = nodesState.library.favorites || [];
+  const rootFavorites = allFavorites
+    .filter((favorite) => !favorite.groupId || favorite.groupId === NODE_DEFAULT_GROUP_ID)
+    .map((favorite) => favoriteDisplayNode(favorite, nodeMap))
+    .filter((favorite) => nodeMatchesQuery(favorite, query, ""))
+    .sort((a, b) => query ? nodeSearchScore(a, query, "") - nodeSearchScore(b, query, "") : a.order - b.order);
+
+  const rootList = document.createElement("div");
+  rootList.className = "workspace2-node-list";
+  rootList.dataset.workspace2FavoriteRegion = NODE_DEFAULT_GROUP_ID;
+  for (const favorite of rootFavorites) {
+    rootList.append(renderFavoriteNodeRow(el, favorite));
+  }
+  section.append(rootList);
+
+  const userGroups = [...nodesState.library.groups]
+    .filter((group) => group.id !== NODE_DEFAULT_GROUP_ID && !group.parentId)
+    .sort((a, b) => a.order - b.order);
+
+  for (const group of userGroups) {
+    renderFavoriteGroupFolder(el, section, group, nodeMap, query, 0);
+  }
+
+  if (!rootFavorites.length && !userGroups.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-empty";
+    empty.textContent = query ? t("nodes.noFavoriteMatches") : t("nodes.emptyGroup");
+    section.append(empty);
+  }
+}
+
+function toggleNodeGroup(el, groupId) {
+  if (nodesState.expanded.has(groupId)) {
+    nodesState.expanded.delete(groupId);
+  } else {
+    nodesState.expanded.add(groupId);
+  }
+  renderNodesPanel(el);
+}
+
+function childNodeGroups(parentId) {
+  return [...(nodesState.library.groups || [])]
+    .filter((group) => group.id !== NODE_DEFAULT_GROUP_ID && group.parentId === parentId)
+    .sort((a, b) => a.order - b.order);
+}
+
+function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0) {
+  const groupFavorites = nodesState.library.favorites
+    .filter((favorite) => favorite.groupId === group.id)
+    .map((favorite) => favoriteDisplayNode(favorite, nodeMap))
+    .filter((favorite) => nodeMatchesQuery(favorite, query, group.name))
+    .sort((a, b) => query ? nodeSearchScore(a, query, group.name) - nodeSearchScore(b, query, group.name) : a.order - b.order);
+  const groupOpen = nodesState.expanded.has(group.id) || Boolean(query);
+
+  const header = document.createElement("div");
+  header.className = "workspace2-node-folder-header";
+  header.style.setProperty("--indent", `${depth * 16 + 4}px`);
+  header.dataset.workspace2FavoriteRegion = group.id;
+  header.dataset.workspace2GroupId = group.id;
+  makeFavoriteGroupDropTarget(el, header, group.id);
+  makeNodeGroupDragSource(el, header, group);
+  header.addEventListener("click", (event) => {
+    if (event.target.closest("button,input")) {
+      return;
+    }
+    if (nodesState.suppressClick) {
+      nodesState.suppressClick = false;
+      return;
+    }
+    event.stopPropagation();
+    toggleNodeGroup(el, group.id);
+  });
+  header.addEventListener("contextmenu", (event) => openNodeGroupContextMenu(el, event, group));
+
+  const disclosure = document.createElement("button");
+  disclosure.className = `workspace2-disclosure ${groupOpen ? "is-open" : ""}`;
+  disclosure.type = "button";
+  disclosure.title = groupOpen ? t("folder.collapse") : t("folder.expand");
+  disclosure.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleNodeGroup(el, group.id);
+  });
+
+  const icon = document.createElement("span");
+  applyDecoratedIcon(icon, group.icon, group.color, groupOpen ? DEFAULT_FOLDER_OPEN_ICON_CLASS : DEFAULT_FOLDER_ICON_CLASS);
+  const name = document.createElement("div");
+  name.className = "workspace2-name";
+  if (nodesState.editingGroupId === group.id) {
+    const input = document.createElement("input");
+    input.className = "workspace2-rename-input";
+    input.value = group.name;
+    isolateComfyKeys(input);
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter") {
+        try {
+          await commitNodeGroupRename(el, group, input.value);
+        } catch (error) {
+          handleError(el, error);
+        }
+      }
+      if (event.key === "Escape") {
+        nodesState.editingGroupId = "";
+        renderNodesPanel(el);
+      }
+    });
+    input.addEventListener("blur", async () => {
+      try {
+        await commitNodeGroupRename(el, group, input.value);
+      } catch (error) {
+        handleError(el, error);
+      }
+    });
+    name.append(input);
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  } else {
+    name.textContent = group.name;
+  }
+  const actions = document.createElement("div");
+  actions.className = "workspace2-actions";
+  actions.append(
+    iconButton("folderPlus", t("menu.newSubfolder"), async () => {
+      await createNodeGroup(el, group.id);
+    }),
+    iconButton("edit", t("nodes.renameGroup"), async () => {
+      await renameNodeGroup(el, group);
+    }),
+    iconButton("trash", t("nodes.deleteGroup"), async () => {
+      await deleteNodeGroup(el, group);
+    }),
+  );
+  header.append(disclosure, icon, name, actions);
+  section.append(header);
+
+  if (groupOpen) {
+    for (const childGroup of childNodeGroups(group.id)) {
+      renderFavoriteGroupFolder(el, section, childGroup, nodeMap, query, depth + 1);
+    }
+    const list = document.createElement("div");
+    list.className = "workspace2-node-list";
+    list.style.setProperty("--indent", `${(depth + 1) * 16 + 4}px`);
+    list.dataset.workspace2FavoriteRegion = group.id;
+    for (const favorite of groupFavorites) {
+      list.append(renderFavoriteNodeRow(el, favorite));
+    }
+    if (!groupFavorites.length) {
+      const empty = document.createElement("div");
+      empty.className = "workspace2-empty";
+      empty.textContent = query ? t("nodes.noFavoriteMatches") : t("nodes.emptyGroup");
+      list.append(empty);
+    }
+    section.append(list);
+  }
+}
+function renderFavoriteNodeRow(el, favorite) {
+  const row = document.createElement("div");
+  row.className = `workspace2-node-row ${favorite.invalid ? "is-invalid" : ""}`;
+  row.dataset.workspace2NodeType = favorite.type;
+  row.dataset.workspace2FavoriteRegion = favorite.groupId || NODE_DEFAULT_GROUP_ID;
+  if (nodesState.pendingNode?.type === favorite.type) {
+    row.classList.add("is-selected");
+  }
+  row.title = favorite.type;
+  makeFavoriteDragSource(row, favorite);
+  makeFavoriteGroupDropTarget(el, row, favorite.groupId, favorite.type);
+  if (!favorite.invalid) {
+    makeNodeCanvasDragSource(row, favorite);
+    row.addEventListener("mouseenter", (event) => showNodePreview(favorite, event));
+    row.addEventListener("mousemove", moveNodePreview);
+    row.addEventListener("mouseleave", hideNodePreview);
+    row.addEventListener("contextmenu", (event) => {
+      showNodePreview(favorite, event);
+      openNodeContextMenu(el, event, favorite, { favorite });
+    });
+    row.addEventListener("click", (event) => {
+      if (nodesState.suppressClick) {
+        nodesState.suppressClick = false;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      if (event.target.closest("button,input")) {
+        return;
+      }
+      event.stopPropagation();
+      showNodePreview(favorite, event);
+      setPendingNode(nodesState.pendingNode?.type === favorite.type ? null : favorite);
+    });
+  }
+
+  const reorderHandle = document.createElement("span");
+  if (nodesState.customOrderEnabled) {
+    reorderHandle.className = "workspace2-reorder-handle";
+    reorderHandle.title = t("nodes.reorderHandle");
+    beginNodeReorderDrag(el, reorderHandle, row, {
+      kind: "favorite",
+      type: favorite.type,
+      title: favorite.title,
+      groupId: favorite.groupId || NODE_DEFAULT_GROUP_ID,
+    });
+  } else {
+    reorderHandle.className = "workspace2-reorder-spacer";
+  }
+
+  const dot = document.createElement("span");
+  dot.className = "workspace2-node-dot";
+
+  const info = document.createElement("div");
+  info.className = "workspace2-name";
+  const name = document.createElement("div");
+  name.className = "workspace2-name";
+  name.textContent = favorite.title;
+  info.append(name);
+
+  const actions = document.createElement("div");
+  actions.className = "workspace2-actions";
+  actions.append(
+    iconButton("edit", t("nodes.editAlias"), async () => {
+      await editFavoriteAlias(el, favorite);
+    }),
+  );
+  const favoriteButton = iconButton("starFilled", t("nodes.removeFavorite"), async () => {
+    await removeFavoriteNode(el, favorite.type);
+  });
+  favoriteButton.classList.add("is-favorite-active");
+  actions.append(favoriteButton);
+
+  row.append(reorderHandle, dot, info, actions);
+  return row;
+}
+
+function renderEssentialsNodeSection(el, body, nodes, favoriteTypes) {
+  const query = nodesState.query.trim().toLowerCase();
+  const sectionId = "__essentials__";
+  const groups = new Map();
+  for (const node of nodes) {
+    const category = resolveEssentialsCategory(node);
+    if (!category) {
+      continue;
+    }
+    if (!groups.has(category)) {
+      groups.set(category, []);
+    }
+    groups.get(category).push(node);
+  }
+  const essentialsTotal = [...groups.values()].reduce((sum, items) => sum + items.length, 0);
+  if (!essentialsTotal && !query) {
+    return;
+  }
+
+  const section = document.createElement("div");
+  section.className = "workspace2-node-section";
+  renderTopSectionHeader(el, section, sectionId, t("nodes.categoryEssentials"), String(essentialsTotal));
+  body.append(section);
+
+  if (!nodesState.expanded.has(sectionId) && !query) {
+    return;
+  }
+
+  for (const category of ESSENTIALS_CATEGORY_ORDER) {
+    const rankMap = ESSENTIALS_NODE_RANK.get(category);
+    const categoryNodes = (groups.get(category) || []).sort((a, b) => {
+      const diff = (rankMap?.get(a.type) ?? Number.MAX_SAFE_INTEGER) - (rankMap?.get(b.type) ?? Number.MAX_SAFE_INTEGER);
+      return diff || a.title.localeCompare(b.title);
+    });
+    if (!categoryNodes.length) {
+      continue;
+    }
+
+    const groupId = `${sectionId}:${category}`;
+    const groupOpen = nodesState.expanded.has(groupId) || Boolean(query);
+    const categoryHeader = document.createElement("div");
+    categoryHeader.className = "workspace2-node-folder-header";
+    categoryHeader.addEventListener("click", (event) => {
+      if (event.target.closest("button,input")) {
+        return;
+      }
+      event.stopPropagation();
+      if (nodesState.expanded.has(groupId)) {
+        nodesState.expanded.delete(groupId);
+      } else {
+        nodesState.expanded.add(groupId);
+      }
+      renderNodesPanel(el);
+    });
+    const disclosure = document.createElement("button");
+    disclosure.className = `workspace2-disclosure ${groupOpen ? "is-open" : ""}`;
+    disclosure.type = "button";
+    disclosure.title = groupOpen ? t("folder.collapse") : t("folder.expand");
+    disclosure.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (nodesState.expanded.has(groupId)) {
+        nodesState.expanded.delete(groupId);
+      } else {
+        nodesState.expanded.add(groupId);
+      }
+      renderNodesPanel(el);
+    });
+    const name = document.createElement("div");
+    name.className = "workspace2-name";
+    name.textContent = essentialsCategoryLabel(category);
+    const meta = document.createElement("div");
+    meta.className = "workspace2-meta";
+    meta.textContent = String(categoryNodes.length);
+    categoryHeader.append(disclosure, name, meta);
+    section.append(categoryHeader);
+
+    if (groupOpen) {
+      const list = document.createElement("div");
+      list.className = "workspace2-node-list";
+      for (const node of categoryNodes) {
+        list.append(renderAllNodeRow(el, node, favoriteTypes.has(node.type)));
+      }
+      section.append(list);
+    }
+  }
+}
+
+function renderNodeCategorySections(el, body) {
+  const query = nodesState.query.trim().toLowerCase();
+  const allNodes = getNodeDefinitions();
+  const matchingNodes = allNodes.filter((node) => nodeMatchesQuery(node, query));
+  const filtered = query ? sortNodeSearchResults(matchingNodes, query) : matchingNodes;
+  const favoriteTypes = new Set(nodesState.library.favorites.map((favorite) => favorite.type));
+  const comfyNodes = [];
+  const extensionNodes = [];
+  let visibleTotal = 0;
+  for (const node of filtered) {
+    if (isHiddenOfficialNodeSection(node)) {
+      continue;
+    }
+    visibleTotal += 1;
+    if (isComfyCoreNode(node)) {
+      comfyNodes.push(node);
+    } else {
+      extensionNodes.push(node);
+    }
+  }
+
+  const visibleSections = { ...defaultNodeVisibleSections(), ...(nodesState.visibleSections || {}) };
+  if (!Object.values(visibleSections).some(Boolean)) {
+    Object.assign(visibleSections, defaultNodeVisibleSections());
+  }
+
+  if (visibleSections.bookmarked) {
+    renderFavoriteNodeSections(el, body);
+  }
+  if (visibleSections.comfy) {
+    renderNodeTopSection(el, body, "__comfy__", t("nodes.categoryComfy"), comfyNodes, visibleTotal, favoriteTypes);
+  }
+  if (visibleSections.extensions) {
+    renderNodeTopSection(el, body, "__extensions__", t("nodes.categoryExtensions"), extensionNodes, visibleTotal, favoriteTypes);
+  }
+}
+
+function renderNodeTopSection(el, body, sectionId, titleText, nodes, totalCount, favoriteTypes) {
+  const section = document.createElement("div");
+  section.className = "workspace2-node-section";
+  renderTopSectionHeader(el, section, sectionId, titleText, `${nodes.length}/${totalCount}`);
+  body.append(section);
+
+  if (!nodes.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-empty";
+    empty.textContent = t("nodes.noNodeMatches");
+    section.append(empty);
+    return;
+  }
+
+  renderOfficialNodeTree(el, section, buildOfficialNodeTree(sectionId, nodes), favoriteTypes);
+}
+function renderAllNodeRow(el, node, isFavorite, depth = 0, parentKey = "") {
+  const row = document.createElement("div");
+  row.className = "workspace2-node-row";
+  row.style.paddingLeft = `${8 + depth * 24}px`;
+  row.dataset.workspace2NodeType = node.type;
+  row.dataset.workspace2NodeParentKey = parentKey;
+  if (nodesState.pendingNode?.type === node.type) {
+    row.classList.add("is-selected");
+  }
+  row.title = node.type;
+  makeNodeCanvasDragSource(row, node);
+  row.addEventListener("mouseenter", (event) => showNodePreview(node, event));
+  row.addEventListener("mousemove", moveNodePreview);
+  row.addEventListener("mouseleave", hideNodePreview);
+  row.addEventListener("contextmenu", (event) => {
+    showNodePreview(node, event);
+    openNodeContextMenu(el, event, node);
+  });
+  row.addEventListener("click", (event) => {
+    if (nodesState.suppressClick) {
+      nodesState.suppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (event.target.closest("button,input")) {
+      return;
+    }
+    event.stopPropagation();
+    showNodePreview(node, event);
+    setPendingNode(nodesState.pendingNode?.type === node.type ? null : node);
+  });
+
+  const reorderHandle = document.createElement("span");
+  if (nodesState.customOrderEnabled) {
+    reorderHandle.className = "workspace2-reorder-handle";
+    reorderHandle.title = t("nodes.reorderHandle");
+    beginNodeReorderDrag(el, reorderHandle, row, {
+      kind: "global",
+      type: node.type,
+      title: node.title,
+      parentKey,
+    });
+  } else {
+    reorderHandle.className = "workspace2-reorder-spacer";
+  }
+
+  const dot = document.createElement("span");
+  dot.className = "workspace2-node-dot";
+
+  const info = document.createElement("div");
+  info.className = "workspace2-name";
+  const name = document.createElement("div");
+  name.className = "workspace2-name";
+  name.textContent = node.title;
+  info.append(name);
+
+  const actions = document.createElement("div");
+  actions.className = "workspace2-actions";
+  const favoriteButton = iconButton(isFavorite ? "starFilled" : "star", isFavorite ? t("nodes.removeFavorite") : t("nodes.addFavorite"), async () => {
+    if (isFavorite) {
+      await removeFavoriteNode(el, node.type);
+    } else {
+      await addFavoriteNode(el, node);
+    }
+  });
+  if (isFavorite) {
+    favoriteButton.classList.add("is-favorite-active");
+  }
+  actions.append(favoriteButton);
+
+  row.append(reorderHandle, dot, info, actions);
+  return row;
+}
+
+function showFallbackPanel() {
+  if (document.getElementById("workspace2-fallback")) {
+    return;
+  }
+
+  const host = document.createElement("div");
+  host.id = "workspace2-fallback";
+  host.style.position = "fixed";
+  host.style.right = "12px";
+  host.style.bottom = "12px";
+  host.style.zIndex = "10000";
+  host.style.width = "430px";
+  host.style.height = "70vh";
+  host.style.border = "1px solid #555";
+  host.style.boxShadow = "0 8px 24px rgba(0,0,0,.35)";
+  document.body.append(host);
+  renderPanel(host);
+}
+
+app.registerExtension({
+  name: EXTENSION_NAME,
+  commands: [
+    {
+      id: "Workspace2.CanvasGroups.CreateGroup",
+      label: "Workspace2: Create canvas group",
+      function: () => {
+        workspace2CanvasGroups.createGroupFromSelection?.();
+      },
+    },
+    {
+      id: "Workspace2.CanvasGroups.UngroupSelection",
+      label: "Workspace2: Ungroup selected canvas group",
+      function: () => {
+        workspace2CanvasGroups.ungroupSelection?.();
+      },
+    },
+  ],
+  keybindings: [
+    {
+      combo: { key: "g", shift: true },
+      commandId: "Workspace2.CanvasGroups.UngroupSelection",
+    },
+  ],
+  getCanvasMenuItems() {
+    return [
+      null,
+      {
+        content: "Workspace2 编组",
+        callback: () => {
+          workspace2CanvasGroups.createGroupFromSelection?.();
+        },
+      },
+    ];
+  },
+  async setup() {
+    await loadLocale();
+    startLocaleWatcher();
+    setupWorkspaceShortcuts();
+    workspace2CanvasGroups.init();
+    registerWorkspace2CanvasGroupCommands();
+    detectOfficialNodeAdapter();
+    detectOfficialFavoritesProbe().catch((error) => {
+      console.debug("[Workspace2] official favorites probe failed", error);
+    });
+    try {
+      await loadWorkflows();
+    } catch (error) {
+      state.status = t("status.error", { message: error.message });
+    }
+    if (app.extensionManager?.registerSidebarTab) {
+      app.extensionManager.registerSidebarTab({
+        id: WORKFLOWS_TAB_ID,
+        icon: "pi pi-folder",
+        title: t("workflows.title"),
+        tooltip: "Workspace2 Workflows",
+        type: "custom",
+        render: renderPanel,
+      });
+      app.extensionManager.registerSidebarTab({
+        id: NODES_TAB_ID,
+        icon: "pi pi-sitemap",
+        title: t("nodes.title"),
+        tooltip: "Workspace2 Nodes",
+        type: "custom",
+        render: renderNodesPanel,
+      });
+
+      return;
+    }
+
+    console.warn("[Workspace2] registerSidebarTab is not available; using fallback panel.");
+    showFallbackPanel();
+  },
+});

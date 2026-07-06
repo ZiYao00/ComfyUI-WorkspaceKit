@@ -1,225 +1,125 @@
-# ☕️ ComfyUI Workspace Manager - Comfyspace
-
-
-**[2025-4-16] 📣Hi since ComfyUI frontend has built-in workspace management feature now, this plugin becomes obsolte and will not be maintained anymore. Thanks everyone for supporting comfyui-workspace-manager! Sorry that this cannot continue anymore.**
-
-A ComfyUI workflow and model manager extension to **organize and manage all your workflows, models and generated images in one place**. Seamlessly switch between workflows, track version history and image generation history, 1 click install models from Civit ai, browse/update your installed models
-
-
-<img width="610" alt="Screenshot 2024-03-08 at 6 41 18 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/30455eb1-3d12-4930-bb81-28b33148fbaa">
-
-## Installation
-
-### [Option 1] via ComfyUI Manager (Preferred)
-
-Simply search for “ComfyUI Workspace Manager”, install, and restart ComfyUI.
-
-### [Option 2] via git
-
-Like any other custom node installation, in your ComfyUI root folder run command and restart your ComfyUI.
-
-```
-cd custom_nodes && git clone https://github.com/11cafe/comfyui-workspace-manager.git
-```
-
-
-Please upgrade to V2 asap, you should see an **unicorn🦄** here instead of ☕️ (V1). I will stop supporting V1 soon.
-
-<img width="136" alt="Screenshot 2024-05-31 at 5 39 58 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/f52a83f2-4679-4a40-95ed-e75584516ec5">
-
-Recommanded settings for V2 (Do not use these settings if you are on V1):
- - Enable two way sync (‼️ Will stop supporting non-two-way sync mode starting next version)
- - Make sure My Workspace Save Directory is valid path
-
-<img width="202" alt="Screenshot 2024-05-30 at 6 34 39 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/67020966-c190-48cb-bffc-b715449d5c99">
-
-<img width="377" alt="335530039-10002a3f-ea2f-4bd1-8597-0ae1443d9851" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/6001a7f1-93f2-48ef-86c6-95c9560030ef">
-
-
-
-## Features
-
-**Workflows manager**
-
-- 🔁Switch between different workflows easily. 1click open workflow in multiple browser tabs.
-- 🤏**Drag and drop** to insert subworkflows into current flow.
-- 🗂️Organize workflows with folders (tags are deprecated, please use folders to organize)
-- 📂Save and sync all your workflows in a local folder (by default under `/ComfyUI/my_workflows` customize in Settings)
-  - **Save workflow by pressing the 💾 button, or ⌨Shift+S shortcut** (customize in Settings).
-  - Every time you save, it will create a new record in **Version History**. You can easily revert to any version.
-  - **Enable/disable autosave workflow** (please disable autosave if you are experiencing UI slowing)
-  - You can move files using OS File Explorer and it will be **two-way synced** with workspace.
-- 🕛**Version control** of workflow, create/switch versions
-- Bulk import workflows into your workspace
-- 1click download all your workflows into a .zip
-
-**🔮Models manager**:
-
-- 1click install models from civitai to `models/` subfolder of the matching model type
-- Browse installed models with thumbnail image
-- drag and drop to insert "load model_type" node into workflow
-
-**🖼️Image Gallery**: Every image/video you generate will be saved in the gallery of the current workflow. You can set any image in the gallery as the cover photo of the workflow
-
-- Dark/light mode
-- cloud sync & backup workspace so you will never lose your data (Upcoming!)
-- [beta!]One-click share workflow
-
-Recommend using Chrome browser for the best experience. Safari doesn't work well. Edge or firefox should be fine too.
-
-[中文版教程](https://www.uisdc.com/workspace-manager) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; [Roadmap](https://github.com/orgs/11cafe/projects/1/views/1)
-
-## Updates
-
-**🦄v2.0 Two-way sync with local folder, models manager support external models path like Automatic1111, cloud sync workflows**
-  
-v2.0 demo: https://youtu.be/7Hht_BMe844
-
-**v1.7 ComfyUI model manager, view your installed models, install models from civit ai, open workflow in multiple browser tabs**
-
-<img width="700" alt="Screenshot 2024-02-02 at 5 51 13 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/86dc9007-c45c-4b7b-b74a-76ddc93c89a8">
-
-<img width="400" alt="Screenshot 2024-01-23 at 12 27 34 AM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/3b543024-3a6b-4fca-9980-e535d83e206e">
-
-<img width="200" alt="Screenshot 2024-01-23 at 12 26 56 AM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/d29d0831-a15a-4597-acf6-facee4dbc76e">
-
-## Usage
-
-switch between flows:
-
-<img src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/11543a0f-6cc4-41fb-8666-772ab9a2cfe6" width="500">
-
-🤏drag and drop to insert sub-workflow:
-
-<img src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/7540c45b-be51-4428-8558-96adcc1024c8" width="480">
-
-Bulk import flows:
-
-<img width="400" alt="Screenshot 2024-01-02 at 10 22 45 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/884c8852-73c7-41d6-9179-7fb1fcea9d04">
-
-Workflow operations: Manual Save, Download, Discard unsaved changes:
-
-<img width="500" alt="Screenshot 2023-12-29 at 9 59 57 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/88c82672-ebf2-4feb-bf5b-74b447843c2c">
-
-### How do I save my workflow?
-
-Save your workflow by either clicking the 💾 floppy disk icon button or ⌨**Shift+S** shortcut (customize this shortcut in Settings)
-Every time you save, it will create a new record in **Version History**. You can go back and switch versions in version history like git.
-
-<img width="350" alt="Screenshot 2024-01-23 at 12 22 22 AM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/cc4eb504-6a65-44af-ad7f-d4a8b4ac7b9a">
-<img width="300" alt="Screenshot 2024-01-23 at 12 23 21 AM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/041c2da8-d8cf-46b7-b9d8-45b415e764f8">
-
-By default, We also enabled auto-saving your current workflow as a cache in case you forgot to save it manually. It may affect UI performance, if you experience UI lagging, ‼️‼️**you can disable auto-saving in Settings:**
-
-<img width="297" alt="Screenshot 2024-01-23 at 12 37 37 AM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/9ca0a63e-ddae-4436-a374-6ef0276c23fb">
-<img width="402" alt="Screenshot 2024-01-22 at 2 33 00 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/061a8463-f7e6-4985-9516-8117d7a5edd5">
-
-### Where are my workflow and workspace data stored?
-
-🗂️All your workflows are saved in a folder in `/ComfyUI/my_workflows`, you can change this path in settings.
-
-<img width="360" alt="Screenshot 2024-01-02 at 10 22 45 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/4751b096-0886-4a32-95b1-87c7ce5b3787">
-
-Other metadata (versions, gallery images) is primarily stored in your browser cache (IndexDB) and backedup in your disk under `/ComfyUI/custom_nodes/comfyui-workspace-manager/db/`. Press F12 or Inspect in right click browser menu, go to Application -> IndexedDB -> comfyui_workspace_db to see your data (workflows, version history, gallery, etc.)
-
-**If you switch browser, your will not see your previous metadata (version history, gallery images) in your new browser**
-
-<img width="607" alt="303892585-c04ca874-03f0-4569-9a40-d8453dd9b031" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/17097e17-743d-499f-8f86-0eb1193d0e46">
-
-**Looking for colaborators and coworkers** to develop this ComfyUI project management tool. If you know React, Python or ML model deployment, please reach out to weixuanfu01@gmail.com We want to make it easy to **manage, share and deploy** ComfyUI project.
-
-## Upcoming Features
-
-1. 1-Click Install Models
-   Often when you import a json workflow from online, it will show lots of missing nodes or models errors, we will provide easy one-click install for missing models from Hugging face and Civiti
-
-2. Modular
-   Modern software development project are all modularized, the whole system is broken down into different modules. In ComfyUI each custom node is a module and should be self contained and easy to install and depend on from other modules. So that the modules (custom nodes) can be easily reused across projects.
-   ➡️ We need something like web bundler, e.g. webpack, vite. This will make each custom node self contained and has a clear definition of its dependency.
-
-3. Multi workflow project
-   Now you can only work on one workflow at a time, this limits the potential to build large scale workflows that consists multiple sub-workflows parts. Each workflow can be seen as a custom node. You should be able to easily convert one workflow into one custom node. You can reuse workflow/custom node across your project.
-   ➡️ We need a cross workflow, project management tool, like VSCode editor
-
-4. Cloud running / easy deployment
-   Right now you need to have python and GPU server up to run ComfyUI or Automatic111, that’s really painful for people who do not own a GPU. You should be able to run UI independently without paying for GPU💰.
-   ➡️ Share and deploy your workflow to cloud in 1click and other people can easily run in browser using cloud GPU with no setup. It should be as easy as running Google Docs or Figma.
-
-## Beta Preview
-
-We're constantly pushing new features in beta branch. Here is how to switch to beta branch to receive latest feature updates pre-launch! It requires you have some basic knowledge about command line and git.
-
-- Make sure you have [git installed](https://git-scm.com/downloads)
-- Open your terminal, go to the ComfyUI folder (where you do `python main.py`)
-- in ComfyUI root directory, `cd custom_nodes && cd comfyui-workspace-manager`
-- inside custom_nodes/comfyui-workspace-manager, do `git fetch origin beta && git checkout beta`, you should see something like:
-
-```
-From https://github.com/11cafe/comfyui-workspace-manager
- * branch            beta       -> FETCH_HEAD
-Switched to branch 'beta'
-Your branch is up to date with 'origin/beta'.
+# ComfyUI-Workspace2
+
+ComfyUI-Workspace2 是一个面向 ComfyUI 的工作区增强插件。
+
+它目前主要提供两个侧边栏入口：
+
+- 工作流2：用于管理 ComfyUI 官方工作流目录里的工作流文件。
+- 节点2：用于浏览、搜索、收藏和整理节点。
+
+同时，插件还包含一些画布辅助能力，例如编组增强和标题节点。
+
+这个项目不是“完全从零原创”的插件。它是在 Codex 协助下，参考、迁移和整合多个优秀 ComfyUI 插件后，为新版 ComfyUI 重新整理出来的个人工作流增强插件。
+
+## 当前功能
+
+### 工作流2
+
+- 使用 ComfyUI 官方默认工作流目录。
+- 树状文件夹管理。
+- 新建文件夹、新建子文件夹、重命名、删除到插件回收站。
+- 工作流拖拽整理。
+- 文件夹展开区域支持拖拽放入。
+- 工作流点击名称直接打开。
+- 打开工作流所在位置。
+- 插件回收站与恢复。
+- 回收站项目可移到系统回收站。
+- 工作流排序、自定义顺序、优先文件夹。
+- 文件夹个性化：图标和颜色。
+- 搜索、刷新、新建工作流。
+- 字号滑块。
+- 快捷键：Shift+W 或 Shift+1。
+
+### 节点2
+
+- 独立侧边栏节点管理器。
+- 从 ComfyUI `/object_info` 读取当前可用节点。
+- 显示官方节点与已加载扩展节点。
+- 节点搜索。
+- 节点收藏。
+- 收藏分组。
+- 新建收藏分组、新建子分组、重命名、删除。
+- 拖拽节点到收藏根位置或收藏分组。
+- 拖拽收藏节点移动分组。
+- 收藏节点自定义排序。
+- 节点拖拽到画布。
+- 点击节点后，再点击画布放置节点。
+- 放置节点时显示预览卡片。
+- 节点右键菜单。
+- 与 ComfyUI 官方收藏进行导入、导出、备份、还原。
+- 缺失的第三方节点会以更弱的样式显示，不会自动删除。
+- 收藏分组个性化：图标和颜色。
+- 字号滑块。
+- 快捷键：Shift+N 或 Shift+2。
+
+### 标题2
+
+- 一个用于画布注释/标题的轻量节点。
+- 支持文字编辑和样式调整。
+- 默认透明背景。
+
+### 编组增强
+
+- 支持从选中节点创建画布编组。
+- 支持移动、调整、重命名、删除编组。
+- 支持保存到工作流数据中。
+- 当前不再显示独立侧边栏入口，主要作为画布增强能力使用。
+
+## 安装
+
+进入 ComfyUI 的 `custom_nodes` 目录：
+
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/ZiYao00/ComfyUI-Workspace2.git
 ```
 
-- Restart ComfyUI python server by `python main.py`
+然后重启 ComfyUI。
 
-‼️ Be careful that beta branch can be unstable, so please please make sure you have backups for all your workflows! **Before switching to beta, please make a copy of these folders somewhere:**
+## 依赖
 
-`ComfyUI/custom_nodes/comfyui-workspace-manager/db`
-or the entire `ComfyUI/custom_nodes/comfyui-workspace-manager/` folder
+当前插件需要：
 
-if anything goes wrong, you can always paste back these folders. Also, you should have your /my_workflows folder (workspace save directory) in safe place always
-
-To revert back to main:
-
-- inside custom_nodes/comfyui-workspace-manager, do `git checkout main`, then restart your python server and you are back into main branch!
-
-## Credits
-
-ComfyUI: https://github.com/comfyanonymous/ComfyUI
-
-ComfyUI Browser: https://github.com/talesofai/comfyui-browser (Media display code for reference)
-And thanks to all custom node creators building the community!
-
-## Dev
-
-1. Clone ComfyUI
-   `git clone https://github.com/comfyanonymous/ComfyUI`
-   follow the install and setup instructions of ComfyUI README
-2. Clone Workspace Manager
-   in /ComfyUI folder
-
-```
-cd custom_nodes && git clone https://github.com/11cafe/comfyui-workspace-manager.git
+```text
+send2trash
 ```
 
-3. npm install
-   inside `/ComfyUI/custom_nodes/comfyui-workspace-manager`
-   do `cd ui && npm install`
-   this will install all node dependencies
-4. build and run
-   inside `/ComfyUI/custom_nodes/comfyui-workspace-manager/ui`
-   `npm run build --watch`
-   this command will watch for your file changes and automatically rebuild, you just need to refresh to see your changes in browser everyting you change some code
-5. run ComfyUI server
-   inside `/ComfyUI`
-   do `python main.py` or `python3 main.py` depending on your version
+如果你的环境缺少它，可以在 ComfyUI 对应 Python 环境中安装：
 
-#### IndexDB trouble shooting
-
-If you see indexdb version mismatch error in console that looks like:
-
-```
-VersionError: The requested version (10) is less than the existing version (30)."
-name
-:
-"DatabaseClosedError"
+```bash
+pip install -r requirements.txt
 ```
 
-please delete indexdb manually F12 Dev tools -> Application -> IndexDB -> WorkspaceManagerDB
-<img width="460" alt="Screenshot 2024-01-21 at 11 21 55 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/adcde47f-c620-42ad-9367-e16e5be92be1">
+不要在不了解 ComfyUI Python 环境的情况下随意更新依赖。
 
-and delete localstorage.WORKSPACE_INDEXDB_BACKFILL
-<img width="460" alt="Screenshot 2024-01-21 at 11 29 02 PM" src="https://github.com/11cafe/comfyui-workspace-manager/assets/18367033/f3c17034-c863-481a-8771-8e7e87bcee07">
+## 项目说明
 
-only do this if you are a developer
+我是一个不懂代码的 ComfyUI 爱好者、设计师和创作者。
+
+项目维护者：ZiYao00
+
+项目主页：https://github.com/ZiYao00/ComfyUI-Workspace2
+
+这个插件能做出来，非常感谢 Codex 的协助。Codex 帮我阅读旧插件代码、分析新版 ComfyUI 前端行为、迁移功能、调试问题，并逐步把想法整理成可以实际运行的插件。
+
+同时也非常感谢以下插件和作者提供的基础、灵感和参考：
+
+- [ComfyUI-N-Sidebar](https://github.com/Nuked88/ComfyUI-N-Sidebar)
+- [comfyui-workspace-manager](https://github.com/11cafe/comfyui-workspace-manager)
+- [ComfyUI-xiaozhuguang](https://github.com/xiaozhuguang/ComfyUI-xiaozhuguang)
+
+Workspace2 参考、迁移或改造了这些项目中的部分思路和实现，但并不代表这些原项目作者参与维护 Workspace2。
+
+详细来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 许可证
+
+本项目使用 MIT License。
+
+第三方项目代码、思路和改造部分仍遵循其原始许可证。详见 [LICENSE](LICENSE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 当前状态
+
+这是一个仍在快速迭代中的插件。当前仓库先作为私有测试和整理版本使用。
+
+如果你要在主 ComfyUI 环境中使用，建议先备份工作流和 ComfyUI 用户设置。

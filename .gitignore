@@ -1,8 +1,16 @@
-__pycache__
-hash
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+
+hash/
 .env
+.env.*
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -10,22 +18,51 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-ui/node_modules
-# ui/src/utils/encryptUtils.ts
-db
-dist-ssr
+node_modules/
+ui/node_modules/
+dist-ssr/
 *.local
-backup
+
+# Local plugin data and backups
+db/
+backup/
+*.backup
+*.bak
+
+# ComfyUI/runtime outputs
+output/
+outputs/
+temp/
+tmp/
+.cache/
+
+# Large model/checkpoint files
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.onnx
+*.gguf
+*.bin
+
+# Archives
+*.zip
+*.7z
+*.rar
+*.tar
+*.gz
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-.cache
+
 # dev
 ui/yarn.lock

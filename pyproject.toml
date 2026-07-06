@@ -1,13 +1,16 @@
 [project]
-name = "comfyui-workspace-manager"
-description = "A ComfyUI custom node for project management to centralize the management of all your workflows in one place. Seamlessly switch between workflows, create and update them within a single workspace, like Google Docs."
-version = "1.0.0"
+name = "comfyui-workspace2"
+description = "A ComfyUI workspace enhancement extension for workflows, node favorites, and canvas grouping."
+version = "0.1.0"
 license = { file = "LICENSE" }
+authors = [
+  { name = "ZiYao00" },
+]
 
 [project.urls]
-Repository = "https://github.com/11cafe/comfyui-workspace-manager"
+Repository = "https://github.com/ZiYao00/ComfyUI-Workspace2"
 
 [tool.comfy]
-PublisherId = "weixuan11"
-DisplayName = "comfyui-workspace-manager"
+# PublisherId is intentionally not set until the Comfy Registry publisher is confirmed.
+DisplayName = "ComfyUI-Workspace2"
 Icon = ""

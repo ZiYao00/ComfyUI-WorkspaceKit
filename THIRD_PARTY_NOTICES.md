@@ -63,6 +63,26 @@ Usage in Workspace2:
 - Title-node references.
 - Pinyin search, usage-frequency, and recent-use ideas for future Nodes2 work.
 
+## pinyin-pro
+
+Repository: https://github.com/zh-lx/pinyin-pro
+
+Website: https://pinyin-pro.cn/
+
+License: MIT License
+
+Original license notice:
+
+```text
+MIT License
+Copyright (c) 2022-present zh-lx
+```
+
+Usage in Workspace2:
+
+- Workspace2 bundles an ESM build as `entry/pinyin-pro.esm.js`.
+- Nodes2 uses it to support pinyin-based search for Chinese node names and categories.
+
 ## Notes
 
 Third-party code and adapted implementations remain subject to their original license terms.

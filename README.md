@@ -1,187 +1,173 @@
 # ComfyUI-Workspace2
 
-ComfyUI-Workspace2 是一个面向 ComfyUI 的工作区增强插件。
+English | [中文说明](README.zh-CN.md)
 
-我开发这个插件的本意，是因为 ComfyUI 官方当前的一些交互在大型工作流、节点收藏、画布整理这些日常场景里还不够顺手。于是我根据以前使用旧插件的习惯，把工作流管理、节点管理、编组增强和画布标题节点重新整合、迁移和更新了一遍。
+ComfyUI-Workspace2 is a workspace enhancement extension for ComfyUI.
 
-它不是要替代 ComfyUI 官方功能，而是补齐一些高频操作的体验缺口。
+It was created because some daily ComfyUI workflows become difficult to manage once the number of workflows, custom nodes, favorites, and canvas groups grows. Workspace2 focuses on practical workspace organization: workflow folders, node favorites, node search, canvas groups, and visual title nodes.
 
-目前插件主要提供两个侧边栏入口：
+This project does not try to replace the official ComfyUI UI. It adds a focused set of productivity features for users who need more structure in large ComfyUI setups.
 
-- 工作流2：管理 ComfyUI 官方工作流目录里的工作流文件。
-- 节点2：浏览、搜索、收藏、分组和整理节点。
+Current status: **public beta, 0.1.x**. It is not a stable 1.0 release yet.
 
-同时，插件还包含两个画布辅助能力：
+## Main Features
 
-- 编组增强：强化画布编组的快捷键、标题栏右键设置和默认样式。
-- 标题2：用于在复杂工作流中添加更清晰的标题和注释。
+Workspace2 currently provides two sidebar tabs:
 
-这个项目不是“完全从零原创”的插件。它是在 Codex 协助下，参考、迁移和整合多个优秀 ComfyUI 插件后，为新版 ComfyUI 重新整理出来的个人工作流增强插件。
+- **Workflows 2**: Manage workflow files in the official ComfyUI workflow directory.
+- **Nodes 2**: Browse, search, favorite, group, and organize nodes.
 
-## 为什么需要 Workspace2
+It also includes two canvas helpers:
 
-### 官方工作流管理的痛点
+- **Group Enhancements**: Better canvas group shortcuts, title-bar context settings, and default group styling.
+- **Title2**: A lightweight visual title / annotation node for large workflows.
 
-当工作流数量变多后，单纯列表很难长期整理。常见问题包括：
+## Why Workspace2
 
-- 工作流缺少类似资源管理器的树状文件夹整理体验。
-- 文件夹、子文件夹、拖拽移动、排序这些操作不够集中。
-- 删除工作流时，缺少一个可恢复的中间回收站。
-- 大量工作流需要更快的搜索、排序、自定义顺序和打开位置。
+### Workflow Management Pain Points
 
-Workspace2 的 `工作流2` 针对这些问题做了增强。
+When a ComfyUI setup contains many workflows, a plain list becomes hard to manage.
 
-### 官方节点管理的痛点
+Workspace2 improves this with:
 
-ComfyUI 官方节点管理器可以搜索和添加节点，但在长期使用大量第三方插件后，会遇到这些问题：
+- Tree-style workflow folder management.
+- Folder and subfolder creation.
+- Drag-and-drop workflow organization.
+- Drop support for expanded folder areas and the root area.
+- Plugin trash with restore support before moving items to the operating system trash.
+- Workflow sorting, custom order, and folder-first sorting.
+- Search, clear search, refresh, and direct workflow opening.
+- Folder icon and color customization.
+- Recursive expand/collapse with `Ctrl + click`.
 
-- 常用节点缺少更自由的收藏分组和拖拽整理。
-- 收藏节点缺少方便的备份、还原、导入和导出。
-- 第三方插件节点数量多时，需要更清楚地区分官方节点和扩展节点来源。
-- 搜索、拼音搜索、模糊搜索和收藏结果的组织需要更贴近日常使用。
+### Node Management Pain Points
 
-Workspace2 的 `节点2` 针对这些问题做了增强。
+The official node browser is useful for adding nodes, but large setups with many extensions need stronger organization.
 
-### 官方画布编组的痛点
+Workspace2 improves this with:
 
-ComfyUI 已经有画布编组，但在设计师习惯的工作方式里，还缺少一些细节：
+- Nodes2 sidebar node browser.
+- Comfy and Extensions sections.
+- Extension nodes grouped by plugin source.
+- Fuzzy search and pinyin search.
+- Favorite root, favorite groups, and favorite subgroups.
+- Drag nodes into favorite groups.
+- Drag favorite nodes between groups.
+- Custom ordering for favorites and global nodes.
+- Node preview cards.
+- Drag-to-canvas and click-then-click-to-place node creation.
+- Official ComfyUI favorite import, export, backup, and restore.
+- Dimmed display for missing third-party nodes instead of silently deleting them.
 
-- `Ctrl+G` 编组和 `Shift+G` 取消编组这类设计软件常用快捷键需要更直接。
-- 编组标题栏右键后的样式设置需要更方便。
-- 如果调出了一套喜欢的编组样式，需要能保存为默认样式。
-- 复杂工作流里，编组应该更容易作为视觉结构的一部分来管理。
+### Canvas Group Pain Points
 
-Workspace2 的 `编组增强` 针对这些问题做了增强。
+ComfyUI already supports canvas groups, but Workspace2 adds a workflow closer to common design tools:
 
-### 官方注释和标题的痛点
+- `Ctrl+G` to create a group.
+- `Shift+G` to ungroup.
+- Right-click a group title bar to edit group style.
+- Save the current group style as the default group style.
+- Move, resize, rename, and delete groups.
+- Store group data in the workflow.
 
-复杂工作流经常需要大标题、区域说明和视觉分隔。普通注释节点可以写文字，但不够适合作为清晰的视觉标题。
+If `Ctrl+G` conflicts with an official ComfyUI keybinding, remove or change the official binding in ComfyUI settings first.
 
-Workspace2 的 `标题2` 提供了一个更偏视觉整理用途的轻量标题节点。
+### Visual Title Pain Points
 
-## 功能说明
+Large workflows often need clear section titles, annotations, and visual dividers. Regular note nodes are not always enough for this job.
 
-### 工作流2
+Workspace2 adds **Title2**:
 
-- 使用 ComfyUI 官方默认工作流目录。
-- 树状文件夹管理，支持文件夹和子文件夹。
-- 新建文件夹、新建子文件夹、重命名、删除到插件回收站。
-- 工作流拖拽整理，支持拖到文件夹、展开的文件夹区域和根目录。
-- 工作流点击名称直接打开。
-- 打开工作流所在位置。
-- 插件回收站与恢复。
-- 回收站项目可移到系统回收站。
-- 工作流排序、自定义顺序、优先文件夹。
-- 工作流显示时隐藏 `.json` 后缀。
-- 文件夹个性化：图标和颜色。
-- 搜索、清空搜索、新建工作流、刷新。
-- 字号滑块。
-- `Ctrl + 点击` 文件夹可递归展开或折叠。
-- 快捷键：`Shift+W` 或 `Shift+1`。
+- Lightweight visual title / annotation node.
+- Designed for workflow sections and visual organization.
+- Text editing and style controls.
+- Default font size: 24.
+- Default transparent background.
+- Default corner radius: 15.
 
-### 节点2
+## Shortcuts
 
-- 独立侧边栏节点管理器。
-- 从 ComfyUI `/object_info` 读取当前可用节点。
-- 显示 Comfy 官方节点和已加载扩展节点。
-- 扩展节点按插件来源整理，减少第三方节点混在官方分类里的情况。
-- 节点搜索，支持模糊搜索和拼音搜索。
-- 搜索框支持一键清空。
-- 节点收藏。
-- 收藏根位置、收藏分组和收藏子分组。
-- 新建收藏分组、新建子分组、重命名、删除。
-- 拖拽节点到收藏根位置或收藏分组。
-- 拖拽收藏节点移动分组。
-- 收藏节点和全局节点支持排序与自定义顺序。
-- 节点拖拽到画布。
-- 点击节点后，再点击画布放置节点。
-- 放置节点时显示预览卡片。
-- 节点右键菜单。
-- 与 ComfyUI 官方收藏进行导入、导出、备份、还原。
-- 缺失的第三方节点会以更弱的样式显示，不会自动删除。
-- 收藏分组个性化：图标和颜色。
-- 字号滑块。
-- `Ctrl + 点击` 文件夹可递归展开或折叠。
-- 快捷键：`Shift+N` 或 `Shift+2`。
+- `Shift+W` or `Shift+1`: open Workflows 2.
+- `Shift+N` or `Shift+2`: open Nodes 2.
+- `Ctrl+G`: create canvas group.
+- `Shift+G`: ungroup.
+- `Ctrl + click` folder toggle: recursively expand or collapse folders.
 
-### 编组增强
+## Installation
 
-- 支持从选中节点创建画布编组。
-- 支持 `Ctrl+G` 创建编组。
-- 支持 `Shift+G` 取消编组。
-- 支持右击编组标题栏打开样式设置。
-- 支持把当前编组样式保存为默认编组样式。
-- 支持移动、调整、重命名、删除编组。
-- 支持保存到工作流数据中。
-- 当前不再显示独立侧边栏入口，主要作为画布增强能力使用。
-
-如果 `Ctrl+G` 与 ComfyUI 官方快捷键冲突，需要先在 ComfyUI 快捷键设置里移除或修改官方绑定。
-
-### 标题2
-
-- 一个用于画布注释、分区和标题的轻量节点。
-- 适合给复杂工作流添加清晰的视觉标题。
-- 支持文字编辑和样式调整。
-- 默认字号为 24。
-- 默认透明背景。
-- 默认圆角为 15。
-- 支持通过工具条调整标题外观。
-
-## 安装
-
-进入 ComfyUI 的 `custom_nodes` 目录：
+Clone this repository into your ComfyUI `custom_nodes` directory:
 
 ```bash
 cd ComfyUI/custom_nodes
 git clone https://github.com/ZiYao00/ComfyUI-Workspace2.git
 ```
 
-然后重启 ComfyUI。
+Then restart ComfyUI.
 
-## 依赖
+## Requirements
 
-当前插件需要：
+Workspace2 currently requires:
 
 ```text
 send2trash
 ```
 
-如果你的环境缺少它，可以在 ComfyUI 对应 Python 环境中安装：
+Install the dependency inside the Python environment used by ComfyUI:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-不要在不了解 ComfyUI Python 环境的情况下随意更新依赖。
+Do not update your ComfyUI Python environment unless you understand the environment you are modifying.
 
-## 项目说明
+## System Trash Behavior
 
-我是一个不懂代码的 ComfyUI 爱好者、设计师和创作者。
+Workspace2 has two trash layers:
 
-项目维护者：ZiYao00
+- **Workspace2 trash**: the plugin-level recoverable trash used when deleting workflows from Workflows 2.
+- **System trash**: the operating system trash / recycle bin, handled through `send2trash`.
 
-项目主页：https://github.com/ZiYao00/ComfyUI-Workspace2
+The system trash feature depends on the operating system and desktop environment supported by `send2trash`.
 
-这个插件能做出来，非常感谢 Codex 的协助。Codex 帮我阅读旧插件代码、分析新版 ComfyUI 前端行为、迁移功能、调试问题，并逐步把想法整理成可以实际运行的插件。
+## Known Issues
 
-同时也非常感谢以下插件和作者提供的基础、灵感和参考：
+- This is still a public beta.
+- Screenshots and GIF tutorials are not included yet.
+- Very large workflow directories may take longer to scan and refresh.
+- Comfy Registry / ComfyUI Manager metadata is not finalized yet.
+- If you choose a custom workflow root, use a dedicated workflow folder. Do not use a disk root, Desktop, Downloads, or a large project directory.
+
+## Before First Use
+
+Workspace2 moves, renames, and organizes workflow files. Before using it in a main ComfyUI environment, back up:
+
+- Your ComfyUI workflow directory.
+- Your ComfyUI user settings.
+- Important node favorite data.
+
+## Project Notes
+
+I am a ComfyUI user, designer, and creator, not a professional programmer.
+
+Maintainer: ZiYao00
+
+Project homepage: https://github.com/ZiYao00/ComfyUI-Workspace2
+
+This plugin was built with extensive help from Codex. Codex helped read old plugin code, inspect newer ComfyUI frontend behavior, migrate features, debug problems, and turn design ideas into a working extension.
+
+Special thanks to the authors of these projects for providing useful foundations, references, and inspiration:
 
 - [ComfyUI-N-Sidebar](https://github.com/Nuked88/ComfyUI-N-Sidebar)
 - [comfyui-workspace-manager](https://github.com/11cafe/comfyui-workspace-manager)
 - [ComfyUI-xiaozhuguang](https://github.com/xiaozhuguang/ComfyUI-xiaozhuguang)
+- [pinyin-pro](https://github.com/zh-lx/pinyin-pro)
 
-Workspace2 参考、迁移或改造了这些项目中的部分思路和实现，但并不代表这些原项目作者参与维护 Workspace2。
+Workspace2 references, migrates, or adapts some ideas and implementation details from these projects. This does not mean the original authors maintain or endorse Workspace2.
 
-详细来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
 
-## 许可证
+## License
 
-本项目使用 MIT License。
+This project uses the MIT License.
 
-第三方项目代码、思路和改造部分仍遵循其原始许可证。详见 [LICENSE](LICENSE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
-## 当前状态
-
-这是一个仍在快速迭代中的插件。当前仓库先作为私有测试和整理版本使用。
-
-如果你要在主 ComfyUI 环境中使用，建议先备份工作流和 ComfyUI 用户设置。
+Third-party code, references, and adapted implementations remain subject to their original licenses. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

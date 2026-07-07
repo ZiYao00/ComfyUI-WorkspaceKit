@@ -1,1 +1,2 @@
+# Required for moving Workspace2 trash items to the operating system trash.
 send2trash

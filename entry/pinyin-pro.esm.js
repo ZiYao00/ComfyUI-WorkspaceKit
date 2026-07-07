@@ -1,3 +1,9 @@
+/*!
+ * pinyin-pro
+ * https://github.com/zh-lx/pinyin-pro
+ * MIT License
+ * Copyright (c) 2022-present zh-lx
+ */
 const DoubleUnicodePrefixReg = /^[\uD800-\uDBFF]$/;
 const DoubleUnicodeSuffixReg = /^[\uDC00-\uDFFF]$/;
 const DoubleUnicodeReg = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;

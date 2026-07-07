@@ -1,8 +1,5 @@
 import json
 import shutil
-import sys
-import ctypes
-from ctypes import wintypes
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -135,34 +132,12 @@ def _send_to_system_trash(path):
     path = Path(path).resolve()
     if not path.exists():
         raise ValueError("Trashed file is missing")
-    if sys.platform != "win32":
-        raise RuntimeError("System trash is currently only supported on Windows")
+    try:
+        from send2trash import send2trash
+    except ImportError as exc:
+        raise RuntimeError("send2trash is required to move items to the system trash") from exc
 
-    class SHFILEOPSTRUCTW(ctypes.Structure):
-        _fields_ = [
-            ("hwnd", wintypes.HWND),
-            ("wFunc", wintypes.UINT),
-            ("pFrom", wintypes.LPCWSTR),
-            ("pTo", wintypes.LPCWSTR),
-            ("fFlags", wintypes.USHORT),
-            ("fAnyOperationsAborted", wintypes.BOOL),
-            ("hNameMappings", wintypes.LPVOID),
-            ("lpszProgressTitle", wintypes.LPCWSTR),
-        ]
-
-    FO_DELETE = 0x0003
-    FOF_ALLOWUNDO = 0x0040
-    FOF_NOCONFIRMATION = 0x0010
-    FOF_SILENT = 0x0004
-    FOF_NOERRORUI = 0x0400
-
-    operation = SHFILEOPSTRUCTW()
-    operation.wFunc = FO_DELETE
-    operation.pFrom = f"{path}\0\0"
-    operation.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
-    result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(operation))
-    if result != 0 or operation.fAnyOperationsAborted:
-        raise RuntimeError(f"Failed to move item to system recycle bin: {result}")
+    send2trash(str(path))
 
 
 def move_trash_item_to_system_trash(workspace_data_root, trash_id):

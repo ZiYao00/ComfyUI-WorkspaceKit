@@ -1,5 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
 import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260706_fix15";
 
 const EXTENSION_NAME = "comfyui.workspace2";
@@ -20,6 +21,7 @@ const NODE_VISIBLE_SECTIONS_KEY = "workspace2.nodes.visibleSections";
 const NODE_SORT_KEY = "workspace2.nodes.sort";
 const NODE_CUSTOM_ORDER_KEY = "workspace2.nodes.customOrder";
 const NODE_CUSTOM_ORDER_ENABLED_KEY = "workspace2.nodes.customOrderEnabled";
+const NODE_PREVIEW_MODE_KEY = "workspace2.nodes.previewMode";
 const OFFICIAL_NODE_ADAPTER_KEY = "workspace2.officialNodeAdapter";
 const CANVAS_GROUP_CTRL_G_KEY = "workspace2.canvasGroups.ctrlGCreate";
 const DEFAULT_LOCALE = "en-US";
@@ -28,8 +30,12 @@ const WORKFLOWS_TAB_ID = "workspace2-workflows";
 const NODES_TAB_ID = "workspace2-nodes";
 const CANVAS_GROUPS_TAB_ID = "workspace2-canvas-groups";
 const WORKFLOW_SORTS = ["nameAsc", "nameDesc", "updatedDesc", "updatedAsc"];
+const WORKFLOW_SEARCH_RENDER_DELAY = 100;
 const NODE_SECTION_FILTERS = ["bookmarked", "comfy", "extensions"];
 const NODE_SORTS = ["original", "alphabetical"];
+const NODE_PREVIEW_MODES = ["detailed", "compact"];
+const NODE_SEARCH_RESULT_LIMIT = 64;
+const NODE_SEARCH_RENDER_DELAY = 100;
 const DEFAULT_FOLDER_ICON_CLASS = "pi pi-folder";
 const DEFAULT_FOLDER_OPEN_ICON_CLASS = "pi pi-folder-open";
 const DEFAULT_FILE_ICON_CLASS = "pi pi-file";
@@ -44,9 +50,13 @@ const FALLBACK_STRINGS = {
     "workflows.folderFirst": "优先文件夹",
     "workflows.sortTitle": "工作流排序：{sort}。点击打开菜单。",
     "workflows.reorderHandle": "拖动调整顺序",
+    "search.clear": "清空搜索",
     "nodes.customOrder": "自定义顺序",
     "nodes.reorderHandle": "拖动调整顺序",
     "nodes.defaultGroupName": "新建分组",
+    "nodes.previewModeDetailed": "节点预览：完整",
+    "nodes.previewModeCompact": "节点预览：紧凑",
+    "nodes.categoryUnknown": "来源未知",
     "menu.newSubfolder": "新建子文件夹",
     "row.openLocation": "打开工作流位置",
     "folder.personalize": "个性化",
@@ -88,9 +98,13 @@ const FALLBACK_STRINGS = {
     "workflows.folderFirst": "Folders first",
     "workflows.sortTitle": "Workflow sort: {sort}. Click to open menu.",
     "workflows.reorderHandle": "Drag to reorder",
+    "search.clear": "Clear search",
     "nodes.customOrder": "Custom order",
     "nodes.reorderHandle": "Drag to reorder",
     "nodes.defaultGroupName": "New group",
+    "nodes.previewModeDetailed": "Node preview: Detailed",
+    "nodes.previewModeCompact": "Node preview: Compact",
+    "nodes.categoryUnknown": "Unknown source",
     "menu.newSubfolder": "New subfolder",
     "row.openLocation": "Show workflow in folder",
     "folder.personalize": "Personalize",
@@ -179,9 +193,22 @@ const COMFY_CATEGORY_LABEL_KEYS = new Map([
   ["sd", "nodes.officialCategory.model"],
   ["text", "nodes.officialCategory.text"],
   ["utils", "nodes.officialCategory.advanced"],
+  ["utilities", "nodes.officialCategory.advanced"],
   ["video", "nodes.officialCategory.video"],
+  ["experimental", "nodes.officialCategory.experimental"],
   ["_for_testing", "nodes.officialCategory.experimental"],
 ]);
+const COMFY_CATEGORY_ORDER_KEYS = [
+  "nodes.officialCategory.3d",
+  "nodes.officialCategory.advanced",
+  "nodes.officialCategory.model",
+  "nodes.officialCategory.experimental",
+  "nodes.officialCategory.video",
+  "nodes.officialCategory.conditioning",
+  "nodes.officialCategory.image",
+  "nodes.officialCategory.text",
+  "nodes.officialCategory.audio",
+];
 
 const state = {
   query: "",
@@ -217,6 +244,7 @@ const state = {
   strings: {},
   localeTimer: null,
   workflowsTarget: null,
+  resultsRefreshTimer: null,
 };
 
 const canvasGroupsState = {
@@ -253,12 +281,18 @@ const nodesState = {
   sort: NODE_SORTS.includes(localStorage.getItem(NODE_SORT_KEY)) ? localStorage.getItem(NODE_SORT_KEY) : "original",
   customOrderEnabled: localStorage.getItem(NODE_CUSTOM_ORDER_ENABLED_KEY) === "1",
   customOrder: readNodeCustomOrder(),
+  previewMode: NODE_PREVIEW_MODES.includes(localStorage.getItem(NODE_PREVIEW_MODE_KEY)) ? localStorage.getItem(NODE_PREVIEW_MODE_KEY) : "detailed",
   uiScale: Number(localStorage.getItem(NODE_UI_SCALE_KEY) ?? localStorage.getItem(NODE_FONT_SCALE_KEY) ?? "50"),
   fontScale: Number(localStorage.getItem(NODE_FONT_SCALE_KEY) || "0"),
   rowSpacing: Number(localStorage.getItem(NODE_ROW_SPACING_KEY) || "0"),
   officialAdapter: null,
   officialFavoritesProbe: null,
   officialFavoritesLoading: false,
+  nodeFrequencyLookup: {},
+  resultsRefreshTimer: null,
+  nodeDefinitionsCache: null,
+  nodeDefinitionMapCache: null,
+  nodeDefinitionsSource: null,
 };
 
 function ownKeys(value) {
@@ -712,6 +746,7 @@ function setupWorkspaceKeyIsolation() {
     event.stopImmediatePropagation();
   };
   for (const eventName of ["keydown", "keyup", "keypress"]) {
+    window.addEventListener(eventName, stop, true);
     document.addEventListener(eventName, stop, true);
   }
 }
@@ -893,14 +928,14 @@ async function loadLocale() {
   state.locale = detectLocale();
   state.strings = {};
   try {
-    const response = await fetch(`${api.api_base}/extensions/comfyui-workspace2/locales/${state.locale}.json`);
+    const response = await fetch(`${api.api_base}/extensions/comfyui-workspace2/locales/${state.locale}.json`, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(response.statusText);
     }
     state.strings = await response.json();
   } catch (error) {
     if (state.locale !== DEFAULT_LOCALE) {
-      const response = await fetch(`${api.api_base}/extensions/comfyui-workspace2/locales/${DEFAULT_LOCALE}.json`);
+      const response = await fetch(`${api.api_base}/extensions/comfyui-workspace2/locales/${DEFAULT_LOCALE}.json`, { cache: "no-store" });
       state.strings = response.ok ? await response.json() : {};
     }
   }
@@ -1057,6 +1092,10 @@ function styles() {
       gap: 6px;
       align-items: center;
     }
+    .workspace2-search-wrap {
+      position: relative;
+      min-width: 0;
+    }
     .workspace2-top {
       flex: 0 0 auto;
       display: flex;
@@ -1080,9 +1119,34 @@ function styles() {
       background: var(--workspace2-control-bg);
     }
     .workspace2-input {
+      width: 100%;
       min-width: 0;
-      padding: 4px 7px;
+      padding: 4px 28px 4px 7px;
       user-select: text;
+    }
+    .workspace2-search-clear {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      width: 20px;
+      height: 20px;
+      border: 0;
+      border-radius: 999px;
+      padding: 3px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--workspace2-muted);
+      background: transparent;
+      transform: translateY(-50%);
+      cursor: pointer;
+    }
+    .workspace2-search-clear:hover {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--workspace2-hover);
+    }
+    .workspace2-search-clear[hidden] {
+      display: none;
     }
     .workspace2-button {
       width: 30px;
@@ -1515,27 +1579,39 @@ function styles() {
     }
     .workspace2-node-preview-popover {
       position: fixed;
-      width: min(248px, calc(100vw - 24px));
+      width: min(360px, calc(100vw - 24px));
       max-height: min(560px, calc(100vh - 24px));
       overflow: auto;
       z-index: 12000;
       pointer-events: none;
-      border: 1px solid var(--workspace2-border);
-      border-radius: var(--workspace2-radius);
-      padding: 0;
-      background: color-mix(in srgb, var(--workspace2-surface) 97%, transparent);
-      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.42);
+      border: 1px solid #51535c;
+      border-radius: 10px;
+      padding: 10px 11px 12px;
+      background: #111215;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.34);
       font-size: 9px;
       color: var(--p-text-color, var(--fg-color, #f2f2f2));
     }
+    .workspace2-node-preview-details {
+      padding: 9px 2px 0;
+    }
+    .workspace2-node-preview-details-title {
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.25;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .workspace2-node-preview-header {
-      min-height: 30px;
+      min-height: 28px;
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 6px 8px;
-      background: color-mix(in srgb, var(--workspace2-border) 48%, transparent);
-      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 70%, transparent);
+      padding: 0;
+      background: transparent;
+      border-bottom: 0;
     }
     .workspace2-node-preview-dot {
       width: 8px;
@@ -1553,36 +1629,166 @@ function styles() {
       white-space: nowrap;
     }
     .workspace2-node-preview-body {
-      padding: 8px;
+      padding: 0;
     }
     .workspace2-node-preview-card {
-      margin-bottom: 7px;
+      margin-bottom: 0;
       overflow: hidden;
-      border: 1px solid color-mix(in srgb, var(--workspace2-border) 82%, transparent);
-      border-radius: var(--workspace2-radius-sm);
-      background: color-mix(in srgb, var(--workspace2-control-bg) 74%, transparent);
+      border: 1px solid #494c55;
+      border-radius: 12px;
+      background: #282a2e;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
     }
-    .workspace2-node-preview-card-title {
-      min-height: 24px;
+    .workspace2-node-preview-card-header {
+      min-height: 31px;
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 5px 7px;
-      background: color-mix(in srgb, var(--workspace2-border) 48%, transparent);
-      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 70%, transparent);
-      font-weight: 500;
-      font-size: 9px;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6px 12px 3px;
+      background: transparent;
+      font-size: 11.5px;
+    }
+    .workspace2-node-preview-card-heading {
+      min-width: 0;
+      flex: 1 1 auto;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .workspace2-node-preview-card-chevron {
+      width: 0;
+      height: 0;
+      flex: 0 0 auto;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 5px solid #aeb0b5;
+      opacity: 0.9;
+    }
+    .workspace2-node-preview-card-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #f0f0f2;
+      font-weight: 650;
+      line-height: 1.2;
+    }
+    .workspace2-node-preview-card-output {
+      min-width: 0;
+      flex: 0 1 64px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 5px;
+      color: #bfc1c7;
+      font-size: 11.5px;
+      line-height: 1;
+    }
+    .workspace2-node-preview-card-output-name {
+      min-width: 0;
+      max-width: 48px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .workspace2-node-preview-card-body {
-      padding: 5px 6px 6px;
+      padding: 3px 12px 10px;
+    }
+    .workspace2-node-preview-mini-row {
+      min-height: 23px;
+      display: grid;
+      grid-template-columns: 8px minmax(58px, 0.56fr) minmax(130px, 1.44fr);
+      align-items: center;
+      gap: 8px;
+    }
+    .workspace2-node-preview-mini-row + .workspace2-node-preview-mini-row {
+      margin-top: 1px;
+    }
+    .workspace2-node-preview-mini-port {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--workspace2-preview-port, #8b8b8b);
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.42);
+    }
+    .workspace2-node-preview-mini-row.is-widget .workspace2-node-preview-mini-port {
+      visibility: hidden;
+    }
+    .workspace2-node-preview-mini-label {
+      min-width: 0;
+      color: #bebfc4;
+      font-size: 11.5px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-node-preview-mini-widget {
+      min-width: 0;
+      height: 20px;
+      border: 1px solid #33363d;
+      border-radius: 7px;
+      background: #303238;
+      color: #aeb0b5;
+      font-size: 10px;
+      line-height: 18px;
+      padding: 0 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 1px 0 rgba(0, 0, 0, 0.25);
+    }
+    .workspace2-node-preview-mini-widget.is-empty {
+      visibility: hidden;
+    }
+    .workspace2-node-preview-mini-widget.is-combo {
+      position: relative;
+      padding-right: 18px;
+    }
+    .workspace2-node-preview-mini-widget.is-combo::after {
+      content: "";
+      position: absolute;
+      right: 7px;
+      top: 50%;
+      width: 0;
+      height: 0;
+      border-left: 3px solid transparent;
+      border-right: 3px solid transparent;
+      border-top: 4px solid #aeb0b5;
+      transform: translateY(-35%);
+      opacity: 0.82;
+    }
+    .workspace2-node-preview-mini-widget.is-boolean {
+      width: 38px;
+      justify-self: start;
+      border-radius: 999px;
+      padding: 0;
+    }
+    .workspace2-node-preview-mini-widget.is-boolean::before {
+      content: "";
+      display: block;
+      width: 14px;
+      height: 14px;
+      margin: 2px;
+      border-radius: 50%;
+      background: #8f9299;
+    }
+    .workspace2-node-preview-mini-widget.is-number {
+      width: min(96px, 100%);
+      justify-self: start;
+    }
+    .workspace2-node-preview-mini-empty {
+      min-height: 18px;
+      color: var(--workspace2-muted);
+      font-size: 11px;
     }
     .workspace2-node-preview-slot-row {
-      min-height: 16px;
+      min-height: 18px;
       display: grid;
-      grid-template-columns: 8px minmax(0, 1fr) minmax(24px, 0.45fr) minmax(0, 1fr) 8px;
+      grid-template-columns: 8px minmax(0, 0.68fr) minmax(54px, 1fr) minmax(0, 0.68fr) 8px;
       align-items: center;
       gap: 4px;
     }
@@ -1600,16 +1806,20 @@ function styles() {
     }
     .workspace2-node-preview-slot-type {
       min-width: 0;
-      opacity: 0.46;
+      height: 16px;
+      border-radius: 5px;
+      background: color-mix(in srgb, var(--workspace2-border) 42%, transparent);
+      color: transparent;
+      opacity: 1;
       overflow: hidden;
       text-align: center;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .workspace2-node-preview-widget-row {
-      min-height: 16px;
+      min-height: 18px;
       display: grid;
-      grid-template-columns: 9px minmax(0, 1fr) minmax(0, 1fr) 9px;
+      grid-template-columns: 8px minmax(0, 0.68fr) minmax(54px, 1fr) 8px;
       align-items: center;
       gap: 4px;
       margin-top: 3px;
@@ -1622,34 +1832,36 @@ function styles() {
     .workspace2-node-preview-meta {
       opacity: 0.58;
       overflow-wrap: anywhere;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
+      font-size: 11px;
     }
     .workspace2-node-preview-desc {
       opacity: 0.82;
-      margin: 5px 0;
+      margin: 6px 0;
       line-height: 1.3;
+      font-size: 11px;
     }
     .workspace2-node-preview-section {
-      margin-top: 7px;
-      border-top: 1px solid color-mix(in srgb, var(--workspace2-border) 70%, transparent);
-      padding-top: 5px;
+      margin-top: 11px;
+      border-top: 1px solid #4d5058;
+      padding-top: 9px;
     }
     .workspace2-node-preview-section-title {
-      margin-bottom: 5px;
-      color: var(--workspace2-muted);
-      font-size: 8.5px;
-      font-weight: 500;
-      text-transform: uppercase;
+      margin-bottom: 8px;
+      color: #a4a6ad;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: none;
     }
     .workspace2-node-preview-row {
-      min-height: 18px;
+      min-height: 23px;
       display: grid;
-      grid-template-columns: 10px minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      gap: 6px;
+      gap: 12px;
     }
     .workspace2-node-preview-row + .workspace2-node-preview-row {
-      margin-top: 3px;
+      margin-top: 1px;
     }
     .workspace2-node-preview-port {
       width: 7px;
@@ -1669,10 +1881,17 @@ function styles() {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-size: 11px;
+    }
+    .workspace2-node-preview-name {
+      color: #f0f0f2;
+      font-weight: 650;
     }
     .workspace2-node-preview-type {
-      opacity: 0.62;
+      color: #a3a5ab;
+      opacity: 1;
       text-align: right;
+      font-weight: 500;
     }
     .workspace2-canvas-group-list {
       flex: 1 1 auto;
@@ -2146,6 +2365,14 @@ async function fetchJson(path, options) {
   return data;
 }
 
+async function fetchStaticJson(path) {
+  const response = await fetch(path, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(response.statusText);
+  }
+  return response.json();
+}
+
 async function postJson(path, body) {
   return fetchJson(path, {
     method: "POST",
@@ -2576,11 +2803,36 @@ function compareWorkflowItems(a, b, parent = "") {
   return nameCompare;
 }
 
+function workflowSearchFields(node) {
+  const displayName = workflowDisplayName(node);
+  const pathText = String(node?.path || "");
+  const parentText = parentPath(pathText);
+  const pathParts = pathText.split("/").filter(Boolean);
+  return compactSearchFields([
+    displayName,
+    node?.name,
+    splitCamelCase(displayName),
+    pathText,
+    parentText,
+    ...pathParts,
+  ], [
+    displayName,
+    node?.name,
+    pathText,
+    parentText,
+    ...pathParts,
+  ]);
+}
+
+function workflowMatchesSelf(node, query) {
+  return genericSearchScores(workflowSearchFields(node), query)[0] < 9;
+}
+
 function matchesQuery(node, query) {
   if (!query) {
     return true;
   }
-  if (node.path.toLowerCase().includes(query)) {
+  if (workflowMatchesSelf(node, query)) {
     return true;
   }
   return node.children?.some((child) => matchesQuery(child, query));
@@ -2608,6 +2860,48 @@ function restoreTreeScrollTop(el, scrollTop) {
       tree.scrollTop = scrollTop;
     }
   });
+}
+
+function setExpandedRecursive(expandedSet, keys, shouldExpand) {
+  for (const key of keys) {
+    if (!key) {
+      continue;
+    }
+    if (shouldExpand) {
+      expandedSet.add(key);
+    } else {
+      expandedSet.delete(key);
+    }
+  }
+}
+
+function workflowFolderKeys(node) {
+  const keys = [];
+  if (!node || node.type !== "folder") {
+    return keys;
+  }
+  if (node.path) {
+    keys.push(node.path);
+  }
+  for (const child of node.children || []) {
+    keys.push(...workflowFolderKeys(child));
+  }
+  return keys;
+}
+
+function toggleWorkflowFolder(el, node, recursive = false) {
+  if (!node || node.type !== "folder") {
+    return;
+  }
+  const isOpen = state.expanded.has(node.path);
+  if (recursive) {
+    setExpandedRecursive(state.expanded, workflowFolderKeys(node), !isOpen);
+  } else if (isOpen) {
+    state.expanded.delete(node.path);
+  } else {
+    state.expanded.add(node.path);
+  }
+  renderPanel(el);
 }
 
 async function refreshPanel(el, options = {}) {
@@ -2919,6 +3213,8 @@ function iconSvg(name) {
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
     palette: '<path d="M12 3a9 9 0 0 0 0 18h1.5a1.8 1.8 0 0 0 1.3-3.1 1.8 1.8 0 0 1 1.3-3h1.9A3 3 0 0 0 21 12a9 9 0 0 0-9-9z"/><circle cx="7.5" cy="10" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="14" cy="7.5" r="1"/><circle cx="16.5" cy="10" r="1"/>',
     badge: '<path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/>',
+    previewDetailed: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h6"/>',
+    previewCompact: '<rect x="5" y="6" width="14" height="12" rx="2"/><path d="M8 10h8"/><path d="M8 14h5"/>',
     restore: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/>',
     copy: '<path d="M8 8h12v12H8z"/><path d="M4 16V4h12"/>',
     target: '<circle cx="12" cy="12" r="7"/><path d="M12 3v4"/><path d="M12 17v4"/><path d="M3 12h4"/><path d="M17 12h4"/>',
@@ -2930,6 +3226,7 @@ function iconSvg(name) {
     upload: '<path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/>',
     star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
     starFilled: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z" fill="currentColor"/>',
+    x: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>',
   };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
@@ -3050,16 +3347,25 @@ async function loadNodeLibrary() {
   nodesState.loading = true;
   nodesState.error = "";
   try {
-    const [libraryData, objectInfoData] = await Promise.all([
+    const [libraryData, objectInfoData, nodeFrequencyData] = await Promise.all([
       fetchJson("/workspace2/nodes/library"),
       fetchJson("/object_info"),
+      fetchStaticJson("/assets/sorted-custom-node-map.json").catch(() => ({})),
     ]);
     nodesState.library = normalizeNodeLibrary(libraryData.library);
     nodesState.objectInfo = objectInfoData || {};
+    nodesState.nodeFrequencyLookup = nodeFrequencyData && typeof nodeFrequencyData === "object" ? nodeFrequencyData : {};
+    nodesState.nodeDefinitionsCache = null;
+    nodesState.nodeDefinitionMapCache = null;
+    nodesState.nodeDefinitionsSource = null;
   } catch (error) {
     nodesState.error = error.message;
     nodesState.library = emptyNodeLibrary();
     nodesState.objectInfo = {};
+    nodesState.nodeFrequencyLookup = {};
+    nodesState.nodeDefinitionsCache = null;
+    nodesState.nodeDefinitionMapCache = null;
+    nodesState.nodeDefinitionsSource = null;
   } finally {
     nodesState.loading = false;
   }
@@ -3174,7 +3480,21 @@ function isWidgetInputSpec(spec) {
     return true;
   }
   const options = inputSpecOptions(spec);
-  return Boolean(options.forceInput === false || options.defaultInput === false);
+  if (options.forceInput === true || options.defaultInput === true) {
+    return false;
+  }
+  if (options.forceInput === false || options.defaultInput === false) {
+    return true;
+  }
+  const normalized = String(type || "").toUpperCase();
+  return ["STRING", "INT", "FLOAT", "BOOLEAN"].includes(normalized)
+    && (
+      Object.prototype.hasOwnProperty.call(options, "default")
+      || Object.prototype.hasOwnProperty.call(options, "min")
+      || Object.prototype.hasOwnProperty.call(options, "max")
+      || Object.prototype.hasOwnProperty.call(options, "step")
+      || Object.prototype.hasOwnProperty.call(options, "control_after_generate")
+    );
 }
 
 function collectInputTypes(input) {
@@ -3265,7 +3585,11 @@ function collectPreviewOutputs(definition) {
 
 function nodeSourceFor(definition) {
   const pythonModule = String(definition?.python_module || "");
-  const root = pythonModule.split(".")[0] || "";
+  if (!pythonModule) {
+    return NODE_SOURCE.UNKNOWN;
+  }
+  const modules = pythonModule.split(".");
+  const root = modules[0] || "";
   if (definition?.essentials_category) {
     return NODE_SOURCE.ESSENTIALS;
   }
@@ -3275,10 +3599,16 @@ function nodeSourceFor(definition) {
   if (root === "blueprint") {
     return NODE_SOURCE.BLUEPRINT;
   }
-  if (root === "custom_nodes") {
+  if (root === "custom_nodes" && modules[1]) {
     return NODE_SOURCE.CUSTOM;
   }
   return NODE_SOURCE.UNKNOWN;
+}
+
+function shortenNodeSourceName(name) {
+  return String(name || "")
+    .replace(/^(ComfyUI-|ComfyUI_|Comfy-|Comfy_)/i, "")
+    .replace(/(-ComfyUI|_ComfyUI|-Comfy|_Comfy)$/i, "");
 }
 
 function canonicalEssentialsCategory(category) {
@@ -3353,19 +3683,34 @@ function wrapRegisteredNode(type, definition) {
 }
 
 function getNodeDefinitions() {
+  const objectInfoSource = nodesState.objectInfo && Object.keys(nodesState.objectInfo).length
+    ? nodesState.objectInfo
+    : globalThis.LiteGraph?.registered_node_types || {};
+  if (nodesState.nodeDefinitionsCache && nodesState.nodeDefinitionsSource === objectInfoSource) {
+    return nodesState.nodeDefinitionsCache;
+  }
+
+  let definitions;
   if (nodesState.objectInfo && Object.keys(nodesState.objectInfo).length) {
-    return Object.entries(nodesState.objectInfo)
+    definitions = Object.entries(nodesState.objectInfo)
       .map(([type, definition]) => wrapObjectInfoNode(type, definition))
       .sort((a, b) => a.title.localeCompare(b.title));
+  } else {
+    definitions = Object.entries(objectInfoSource)
+      .map(([type, definition]) => wrapRegisteredNode(type, definition))
+      .sort((a, b) => a.title.localeCompare(b.title));
   }
-  const registered = globalThis.LiteGraph?.registered_node_types || {};
-  return Object.entries(registered)
-    .map(([type, definition]) => wrapRegisteredNode(type, definition))
-    .sort((a, b) => a.title.localeCompare(b.title));
+  nodesState.nodeDefinitionsSource = objectInfoSource;
+  nodesState.nodeDefinitionsCache = definitions;
+  nodesState.nodeDefinitionMapCache = null;
+  return definitions;
 }
 
 function getNodeDefinitionMap() {
-  return new Map(getNodeDefinitions().map((node) => [node.type, node]));
+  if (!nodesState.nodeDefinitionMapCache) {
+    nodesState.nodeDefinitionMapCache = new Map(getNodeDefinitions().map((node) => [node.type, node]));
+  }
+  return nodesState.nodeDefinitionMapCache;
 }
 
 function getFavorite(type) {
@@ -3376,64 +3721,232 @@ function nodeMatchesQuery(node, query, groupName = "") {
   if (!query) {
     return true;
   }
-  return nodeSearchScore(node, query, groupName) < 999;
+  return officialNodeSearchScores(node, query, groupName)[0] < 9;
 }
 
 function nodeSearchScore(node, query, groupName = "") {
-  const normalized = String(query || "").trim().toLowerCase();
-  if (!normalized) {
-    return 0;
-  }
-  const alias = String(node.alias || "").toLowerCase();
-  const title = String(node.title || "").toLowerCase();
-  const type = String(node.type || "").toLowerCase();
-  const category = String(node.category || "").toLowerCase();
-  const group = String(groupName || "").toLowerCase();
-  const aliases = Array.isArray(node.searchAliases) ? node.searchAliases.join(" ").toLowerCase() : "";
-  const io = [
-    ...(node.inputs || []),
-    ...(node.outputs || []),
-    ...(node.inputTypes || []),
-    ...(node.outputTypes || []),
-  ].join(" ").toLowerCase();
-  const description = String(node.description || "").toLowerCase();
+  return packNodeSearchScores(officialNodeSearchScores(node, query, groupName));
+}
 
-  const ranked = [
-    [alias, 0],
-    [title, 1],
-    [type, 2],
-    [aliases, 3],
-    [category, 4],
-    [group, 5],
-    [io, 6],
-    [description, 8],
+function normalizeNodeSearchValue(value) {
+  return String(value || "").trim().toLowerCase().replace(/[_\-./\\]+/g, " ").replace(/\s+/g, " ");
+}
+
+function splitCamelCase(value) {
+  return String(value || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2");
+}
+
+function pinyinText(value, mode = "full") {
+  const text = String(value || "");
+  if (!text || !/[\u3400-\u9fff]/.test(text)) {
+    return "";
+  }
+  try {
+    return pinyinPro(text, {
+      pattern: mode === "initial" ? "first" : "pinyin",
+      toneType: "none",
+      type: "string",
+    }).replace(/\s/g, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function pinyinSearchText(values) {
+  return values
+    .flatMap((value) => [pinyinText(value, "full"), pinyinText(value, "initial")])
+    .filter(Boolean)
+    .join(" ");
+}
+
+function nodePinyinSearchText(node, groupName = "") {
+  const values = [
+    node?.title,
+    node?.alias,
+    node?.category,
+    nodeGroupLabel(node),
+    ...officialNodeCategoryParts(node),
+    groupName,
+    ...(Array.isArray(node?.searchAliases) ? node.searchAliases : []),
   ];
-  for (const [value, rank] of ranked) {
-    if (value === normalized) {
-      return rank;
+  return pinyinSearchText(values);
+}
+
+function fuzzySearchMatch(value, query) {
+  const haystack = String(value || "").replace(/\s+/g, "");
+  const needle = String(query || "").replace(/\s+/g, "");
+  if (!haystack || !needle) {
+    return false;
+  }
+  let index = 0;
+  for (const char of haystack) {
+    if (char === needle[index]) {
+      index += 1;
+      if (index === needle.length) {
+        return true;
+      }
     }
   }
-  for (const [value, rank] of ranked) {
-    if (value && value.includes(normalized)) {
-      return rank + 20;
+  return false;
+}
+
+const nodeSearchFieldCache = new WeakMap();
+
+function compactSearchFields(values, pinyinValues = []) {
+  const fields = values.filter((value) => String(value || "").trim());
+  const pinyin = pinyinSearchText(pinyinValues);
+  if (pinyin) {
+    fields.push(pinyin);
+  }
+  return fields;
+}
+
+function getNodeFrequencyByName(nodeName) {
+  return Number(nodesState.nodeFrequencyLookup?.[nodeName] || 0);
+}
+
+function officialSearchWords(value) {
+  return String(value || "")
+    .split(/ |\b|(?<=[a-z])(?=[A-Z])|(?=[A-Z][a-z])/)
+    .map((item) => item.toLocaleLowerCase())
+    .filter(Boolean);
+}
+
+function officialCalcAuxSingle(query, item, score = 0) {
+  const text = String(item || "").toLocaleLowerCase();
+  const itemWords = officialSearchWords(item);
+  const queryParts = String(query || "").split(" ").filter(Boolean);
+  let main = 9;
+  let aux1 = 0;
+  let aux2 = 0;
+
+  if (text === query) {
+    main = 0;
+  } else if (text.startsWith(query)) {
+    main = 1;
+    aux2 = text.length;
+  } else if (itemWords.includes(query)) {
+    main = 2;
+    aux1 = text.indexOf(query) + text.length * 0.5;
+    aux2 = text.length;
+  } else if (text.includes(query)) {
+    main = 3;
+    aux1 = text.indexOf(query) + text.length * 0.5;
+    aux2 = text.length;
+  } else if (queryParts.length && queryParts.every((part) => itemWords.includes(part))) {
+    const indexes = queryParts.map((part) => itemWords.indexOf(part));
+    const min = Math.min(...indexes);
+    const max = Math.max(...indexes);
+    main = 4;
+    aux1 = max - min + max * 0.5 + text.length * 0.5;
+    aux2 = text.length;
+  } else if (queryParts.length && queryParts.every((part) => text.includes(part))) {
+    const min = Math.min(...queryParts.map((part) => text.indexOf(part)));
+    const max = Math.max(...queryParts.map((part) => text.indexOf(part) + part.length));
+    main = 5;
+    aux1 = max - min + max * 0.5 + text.length * 0.5;
+    aux2 = text.length;
+  }
+
+  const lengthPenalty = 0.2 * (1 - Math.min(text.length, query.length) / Math.max(text.length, query.length));
+  return [main, aux1, aux2, score + (Number.isFinite(lengthPenalty) ? lengthPenalty : 0)];
+}
+
+function compareSearchScores(a, b) {
+  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
+    if (a[index] !== b[index]) {
+      return a[index] - b[index];
     }
   }
-  return 999;
+  return a.length - b.length;
+}
+
+function genericSearchScores(fields, query, frequencyScore = 0) {
+  const normalized = String(query || "").trim().toLocaleLowerCase();
+  if (!normalized) {
+    return [0, frequencyScore, 0, 0, 0];
+  }
+  const scores = fields
+    .map((value) => officialCalcAuxSingle(normalized, value, 0))
+    .sort(compareSearchScores);
+  const best = scores[0] || [9, 0, 0, 1];
+  const deprecatedPenalty = fields
+    .some((value) => String(value || "").toLocaleLowerCase().includes("deprecated")) && best[0] !== 0 ? 5 : 0;
+  return [best[0] + deprecatedPenalty, frequencyScore, ...best.slice(1)];
+}
+
+function officialNodeSearchFields(node, groupName = "") {
+  let fieldsByGroup = nodeSearchFieldCache.get(node);
+  if (!fieldsByGroup) {
+    fieldsByGroup = new Map();
+    nodeSearchFieldCache.set(node, fieldsByGroup);
+  }
+  const cacheKey = String(groupName || "");
+  if (fieldsByGroup.has(cacheKey)) {
+    return fieldsByGroup.get(cacheKey);
+  }
+  const aliases = Array.isArray(node?.searchAliases) ? node.searchAliases : [];
+  const fields = compactSearchFields([
+    node?.type,
+    splitCamelCase(node?.type),
+    node?.title,
+    node?.alias,
+    ...aliases,
+  ], [
+    node?.title,
+    node?.alias,
+    node?.category,
+    nodeGroupLabel(node),
+    ...officialNodeCategoryParts(node),
+    groupName,
+    ...aliases,
+  ]);
+  fieldsByGroup.set(cacheKey, fields);
+  return fields;
+}
+
+function officialNodeSearchScores(node, query, groupName = "") {
+  return genericSearchScores(officialNodeSearchFields(node, groupName), query, -getNodeFrequencyByName(node?.type));
+}
+
+function packNodeSearchScores(scores) {
+  return scores.reduce((total, score, index) => total + score * Math.pow(1000, Math.max(0, 5 - index)), 0);
+}
+
+function compareNodeSearchResults(a, b, query, groupName = "") {
+  const normalized = String(query || "").trim().toLocaleLowerCase();
+  if (!normalized) {
+    const freqDiff = getNodeFrequencyByName(b.type) - getNodeFrequencyByName(a.type);
+    return freqDiff || a.title.localeCompare(b.title);
+  }
+  return compareSearchScores(
+    officialNodeSearchScores(a, normalized, groupName),
+    officialNodeSearchScores(b, normalized, groupName),
+  ) || a.title.localeCompare(b.title);
 }
 
 function sortNodeSearchResults(nodes, query, groupName = "") {
-  const normalized = String(query || "").trim().toLowerCase();
+  const normalized = String(query || "").trim().toLocaleLowerCase();
   if (!normalized) {
-    return nodes.sort((a, b) => a.title.localeCompare(b.title));
+    return nodes.sort((a, b) => compareNodeSearchResults(a, b, ""));
   }
-  return nodes.sort((a, b) => {
-    const diff = nodeSearchScore(a, normalized, groupName) - nodeSearchScore(b, normalized, groupName);
-    return diff || a.title.localeCompare(b.title);
-  });
+  return nodes.sort((a, b) => compareNodeSearchResults(a, b, normalized, groupName));
 }
 
 function nodeSearchText(node, groupName = "") {
-  return [node.title, node.type, node.alias, node.category, node.pythonModule, groupName, ...(node.searchAliases || [])]
+  return [
+    node.title,
+    node.type,
+    splitCamelCase(node.type),
+    node.alias,
+    node.category,
+    node.pythonModule,
+    groupName,
+    nodePinyinSearchText(node, groupName),
+    ...(node.searchAliases || []),
+  ]
     .filter(Boolean)
     .join(" ");
 }
@@ -3747,22 +4260,54 @@ function groupedNodes(nodes) {
 function nodePackageName(node) {
   const parts = String(node?.pythonModule || "").split(".");
   if (parts[0] === "custom_nodes" && parts[1]) {
+    return shortenNodeSourceName(parts[1].split("@")[0]);
+  }
+  return "";
+}
+
+function rawNodePackageName(node) {
+  const parts = String(node?.pythonModule || "").split(".");
+  if (parts[0] === "custom_nodes" && parts[1]) {
     return parts[1].split("@")[0];
   }
   return "";
 }
 
+function normalizeExtensionCategoryIdentity(value) {
+  return shortenNodeSourceName(value)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function isDuplicateExtensionCategory(packageName, rawPackageName, categoryPart) {
+  const normalizedCategory = normalizeExtensionCategoryIdentity(categoryPart);
+  if (!normalizedCategory) {
+    return false;
+  }
+  return [packageName, rawPackageName]
+    .map(normalizeExtensionCategoryIdentity)
+    .filter(Boolean)
+    .some((value) => value === normalizedCategory);
+}
+
+function isComfyNode(node) {
+  return node?.source === NODE_SOURCE.CORE || node?.source === NODE_SOURCE.ESSENTIALS;
+}
+
 function nodeGroupLabel(node) {
-  if (isComfyCoreNode(node)) {
+  if (isComfyNode(node)) {
     const root = String(node.categoryRoot || "").trim().toLowerCase();
     const key = COMFY_CATEGORY_LABEL_KEYS.get(root);
     return key ? t(key) : node.categoryRoot || t("nodes.uncategorized");
   }
-  return nodePackageName(node) || node.categoryRoot || t("nodes.uncategorized");
+  if (node?.source === NODE_SOURCE.CUSTOM) {
+    return nodePackageName(node) || t("nodes.categoryUnknown");
+  }
+  return t("nodes.categoryUnknown");
 }
 
 function isComfyCoreNode(node) {
-  return node?.source === NODE_SOURCE.CORE;
+  return isComfyNode(node);
 }
 
 function isHiddenOfficialNodeSection(node) {
@@ -3770,16 +4315,26 @@ function isHiddenOfficialNodeSection(node) {
 }
 
 function officialNodeCategoryParts(node) {
-  const parts = String(node?.category || "")
-    .split("/")
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const parts = Array.isArray(node?.categoryParts)
+    ? node.categoryParts.map((part) => String(part || "").trim()).filter(Boolean)
+    : String(node?.category || "")
+      .split("/")
+      .map((part) => part.trim())
+      .filter(Boolean);
+  if (node?.source === NODE_SOURCE.CUSTOM) {
+    const packageName = nodePackageName(node) || t("nodes.categoryUnknown");
+    const rawPackageName = rawNodePackageName(node);
+    const categoryParts = [...parts];
+    if (categoryParts.length && isDuplicateExtensionCategory(packageName, rawPackageName, categoryParts[0])) {
+      categoryParts.shift();
+    }
+    return [{ key: `pkg:${rawPackageName || packageName}`, label: packageName }, ...categoryParts];
+  }
   if (!isComfyCoreNode(node)) {
-    const packageName = nodePackageName(node) || t("nodes.uncategorized");
-    return [packageName, ...parts.filter((part) => part !== packageName)];
+    return [t("nodes.categoryUnknown"), ...parts];
   }
   if (!parts.length) {
-    return [t("nodes.uncategorized")];
+    return [t("nodes.officialCategory.advanced")];
   }
   const root = parts[0].toLowerCase();
   const key = COMFY_CATEGORY_LABEL_KEYS.get(root);
@@ -3797,18 +4352,31 @@ function createNodeTreeFolder(key, label) {
   };
 }
 
+function nodeTreePartLabel(part) {
+  return typeof part === "object" && part ? String(part.label || part.key || "") : String(part || "");
+}
+
+function nodeTreePartKey(part) {
+  return typeof part === "object" && part ? String(part.key || part.label || "") : String(part || "");
+}
+
 function buildOfficialNodeTree(sectionId, nodes) {
   const root = createNodeTreeFolder(sectionId, "");
   for (const node of nodes) {
     let current = root;
     for (const part of officialNodeCategoryParts(node)) {
-      const folderKey = `${current.key}/${part}`;
-      if (!current.childMap.has(part)) {
-        const folder = createNodeTreeFolder(folderKey, part);
-        current.childMap.set(part, folder);
+      const partKey = nodeTreePartKey(part);
+      const partLabel = nodeTreePartLabel(part);
+      if (!partKey) {
+        continue;
+      }
+      const folderKey = `${current.key}/${partKey}`;
+      if (!current.childMap.has(partKey)) {
+        const folder = createNodeTreeFolder(folderKey, partLabel);
+        current.childMap.set(partKey, folder);
         current.children.push(folder);
       }
-      current = current.childMap.get(part);
+      current = current.childMap.get(partKey);
     }
     current.children.push({
       key: `${current.key}/${node.type}`,
@@ -3849,6 +4417,11 @@ function sortOfficialNodeTree(node) {
     }
     if (a.type !== b.type) {
       return a.type === "folder" ? -1 : 1;
+    }
+    const rankA = comfyCategorySortRank(a.label);
+    const rankB = comfyCategorySortRank(b.label);
+    if (rankA !== rankB) {
+      return rankA - rankB;
     }
     if (nodesState.customOrderEnabled) {
       const order = Array.isArray(nodesState.customOrder?.[node.key]) ? nodesState.customOrder[node.key] : [];
@@ -3897,7 +4470,7 @@ function renderOfficialNodeFolder(el, section, folder, favoriteTypes, depth) {
       return;
     }
     event.stopPropagation();
-    toggleNodeGroup(el, folder.key);
+    toggleOfficialTreeFolder(el, folder, event.ctrlKey || event.metaKey);
   });
 
   const disclosure = document.createElement("button");
@@ -3906,7 +4479,7 @@ function renderOfficialNodeFolder(el, section, folder, favoriteTypes, depth) {
   disclosure.title = groupOpen ? t("folder.collapse") : t("folder.expand");
   disclosure.addEventListener("click", (event) => {
     event.stopPropagation();
-    toggleNodeGroup(el, folder.key);
+    toggleOfficialTreeFolder(el, folder, event.ctrlKey || event.metaKey);
   });
 
   const icon = document.createElement("span");
@@ -4624,6 +5197,11 @@ async function commitNodeGroupPointerDrag(event) {
       renderNodesPanel(nodesState.renderTarget);
     }
   }
+}
+
+function comfyCategorySortRank(label) {
+  const index = COMFY_CATEGORY_ORDER_KEYS.findIndex((key) => t(key) === label);
+  return index === -1 ? 1000 : index;
 }
 
 function makeNodeGroupDragSource(el, header, group) {
@@ -5431,6 +6009,9 @@ function createSearchToolbar({ focusKey, placeholder, value, onInput, buttons = 
   toolbar.className = "workspace2-toolbar";
   toolbar.style.setProperty("--workspace2-toolbar-actions", String(buttons.length));
 
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "workspace2-search-wrap";
+
   const search = document.createElement("input");
   search.className = "workspace2-input";
   search.dataset.workspace2Focus = focusKey;
@@ -5438,22 +6019,55 @@ function createSearchToolbar({ focusKey, placeholder, value, onInput, buttons = 
   search.value = value;
   isolateComfyKeys(search);
   search.addEventListener("click", (event) => event.stopPropagation());
+
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "workspace2-search-clear";
+  clear.title = t("search.clear");
+  clear.setAttribute("aria-label", t("search.clear"));
+  clear.append(iconSvg("x"));
+
+  const updateClear = () => {
+    clear.hidden = !search.value;
+  };
+  const emitInput = () => {
+    updateClear();
+    onInput(search.value);
+  };
   let isComposing = false;
   search.addEventListener("compositionstart", () => {
     isComposing = true;
   });
   search.addEventListener("compositionend", () => {
     isComposing = false;
-    onInput(search.value);
+    emitInput();
   });
   search.addEventListener("input", (event) => {
+    updateClear();
     if (isComposing || event.isComposing) {
       return;
     }
-    onInput(search.value);
+    emitInput();
   });
+  clear.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  clear.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!search.value) {
+      search.focus();
+      return;
+    }
+    search.value = "";
+    emitInput();
+    search.focus();
+  });
+  updateClear();
 
-  toolbar.append(search, ...buttons);
+  searchWrap.append(search, clear);
+  toolbar.append(searchWrap, ...buttons);
   return toolbar;
 }
 
@@ -6002,12 +6616,7 @@ function renderNode(el, list, node, depth) {
     state.selectedPath = node.path;
     closeContextMenu();
     if (node.type === "folder") {
-      if (state.expanded.has(node.path)) {
-        state.expanded.delete(node.path);
-      } else {
-        state.expanded.add(node.path);
-      }
-      renderPanel(el);
+      toggleWorkflowFolder(el, node, event.ctrlKey || event.metaKey);
       return;
     }
     try {
@@ -6034,12 +6643,7 @@ function renderNode(el, list, node, depth) {
     disclosure.title = state.expanded.has(node.path) ? t("folder.collapse") : t("folder.expand");
     disclosure.addEventListener("click", (event) => {
       event.stopPropagation();
-      if (state.expanded.has(node.path)) {
-        state.expanded.delete(node.path);
-      } else {
-        state.expanded.add(node.path);
-      }
-      renderPanel(el);
+      toggleWorkflowFolder(el, node, event.ctrlKey || event.metaKey);
     });
   } else {
     disclosure.className = "workspace2-spacer";
@@ -6160,6 +6764,53 @@ function renderNode(el, list, node, depth) {
   }
 }
 
+function renderWorkflowTreeBody(el, tree) {
+  if (!tree.dataset.workspace2RootDropReady) {
+    makeDropTarget(el, tree, "");
+    tree.dataset.workspace2RootDropReady = "1";
+  }
+  const root = buildTree();
+  const children = visibleChildren(root);
+  if (!children.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-empty";
+    empty.textContent = state.query ? t("empty.noMatches") : t("empty.noWorkflows");
+    tree.append(empty);
+    return;
+  }
+  for (const child of children) {
+    renderNode(el, tree, child, 0);
+  }
+}
+
+function refreshWorkflowResults(el) {
+  if (state.showTrash) {
+    renderPanel(el);
+    return;
+  }
+  const tree = el?.querySelector?.(".workspace2-tree");
+  if (!tree) {
+    renderPanel(el);
+    return;
+  }
+  closeContextMenu();
+  const query = state.query.trim();
+  const scrollTop = query ? 0 : tree.scrollTop;
+  tree.replaceChildren();
+  renderWorkflowTreeBody(el, tree);
+  tree.scrollTop = scrollTop;
+}
+
+function scheduleWorkflowResultsRefresh(el) {
+  if (state.resultsRefreshTimer) {
+    clearTimeout(state.resultsRefreshTimer);
+  }
+  state.resultsRefreshTimer = window.setTimeout(() => {
+    state.resultsRefreshTimer = null;
+    refreshWorkflowResults(el);
+  }, WORKFLOW_SEARCH_RENDER_DELAY);
+}
+
 function renderPanel(el) {
   const snapshot = scrollSnapshot(el);
   state.workflowsTarget = el;
@@ -6231,7 +6882,7 @@ function renderPanel(el) {
     buttons: [newFolder, newWorkflow, refresh, workflowSortButton(el), trash],
     onInput: (value) => {
       state.query = value;
-      renderPanel(el);
+      scheduleWorkflowResultsRefresh(el);
     },
   });
   top.append(header, toolbar);
@@ -6261,7 +6912,6 @@ function renderPanel(el) {
 
   const tree = document.createElement("div");
   tree.className = "workspace2-tree";
-  makeDropTarget(el, tree, "");
 
   const moveRootRow = createRootActionRow({
     title: t("root.dropTitle"),
@@ -6272,19 +6922,7 @@ function renderPanel(el) {
   });
 
   top.append(moveRootRow);
-
-  const root = buildTree();
-  const children = visibleChildren(root);
-  if (!children.length) {
-    const empty = document.createElement("div");
-    empty.className = "workspace2-empty";
-    empty.textContent = state.query ? t("empty.noMatches") : t("empty.noWorkflows");
-    tree.append(empty);
-  } else {
-    for (const child of children) {
-      renderNode(el, tree, child, 0);
-    }
-  }
+  renderWorkflowTreeBody(el, tree);
 
   panel.append(top, tree);
   renderContextMenu(el, panel);
@@ -6449,6 +7087,53 @@ function renderCanvasGroupsPanel(el) {
   panel.append(top, body);
   el.append(panel);
 }
+
+function renderNodesBody(el, body) {
+  if (!nodesState.library && !nodesState.loading) {
+    loadNodeLibrary().then(() => renderNodesPanel(el));
+  }
+
+  if (nodesState.loading) {
+    const loading = document.createElement("div");
+    loading.className = "workspace2-empty";
+    loading.textContent = t("status.loading");
+    body.append(loading);
+  } else if (nodesState.error) {
+    const error = document.createElement("div");
+    error.className = "workspace2-empty";
+    error.textContent = t("status.error", { message: nodesState.error });
+    body.append(error);
+  } else if (nodesState.library) {
+    renderNSidebarMigration(el, body);
+    renderNodeCategorySections(el, body);
+  }
+}
+
+function refreshNodesResults(el) {
+  const body = el?.querySelector?.(".workspace2-tree");
+  if (!body) {
+    renderNodesPanel(el);
+    return;
+  }
+  hideNodePreview();
+  closeNodeContextMenu();
+  const query = nodesState.query.trim();
+  const scrollTop = query ? 0 : body.scrollTop;
+  body.replaceChildren();
+  renderNodesBody(el, body);
+  body.scrollTop = scrollTop;
+}
+
+function scheduleNodesResultsRefresh(el) {
+  if (nodesState.resultsRefreshTimer) {
+    clearTimeout(nodesState.resultsRefreshTimer);
+  }
+  nodesState.resultsRefreshTimer = window.setTimeout(() => {
+    nodesState.resultsRefreshTimer = null;
+    refreshNodesResults(el);
+  }, NODE_SEARCH_RENDER_DELAY);
+}
+
 function renderNodesPanel(el) {
   const snapshot = scrollSnapshot(el);
   nodesState.renderTarget = el;
@@ -6482,15 +7167,6 @@ function renderNodesPanel(el) {
     }
   });
 
-  const refresh = toolbarButton("refresh", t("nodes.refresh"), async () => {
-    nodesState.library = null;
-    nodesState.objectInfo = null;
-    nodesState.nSidebarPreview = null;
-    nodesState.officialFavoritesProbe = null;
-    await loadNodeLibrary();
-    renderNodesPanel(el);
-  });
-
   const syncOfficial = toolbarButton("arrowsUpDown", t("nodes.officialFavoritesSyncMenu"), async (event) => {
     if (nodesState.officialFavoritesLoading) {
       return;
@@ -6510,35 +7186,17 @@ function renderNodesPanel(el) {
     focusKey: "nodes-search",
     placeholder: t("nodes.searchPlaceholder"),
     value: nodesState.query,
-    buttons: [newGroup, refresh, syncOfficial, nodesSortButton(el)],
+    buttons: [newGroup, nodesPreviewModeButton(el), syncOfficial, nodesSortButton(el)],
     onInput: (value) => {
       nodesState.query = value;
-      renderNodesPanel(el);
+      scheduleNodesResultsRefresh(el);
     },
   });
   top.append(header, toolbar, nodesFavoriteRootRow(el), nodesViewTabs(el));
 
   const body = document.createElement("div");
   body.className = "workspace2-tree";
-
-  if (!nodesState.library && !nodesState.loading) {
-    loadNodeLibrary().then(() => renderNodesPanel(el));
-  }
-
-  if (nodesState.loading) {
-    const loading = document.createElement("div");
-    loading.className = "workspace2-empty";
-    loading.textContent = t("status.loading");
-    body.append(loading);
-  } else if (nodesState.error) {
-    const error = document.createElement("div");
-    error.className = "workspace2-empty";
-    error.textContent = t("status.error", { message: nodesState.error });
-    body.append(error);
-  } else if (nodesState.library) {
-    renderNSidebarMigration(el, body);
-    renderNodeCategorySections(el, body);
-  }
+  renderNodesBody(el, body);
 
   panel.append(top, body);
   el.append(panel);
@@ -6627,35 +7285,39 @@ function showNodePreview(node, event, options = {}) {
   preview.innerHTML = "";
   preview.hidden = false;
 
-  const header = document.createElement("div");
-  header.className = "workspace2-node-preview-header";
-  const dot = document.createElement("div");
-  dot.className = "workspace2-node-preview-dot";
-  const title = document.createElement("div");
-  title.className = "workspace2-node-preview-title";
-  title.textContent = node.title || node.type;
-  header.append(dot, title);
-
   const body = document.createElement("div");
   body.className = "workspace2-node-preview-body";
-  const meta = document.createElement("div");
-  meta.className = "workspace2-node-preview-meta";
-  meta.textContent = `${node.type} | ${node.category || t("nodes.uncategorized")}`;
-  body.append(meta);
-
-  if (node.description) {
-    const desc = document.createElement("div");
-    desc.className = "workspace2-node-preview-desc";
-    desc.textContent = node.description;
-    body.append(desc);
-  }
 
   const definition = node.definition || {};
   const inputs = collectPreviewInputs(definition);
   const widgets = collectPreviewWidgets(definition);
   const outputs = collectPreviewOutputs(definition);
   appendNodePreviewCard(body, node, inputs, widgets, outputs);
-  preview.append(header, body);
+
+  if (nodesState.previewMode !== "compact") {
+    const details = document.createElement("div");
+    details.className = "workspace2-node-preview-details";
+    const title = document.createElement("div");
+    title.className = "workspace2-node-preview-details-title";
+    title.textContent = node.title || node.type;
+    const meta = document.createElement("div");
+    meta.className = "workspace2-node-preview-meta";
+    meta.textContent = `${node.type} | ${node.category || t("nodes.uncategorized")}`;
+    details.append(title, meta);
+
+    if (node.description) {
+      const desc = document.createElement("div");
+      desc.className = "workspace2-node-preview-desc";
+      desc.textContent = node.description;
+      details.append(desc);
+    }
+
+    appendNodePreviewSection(details, t("nodes.previewInputs"), inputs, "input");
+    appendNodePreviewSection(details, t("nodes.previewWidgets"), widgets, "widget");
+    appendNodePreviewSection(details, t("nodes.previewOutputs"), outputs, "output");
+    body.append(details);
+  }
+  preview.append(body);
   positionNodePreviewPopover(preview, event, options);
 }
 
@@ -6694,6 +7356,19 @@ function copyText(value) {
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text).catch(() => {});
   }
+}
+
+function nodesPreviewModeButton(el) {
+  const detailed = nodesState.previewMode !== "compact";
+  const title = t(detailed ? "nodes.previewModeDetailed" : "nodes.previewModeCompact");
+  const button = toolbarButton(detailed ? "previewDetailed" : "previewCompact", title, () => {
+    nodesState.previewMode = detailed ? "compact" : "detailed";
+    localStorage.setItem(NODE_PREVIEW_MODE_KEY, nodesState.previewMode);
+    hideNodePreview();
+    renderNodesPanel(el);
+  });
+  button.classList.add("workspace2-node-preview-mode-button");
+  return button;
 }
 
 function openNodeGroupContextMenu(el, event, group) {
@@ -6790,71 +7465,112 @@ function appendNodePreviewCard(preview, node, inputs, widgets, outputs) {
   const card = document.createElement("div");
   card.className = "workspace2-node-preview-card";
 
-  const title = document.createElement("div");
-  title.className = "workspace2-node-preview-card-title";
-  const dot = document.createElement("div");
-  dot.className = "workspace2-node-preview-dot";
+  const header = document.createElement("div");
+  header.className = "workspace2-node-preview-card-header";
+
+  const heading = document.createElement("div");
+  heading.className = "workspace2-node-preview-card-heading";
+  const chevron = document.createElement("div");
+  chevron.className = "workspace2-node-preview-card-chevron";
   const titleText = document.createElement("div");
-  titleText.className = "workspace2-node-preview-title";
+  titleText.className = "workspace2-node-preview-card-name";
   titleText.textContent = node.title || node.type;
-  title.append(dot, titleText);
+  heading.append(chevron, titleText);
+  header.append(heading);
+
+  const primaryOutput = outputs[0];
+  if (primaryOutput) {
+    const output = document.createElement("div");
+    output.className = "workspace2-node-preview-card-output";
+    const outputName = document.createElement("div");
+    outputName.className = "workspace2-node-preview-card-output-name";
+    outputName.textContent = primaryOutput.name || primaryOutput.type;
+    const outputPort = document.createElement("div");
+    outputPort.className = "workspace2-node-preview-port is-output";
+    outputPort.style.setProperty("--workspace2-preview-port", previewPortColor(primaryOutput.type));
+    output.append(outputName, outputPort);
+    header.append(output);
+  }
 
   const body = document.createElement("div");
   body.className = "workspace2-node-preview-card-body";
-  const rowCount = Math.max(inputs.length, outputs.length);
-  for (let index = 0; index < rowCount; index += 1) {
-    const input = inputs[index];
-    const output = outputs[index];
+  const miniRows = buildNodePreviewMiniRows(inputs, widgets);
+  for (const item of miniRows) {
     const row = document.createElement("div");
-    row.className = "workspace2-node-preview-slot-row";
-
-    const inputPort = document.createElement("div");
-    inputPort.className = "workspace2-node-preview-port is-input";
-    inputPort.style.setProperty("--workspace2-preview-port", previewPortColor(input?.type));
-    inputPort.style.visibility = input ? "visible" : "hidden";
-
-    const inputName = document.createElement("div");
-    inputName.className = "workspace2-node-preview-slot-name";
-    inputName.textContent = input ? (input.optional ? `${input.name}?` : input.name) : "";
-
-    const typeText = document.createElement("div");
-    typeText.className = "workspace2-node-preview-slot-type";
-    typeText.textContent = input?.type || output?.type || "";
-
-    const outputName = document.createElement("div");
-    outputName.className = "workspace2-node-preview-slot-name is-output";
-    outputName.textContent = output?.name || "";
-
-    const outputPort = document.createElement("div");
-    outputPort.className = "workspace2-node-preview-port is-output";
-    outputPort.style.setProperty("--workspace2-preview-port", previewPortColor(output?.type));
-    outputPort.style.visibility = output ? "visible" : "hidden";
-
-    row.append(inputPort, inputName, typeText, outputName, outputPort);
-    body.append(row);
-  }
-
-  for (const widget of widgets.slice(0, 8)) {
-    const row = document.createElement("div");
-    row.className = "workspace2-node-preview-widget-row";
-    const leftArrow = document.createElement("div");
-    leftArrow.className = "workspace2-node-preview-widget-arrow";
-    leftArrow.textContent = "◀";
+    row.className = `workspace2-node-preview-mini-row is-${item.kind}`;
+    const port = document.createElement("div");
+    port.className = "workspace2-node-preview-mini-port";
+    port.style.setProperty("--workspace2-preview-port", previewPortColor(item.type));
     const name = document.createElement("div");
-    name.className = "workspace2-node-preview-slot-name";
-    name.textContent = widget.optional ? `${widget.name}?` : widget.name;
-    const value = document.createElement("div");
-    value.className = "workspace2-node-preview-type";
-    value.textContent = previewValue(widget.value) || widget.type;
-    const rightArrow = document.createElement("div");
-    rightArrow.className = "workspace2-node-preview-widget-arrow";
-    rightArrow.textContent = "▶";
-    row.append(leftArrow, name, value, rightArrow);
+    name.className = "workspace2-node-preview-mini-label";
+    name.textContent = item.optional ? `${item.name}?` : item.name;
+    const control = document.createElement("div");
+    control.className = previewMiniControlClass(item);
+    control.textContent = previewMiniControlText(item);
+    control.title = previewValue(item.value) || item.type || "";
+    row.append(port, name, control);
     body.append(row);
   }
+  if (!miniRows.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-node-preview-mini-empty";
+    empty.textContent = node.category || node.type || "";
+    body.append(empty);
+  }
 
-  card.append(title, body);
+  card.append(header, body);
   preview.append(card);
+}
+
+function buildNodePreviewMiniRows(inputs, widgets) {
+  const rows = [];
+  const seen = new Set();
+  for (const value of inputs) {
+    const name = String(value?.name || "").trim();
+    if (!name || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    rows.push({ ...value, kind: "port" });
+  }
+  for (const value of widgets) {
+    const name = String(value?.name || "").trim();
+    if (!name || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    rows.push({ ...value, kind: "widget" });
+    if (rows.length >= 12) {
+      break;
+    }
+  }
+  return rows.slice(0, 12);
+}
+
+function previewMiniControlClass(item) {
+  const type = String(item?.type || "").toUpperCase();
+  const classes = ["workspace2-node-preview-mini-widget"];
+  if (item?.kind === "port") {
+    classes.push("is-empty");
+  } else if (type === "COMBO") {
+    classes.push("is-combo");
+  } else if (type === "BOOLEAN") {
+    classes.push("is-boolean");
+  } else if (type === "INT" || type === "FLOAT") {
+    classes.push("is-number");
+  }
+  return classes.join(" ");
+}
+
+function previewMiniControlText(item) {
+  if (item?.kind === "port") {
+    return "";
+  }
+  const value = previewValue(item?.value);
+  if (value) {
+    return value;
+  }
+  return String(item?.type || "");
 }
 
 function previewPortColor(type) {
@@ -6898,9 +7614,6 @@ function appendNodePreviewSection(preview, label, values, kind) {
   for (const value of values.slice(0, 24)) {
     const row = document.createElement("div");
     row.className = "workspace2-node-preview-row";
-    const port = document.createElement("div");
-    port.className = `workspace2-node-preview-port is-${kind}`;
-    port.style.setProperty("--workspace2-preview-port", previewPortColor(value.type));
     const name = document.createElement("div");
     name.className = "workspace2-node-preview-name";
     name.textContent = value.optional ? `${value.name}?` : value.name;
@@ -6908,11 +7621,7 @@ function appendNodePreviewSection(preview, label, values, kind) {
     type.className = "workspace2-node-preview-type";
     const defaultText = kind === "widget" ? previewValue(value.value) : "";
     type.textContent = defaultText ? `${value.type} = ${defaultText}` : value.type;
-    if (kind === "output") {
-      row.append(port, type, name);
-    } else {
-      row.append(port, name, type);
-    }
+    row.append(name, type);
     section.append(row);
   }
   preview.append(section);
@@ -6962,18 +7671,48 @@ function renderFavoriteNodeSections(el, body) {
   const sectionId = "__bookmarked__";
   const nodeMap = getNodeDefinitionMap();
   const query = nodesState.query.trim().toLowerCase();
-  const section = document.createElement("div");
-  section.className = "workspace2-node-section";
-
-  renderTopSectionHeader(el, section, sectionId, t("nodes.categoryBookmarked"), String(nodesState.library.favorites.length));
-  body.append(section);
-
   const allFavorites = nodesState.library.favorites || [];
+  const groupNameById = new Map((nodesState.library.groups || []).map((group) => [group.id, group.name]));
+  const allFavoriteMatches = allFavorites
+    .map((favorite) => ({
+      favorite: favoriteDisplayNode(favorite, nodeMap),
+      groupName: groupNameById.get(favorite.groupId) || "",
+    }))
+    .filter(({ favorite, groupName }) => nodeMatchesQuery(favorite, query, groupName))
+    .sort((a, b) => query
+      ? compareNodeSearchResults(a.favorite, b.favorite, query, "")
+      : a.favorite.order - b.favorite.order);
+  const favoriteMatches = query ? allFavoriteMatches.slice(0, NODE_SEARCH_RESULT_LIMIT) : allFavoriteMatches;
+
+  if (query && !allFavoriteMatches.length) {
+    return;
+  }
+
   const rootFavorites = allFavorites
     .filter((favorite) => !favorite.groupId || favorite.groupId === NODE_DEFAULT_GROUP_ID)
     .map((favorite) => favoriteDisplayNode(favorite, nodeMap))
     .filter((favorite) => nodeMatchesQuery(favorite, query, ""))
-    .sort((a, b) => query ? nodeSearchScore(a, query, "") - nodeSearchScore(b, query, "") : a.order - b.order);
+    .sort((a, b) => query ? compareNodeSearchResults(a, b, query, "") : a.order - b.order);
+  const userGroups = [...nodesState.library.groups]
+    .filter((group) => group.id !== NODE_DEFAULT_GROUP_ID && !group.parentId)
+    .sort((a, b) => a.order - b.order);
+
+  const section = document.createElement("div");
+  section.className = "workspace2-node-section";
+
+  renderTopSectionHeader(el, section, sectionId, t("nodes.categoryBookmarked"), query ? `${favoriteMatches.length}/${allFavoriteMatches.length}` : String(nodesState.library.favorites.length));
+  body.append(section);
+
+  if (query) {
+    const list = document.createElement("div");
+    list.className = "workspace2-node-list";
+    list.dataset.workspace2FavoriteRegion = NODE_DEFAULT_GROUP_ID;
+    for (const { favorite } of favoriteMatches) {
+      list.append(renderFavoriteNodeRow(el, favorite));
+    }
+    section.append(list);
+    return;
+  }
 
   const rootList = document.createElement("div");
   rootList.className = "workspace2-node-list";
@@ -6982,10 +7721,6 @@ function renderFavoriteNodeSections(el, body) {
     rootList.append(renderFavoriteNodeRow(el, favorite));
   }
   section.append(rootList);
-
-  const userGroups = [...nodesState.library.groups]
-    .filter((group) => group.id !== NODE_DEFAULT_GROUP_ID && !group.parentId)
-    .sort((a, b) => a.order - b.order);
 
   for (const group of userGroups) {
     renderFavoriteGroupFolder(el, section, group, nodeMap, query, 0);
@@ -7008,10 +7743,69 @@ function toggleNodeGroup(el, groupId) {
   renderNodesPanel(el);
 }
 
+function officialTreeFolderKeys(folder) {
+  const keys = [];
+  if (!folder || folder.type !== "folder") {
+    return keys;
+  }
+  keys.push(folder.key);
+  for (const child of folder.children || []) {
+    keys.push(...officialTreeFolderKeys(child));
+  }
+  return keys;
+}
+
+function toggleOfficialTreeFolder(el, folder, recursive = false) {
+  const isOpen = nodesState.expanded.has(folder.key);
+  if (recursive) {
+    setExpandedRecursive(nodesState.expanded, officialTreeFolderKeys(folder), !isOpen);
+  } else if (isOpen) {
+    nodesState.expanded.delete(folder.key);
+  } else {
+    nodesState.expanded.add(folder.key);
+  }
+  renderNodesPanel(el);
+}
+
+function favoriteGroupKeys(groupId) {
+  const keys = [];
+  if (!groupId || groupId === NODE_DEFAULT_GROUP_ID) {
+    return keys;
+  }
+  keys.push(groupId);
+  for (const child of childNodeGroups(groupId)) {
+    keys.push(...favoriteGroupKeys(child.id));
+  }
+  return keys;
+}
+
+function toggleFavoriteGroup(el, groupId, recursive = false) {
+  const isOpen = nodesState.expanded.has(groupId);
+  if (recursive) {
+    setExpandedRecursive(nodesState.expanded, favoriteGroupKeys(groupId), !isOpen);
+  } else if (isOpen) {
+    nodesState.expanded.delete(groupId);
+  } else {
+    nodesState.expanded.add(groupId);
+  }
+  renderNodesPanel(el);
+}
+
 function childNodeGroups(parentId) {
   return [...(nodesState.library.groups || [])]
     .filter((group) => group.id !== NODE_DEFAULT_GROUP_ID && group.parentId === parentId)
     .sort((a, b) => a.order - b.order);
+}
+
+function favoriteGroupHasQueryMatches(group, nodeMap, query) {
+  const hasDirectMatch = nodesState.library.favorites
+    .filter((favorite) => favorite.groupId === group.id)
+    .map((favorite) => favoriteDisplayNode(favorite, nodeMap))
+    .some((favorite) => nodeMatchesQuery(favorite, query, group.name));
+  if (hasDirectMatch) {
+    return true;
+  }
+  return childNodeGroups(group.id).some((childGroup) => favoriteGroupHasQueryMatches(childGroup, nodeMap, query));
 }
 
 function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0) {
@@ -7019,7 +7813,12 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
     .filter((favorite) => favorite.groupId === group.id)
     .map((favorite) => favoriteDisplayNode(favorite, nodeMap))
     .filter((favorite) => nodeMatchesQuery(favorite, query, group.name))
-    .sort((a, b) => query ? nodeSearchScore(a, query, group.name) - nodeSearchScore(b, query, group.name) : a.order - b.order);
+    .sort((a, b) => query ? compareNodeSearchResults(a, b, query, group.name) : a.order - b.order);
+  const childGroups = childNodeGroups(group.id)
+    .filter((childGroup) => !query || favoriteGroupHasQueryMatches(childGroup, nodeMap, query));
+  if (query && !groupFavorites.length && !childGroups.length) {
+    return;
+  }
   const groupOpen = nodesState.expanded.has(group.id) || Boolean(query);
 
   const header = document.createElement("div");
@@ -7038,7 +7837,7 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
       return;
     }
     event.stopPropagation();
-    toggleNodeGroup(el, group.id);
+    toggleFavoriteGroup(el, group.id, event.ctrlKey || event.metaKey);
   });
   header.addEventListener("contextmenu", (event) => openNodeGroupContextMenu(el, event, group));
 
@@ -7048,7 +7847,7 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
   disclosure.title = groupOpen ? t("folder.collapse") : t("folder.expand");
   disclosure.addEventListener("click", (event) => {
     event.stopPropagation();
-    toggleNodeGroup(el, group.id);
+    toggleFavoriteGroup(el, group.id, event.ctrlKey || event.metaKey);
   });
 
   const icon = document.createElement("span");
@@ -7106,7 +7905,7 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
   section.append(header);
 
   if (groupOpen) {
-    for (const childGroup of childNodeGroups(group.id)) {
+    for (const childGroup of childGroups) {
       renderFavoriteGroupFolder(el, section, childGroup, nodeMap, query, depth + 1);
     }
     const list = document.createElement("div");
@@ -7297,16 +8096,30 @@ function renderNodeCategorySections(el, body) {
   const favoriteTypes = new Set(nodesState.library.favorites.map((favorite) => favorite.type));
   const comfyNodes = [];
   const extensionNodes = [];
+  const unknownNodes = [];
+  const visibleNodes = [];
   let visibleTotal = 0;
   for (const node of filtered) {
     if (isHiddenOfficialNodeSection(node)) {
       continue;
     }
     visibleTotal += 1;
+    if (query && visibleNodes.length >= NODE_SEARCH_RESULT_LIMIT) {
+      continue;
+    }
+    visibleNodes.push(node);
+  }
+
+  for (const node of query ? visibleNodes : filtered) {
+    if (isHiddenOfficialNodeSection(node)) {
+      continue;
+    }
     if (isComfyCoreNode(node)) {
       comfyNodes.push(node);
-    } else {
+    } else if (node.source === NODE_SOURCE.CUSTOM) {
       extensionNodes.push(node);
+    } else {
+      unknownNodes.push(node);
     }
   }
 
@@ -7324,6 +8137,9 @@ function renderNodeCategorySections(el, body) {
   if (visibleSections.extensions) {
     renderNodeTopSection(el, body, "__extensions__", t("nodes.categoryExtensions"), extensionNodes, visibleTotal, favoriteTypes);
   }
+  if (unknownNodes.length) {
+    renderNodeTopSection(el, body, "__unknown__", t("nodes.categoryUnknown"), unknownNodes, visibleTotal, favoriteTypes);
+  }
 }
 
 function renderNodeTopSection(el, body, sectionId, titleText, nodes, totalCount, favoriteTypes) {
@@ -7337,6 +8153,16 @@ function renderNodeTopSection(el, body, sectionId, titleText, nodes, totalCount,
     empty.className = "workspace2-empty";
     empty.textContent = t("nodes.noNodeMatches");
     section.append(empty);
+    return;
+  }
+
+  if (nodesState.query.trim()) {
+    const list = document.createElement("div");
+    list.className = "workspace2-node-list";
+    for (const node of nodes) {
+      list.append(renderAllNodeRow(el, node, favoriteTypes.has(node.type)));
+    }
+    section.append(list);
     return;
   }
 

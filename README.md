@@ -56,7 +56,7 @@ Workspace2 improves this with:
 - Custom ordering for favorites and global nodes.
 - Node preview cards.
 - Drag-to-canvas and click-then-click-to-place node creation.
-- Official ComfyUI favorite import, export, backup, and restore.
+- Official ComfyUI favorite import/export with automatic settings backup before writing.
 - Dimmed display for missing third-party nodes instead of silently deleting them.
 
 ### Canvas Group Pain Points

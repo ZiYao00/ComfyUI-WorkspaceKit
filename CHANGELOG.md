@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1-beta - 2026-07-07
+## 0.1.1-beta / 0.1.1b0 - 2026-07-07
 
 Public beta cleanup and documentation release preparation.
 

@@ -12,10 +12,11 @@ Current status: **public beta, 0.1.x**. It is not a stable 1.0 release yet.
 
 ## Main Features
 
-Workspace2 currently provides two sidebar tabs:
+Workspace2 currently provides one sidebar entry with three internal tabs:
 
 - **Workflows 2**: Manage workflow files in the official ComfyUI workflow directory.
 - **Nodes 2**: Browse, search, favorite, group, and organize nodes.
+- **Templates**: Save selected connected nodes as reusable templates and organize them with groups.
 
 It also includes two canvas helpers:
 
@@ -36,6 +37,7 @@ Workspace2 improves this with:
 - Drop support for expanded folder areas and the root area.
 - Plugin trash with restore support before moving items to the operating system trash.
 - Workflow sorting, custom order, and folder-first sorting.
+- Recent workflow history with configurable item count.
 - Search, clear search, refresh, and direct workflow opening.
 - Folder icon and color customization.
 - Recursive expand/collapse with `Ctrl + click`.
@@ -106,13 +108,13 @@ Then restart ComfyUI.
 
 ## Requirements
 
-Workspace2 currently requires:
+Workspace2 recommends:
 
 ```text
 send2trash
 ```
 
-Install the dependency inside the Python environment used by ComfyUI:
+Install the dependency inside the Python environment used by ComfyUI for cross-platform system trash support:
 
 ```bash
 pip install -r requirements.txt
@@ -125,9 +127,9 @@ Do not update your ComfyUI Python environment unless you understand the environm
 Workspace2 has two trash layers:
 
 - **Workspace2 trash**: the plugin-level recoverable trash used when deleting workflows from Workflows 2.
-- **System trash**: the operating system trash / recycle bin, handled through `send2trash`.
+- **System trash**: the operating system trash / recycle bin.
 
-The system trash feature depends on the operating system and desktop environment supported by `send2trash`.
+On Windows, Workspace2 has a built-in recycle bin fallback. On other platforms, system trash support depends on `send2trash` and the desktop environment it supports.
 
 ## Known Issues
 

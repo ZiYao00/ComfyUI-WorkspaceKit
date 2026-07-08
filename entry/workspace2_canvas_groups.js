@@ -8,10 +8,20 @@ import { app } from "../../scripts/app.js";
 const MODE_ALWAYS = 0;
 const MODE_BYPASS = 4;
 const DEFAULT_STYLE_KEY = 'workspace2.canvasGroups.defaultStyle';
+const PRESET_STYLE_KEY = 'workspace2.canvasGroups.stylePresets';
+const ACTIVE_PRESET_KEY = 'workspace2.canvasGroups.activePreset';
+const PRESET_COUNT = 4;
+const DEFAULT_CONTENT_PADDING = 12;
+const DEFAULT_SHADOW_COLOR = '#000000';
+
+const finiteNumber = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+};
 
 const Workspace2CanvasGroups = {
     initialized: false,
-    version: "20260706-fix15",
+    version: "20260708-group-settings-animation-slider-hitbox",
     groups: {},       // groupId → {id, title, nodeIds, bypassed, bounds, fontSize}
     groupEls: {},
     overlay: null,
@@ -234,7 +244,7 @@ const Workspace2CanvasGroups = {
         for (const [gid, g] of Object.entries(this.groups)) {
             const el = this.groupEls[gid];
             if (!el) continue;
-            const b = g.bounds;
+            const b = g._previewBounds || g.bounds;
             if (!b) { el.style.display = 'none'; continue; }
             el.style.display = 'block';
             el.style.left = ((b.x + ox) * scale) + 'px';
@@ -249,6 +259,7 @@ const Workspace2CanvasGroups = {
             const header = el.querySelector('.xzg-group-header');
             if (header) {
                 const padV = 2 * scale;
+                header.style.top = '0px';
                 header.style.height = headerHeight + 'px';
                 header.style.paddingLeft = (6 * scale) + 'px';
                 header.style.paddingRight = (6 * scale) + 'px';
@@ -285,7 +296,7 @@ const Workspace2CanvasGroups = {
 
             const e = g.effect;
             if (!e || e === 'none') {
-                el.style.boxShadow = 'none';
+                this.applyUserShadow(el, g, scale);
                 el.style.borderImage = 'none';
                 el.style.background = 'transparent';
                 continue;
@@ -293,7 +304,7 @@ const Workspace2CanvasGroups = {
 
             const refs = this._ensureRefs(el);
             const spd = (g.effectSpeed || 3) / 3;
-            const bw = (g.borderWidth || 2) * scale;
+            const bw = finiteNumber(g.borderWidth, 2) * scale;
             const bo = g.borderOpacity ?? 0.65;
 
             // 非marquee效果重置文字样式
@@ -314,7 +325,7 @@ const Workspace2CanvasGroups = {
                 const h = (t * 360) % 360;
                 el.style.borderImage = 'none';
                 el.style.border = `${bw}px solid hsla(${h},80%,55%,${bo})`;
-                el.style.boxShadow = 'none';
+                this.applyUserShadow(el, g, scale);
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h},80%,55%,${Math.min(bo + 0.1, 1)})`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h},80%,55%,${bo})`);
                 if (refs.title) refs.title.style.color = `hsla(${h},80%,55%,0.85)`;
@@ -326,7 +337,7 @@ const Workspace2CanvasGroups = {
                 const h = g.colorHue ?? 48;
                 el.style.borderImage = 'none';
                 el.style.border = `${bw}px solid hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${a.toFixed(2)})`;
-                el.style.boxShadow = 'none';
+                this.applyUserShadow(el, g, scale);
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${a.toFixed(2)})`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${(0.3+a*0.7).toFixed(2)})`);
                 if (refs.title) refs.title.style.color = `hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${a.toFixed(2)})`;
@@ -336,11 +347,11 @@ const Workspace2CanvasGroups = {
                 const t = (Date.now() / 2500) * spd;
                 const angle = (t * 360) % 360;
                 const h0 = (t * 360) % 360;
-                el.style.border = `${Math.max(1, bw)}px solid transparent`;
+                el.style.border = `${Math.max(0, bw)}px solid transparent`;
                 el.style.borderRadius = '8px';
                 el.style.overflow = 'hidden';
                 el.style.borderImage = `conic-gradient(from ${angle}deg, hsl(0,100%,65%), hsl(30,100%,65%), hsl(60,100%,65%), hsl(90,100%,65%), hsl(120,100%,65%), hsl(150,100%,65%), hsl(180,100%,65%), hsl(210,100%,65%), hsl(240,100%,65%), hsl(270,100%,65%), hsl(300,100%,65%), hsl(330,100%,65%), hsl(360,100%,65%)) 1`;
-                el.style.boxShadow = 'none';
+                this.applyUserShadow(el, g, scale);
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h0},100%,65%,0.6)`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h0},100%,65%,0.7)`);
                 if (refs.title) {
@@ -358,10 +369,10 @@ const Workspace2CanvasGroups = {
                 const angle = (t * 360) % 360;
                 const h0 = (t * 360) % 360;
                 el.style.overflow = 'hidden';
-                el.style.border = `${Math.max(1, bw)}px solid transparent`;
+                el.style.border = `${Math.max(0, bw)}px solid transparent`;
                 el.style.borderRadius = '8px';
                 el.style.borderImage = `conic-gradient(from ${angle}deg, hsl(0,100%,${5+wave*60}%), hsl(30,100%,${5+wave*60}%), hsl(60,100%,${5+wave*60}%), hsl(90,100%,${5+wave*60}%), hsl(120,100%,${5+wave*60}%), hsl(150,100%,${5+wave*60}%), hsl(180,100%,${5+wave*60}%), hsl(210,100%,${5+wave*60}%), hsl(240,100%,${5+wave*60}%), hsl(270,100%,${5+wave*60}%), hsl(300,100%,${5+wave*60}%), hsl(330,100%,${5+wave*60}%), hsl(360,100%,${5+wave*60}%)) 1`;
-                el.style.boxShadow = 'none';
+                this.applyUserShadow(el, g, scale);
                 const lv = 5 + wave * 60;
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h0},100%,${lv}%,0.6)`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h0},100%,${lv}%,0.7)`);
@@ -389,7 +400,7 @@ const Workspace2CanvasGroups = {
                 break;
             }
             default:
-                el.style.boxShadow = 'none';
+                this.applyUserShadow(el, g, scale);
                 el.style.borderImage = 'none';
                 el.style.background = 'transparent';
             }
@@ -421,6 +432,16 @@ const Workspace2CanvasGroups = {
         return false;
     },
 
+    applyUserShadow(el, group, scale = 1) {
+        const size = Math.max(0, finiteNumber(group?.shadowSize, 0)) * scale;
+        if (!size) {
+            el.style.boxShadow = 'none';
+            return;
+        }
+        const color = group?.shadowColor || DEFAULT_SHADOW_COLOR;
+        el.style.boxShadow = `0 0 ${size}px ${color}`;
+    },
+
     getBuiltInStyle() {
         return {
             fontSize: 14,
@@ -431,18 +452,61 @@ const Workspace2CanvasGroups = {
             effectSpeed: 3,
             borderWidth: 2,
             borderOpacity: 0.65,
+            shadowSize: 0,
+            shadowColor: DEFAULT_SHADOW_COLOR,
+            contentPadding: DEFAULT_CONTENT_PADDING,
             headerBgColor: 'rgba(0,0,0,0.4)',
             titleColor: '#FFD700'
         };
     },
 
     readDefaultStyle() {
+        const presets = this.readStylePresets();
+        const active = this.readActivePreset();
+        return presets[active] || this.getBuiltInStyle();
+    },
+
+    readActivePreset() {
+        const raw = parseInt(localStorage.getItem(ACTIVE_PRESET_KEY) || '0');
+        return Number.isFinite(raw) ? Math.max(0, Math.min(PRESET_COUNT - 1, raw)) : 0;
+    },
+
+    setActivePreset(index) {
+        const normalized = Math.max(0, Math.min(PRESET_COUNT - 1, parseInt(index) || 0));
+        localStorage.setItem(ACTIVE_PRESET_KEY, String(normalized));
+        return normalized;
+    },
+
+    readStylePresets() {
+        const builtIn = this.getBuiltInStyle();
+        const fallback = Array.from({ length: PRESET_COUNT }, () => ({ ...builtIn }));
         try {
-            const saved = JSON.parse(localStorage.getItem(DEFAULT_STYLE_KEY) || 'null');
-            return saved && typeof saved === 'object' ? { ...this.getBuiltInStyle(), ...saved } : this.getBuiltInStyle();
+            const raw = JSON.parse(localStorage.getItem(PRESET_STYLE_KEY) || 'null');
+            if (Array.isArray(raw) && raw.length) {
+                return Array.from({ length: PRESET_COUNT }, (_, i) => ({ ...builtIn, ...(raw[i] && typeof raw[i] === 'object' ? raw[i] : {}) }));
+            }
         } catch {
-            return this.getBuiltInStyle();
+            // Fall through to legacy migration.
         }
+        try {
+            const legacy = JSON.parse(localStorage.getItem(DEFAULT_STYLE_KEY) || 'null');
+            if (legacy && typeof legacy === 'object') {
+                fallback[0] = { ...builtIn, ...legacy };
+                localStorage.setItem(PRESET_STYLE_KEY, JSON.stringify(fallback));
+                localStorage.setItem(ACTIVE_PRESET_KEY, '0');
+            }
+        } catch {}
+        return fallback;
+    },
+
+    saveStylePreset(index, style) {
+        const presets = this.readStylePresets();
+        const normalized = Math.max(0, Math.min(PRESET_COUNT - 1, parseInt(index) || 0));
+        presets[normalized] = { ...this.getBuiltInStyle(), ...style };
+        localStorage.setItem(PRESET_STYLE_KEY, JSON.stringify(presets));
+        this.setActivePreset(normalized);
+        window.Workspace2CanvasGroupsDefaultStyle = presets[normalized];
+        return presets[normalized];
     },
 
     groupStyleSnapshot(group) {
@@ -453,8 +517,11 @@ const Workspace2CanvasGroups = {
             colorLit: group.colorLit ?? 55,
             effect: group.effect || 'none',
             effectSpeed: group.effectSpeed || 3,
-            borderWidth: group.borderWidth || 2,
+            borderWidth: finiteNumber(group.borderWidth, 2),
             borderOpacity: group.borderOpacity ?? 0.65,
+            shadowSize: Math.max(0, finiteNumber(group.shadowSize, 0)),
+            shadowColor: group.shadowColor || DEFAULT_SHADOW_COLOR,
+            contentPadding: group.contentPadding ?? DEFAULT_CONTENT_PADDING,
             headerBgColor: group.headerBgColor || 'rgba(0,0,0,0.4)',
             titleColor: group.titleColor || '#FFD700'
         };
@@ -462,15 +529,11 @@ const Workspace2CanvasGroups = {
 
     saveDefaultStyle(group) {
         const style = this.groupStyleSnapshot(group);
-        localStorage.setItem(DEFAULT_STYLE_KEY, JSON.stringify(style));
-        window.Workspace2CanvasGroupsDefaultStyle = style;
-        return style;
+        return this.saveStylePreset(this.readActivePreset(), style);
     },
 
     resetDefaultStyle() {
-        localStorage.removeItem(DEFAULT_STYLE_KEY);
-        window.Workspace2CanvasGroupsDefaultStyle = this.getBuiltInStyle();
-        return window.Workspace2CanvasGroupsDefaultStyle;
+        return this.saveStylePreset(this.readActivePreset(), this.getBuiltInStyle());
     },
 
     uniqueGroupTitle(base = '组', excludeId = null) {
@@ -535,23 +598,84 @@ const Workspace2CanvasGroups = {
         }
     },
 
+    nodeVisualBounds(node) {
+        const rect = node?.boundingRect;
+        if (Array.isArray(rect) && rect.length >= 4 && rect.every(v => Number.isFinite(Number(v)))) {
+            return { x: Number(rect[0]), y: Number(rect[1]), w: Number(rect[2]), h: Number(rect[3]) };
+        }
+        if (!node?.pos || typeof node.pos[0] !== 'number' || typeof node.pos[1] !== 'number') return null;
+        const titleHeight = Number(window.LiteGraph?.NODE_TITLE_HEIGHT || 0) || 0;
+        const w = node.size?.[0] || 200;
+        const h = node.size?.[1] || 100;
+        return { x: node.pos[0], y: node.pos[1] - titleHeight, w, h: h + titleHeight };
+    },
+
     /* ── 计算包围盒 ── */
-    calcBounds(nodeIds) {
+    calcBounds(nodeIds, options = {}) {
         const g = app?.graph;
         if (!g?._nodes) return null;
         let minX = 1/0, minY = 1/0, maxX = -1/0, maxY = -1/0, f = false;
         for (const nid of nodeIds) {
             const n = g._nodes.find(x => x.id === nid || x.id == nid);
-            if (!n?.pos) continue;
-            const w = n.size?.[0] || 200, h = n.size?.[1] || 100;
-            minX = Math.min(minX, n.pos[0]); minY = Math.min(minY, n.pos[1]);
-            maxX = Math.max(maxX, n.pos[0] + w); maxY = Math.max(maxY, n.pos[1] + h);
+            const rect = this.nodeVisualBounds(n);
+            if (!rect) continue;
+            minX = Math.min(minX, rect.x); minY = Math.min(minY, rect.y);
+            maxX = Math.max(maxX, rect.x + rect.w); maxY = Math.max(maxY, rect.y + rect.h);
             f = true;
         }
         if (!f) return null;
-        const p = 20;
-        const topPad = 58;
+        const style = { ...this.readDefaultStyle(), ...options };
+        const p = Math.max(0, Number(style.contentPadding ?? DEFAULT_CONTENT_PADDING) || 0);
+        const fs = style?.fontSize || 14;
+        const headerHeight = Math.max(18, fs + 4);
+        const topPad = headerHeight + p;
         return { x: minX - p, y: minY - topPad, w: maxX - minX + p * 2, h: maxY - minY + topPad + p };
+    },
+
+    updateGroupBoundsFromMembers(group) {
+        if (!group?.nodeIds?.length) return false;
+        const bounds = this.calcBounds(group.nodeIds, {
+            contentPadding: group.contentPadding ?? DEFAULT_CONTENT_PADDING,
+            fontSize: group.fontSize || 14
+        });
+        if (!bounds) return false;
+        group.bounds = bounds;
+        this.updatePositions();
+        app.graph?.setDirtyCanvas?.(true, true);
+        return true;
+    },
+
+    previewGroupLayout(groupId, values = {}) {
+        const group = this.groups[groupId];
+        if (!group) return false;
+        const previousPadding = group._previewContentPadding ?? group.contentPadding ?? DEFAULT_CONTENT_PADDING;
+        if (!group?.bounds) return false;
+        let bounds = null;
+        if (values.contentPadding !== undefined) {
+            const nextPadding = Math.max(0, Number(values.contentPadding) || 0);
+            const delta = nextPadding - previousPadding;
+            const base = group._previewBounds || group.bounds;
+            bounds = {
+                x: base.x - delta,
+                y: base.y - delta,
+                w: base.w + delta * 2,
+                h: base.h + delta * 2
+            };
+            group._previewBounds = bounds;
+            group._previewContentPadding = nextPadding;
+            group.contentPadding = nextPadding;
+        } else if (group?.nodeIds?.length) {
+            Object.assign(group, values);
+            bounds = this.calcBounds(group.nodeIds, {
+                contentPadding: group.contentPadding ?? DEFAULT_CONTENT_PADDING,
+                fontSize: group.fontSize || 14
+            });
+            if (!bounds) return false;
+            group._previewBounds = bounds;
+        }
+        this.updatePositions();
+        app.graph?.setDirtyCanvas?.(true, true);
+        return true;
     },
 
     /* ── 创建编组 ── */
@@ -562,7 +686,8 @@ const Workspace2CanvasGroups = {
         if (sel.length < 1) { alert('[Workspace2 Canvas Groups] 请至少选1个节点'); return; }
 
         const nids = sel.map(n => n.id);
-        const bounds = this.calcBounds(nids) || { x: 0, y: 0, w: 300, h: 200 };
+        const style = this.readDefaultStyle();
+        const bounds = this.calcBounds(nids, style) || { x: 0, y: 0, w: 300, h: 200 };
 
         // 找出完全位于新编组内部的旧编组（它们将成为子编组，大控制小）
         const childGroupIds = new Set();
@@ -623,7 +748,6 @@ const Workspace2CanvasGroups = {
         }
 
         const gid = 'g_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-        const style = this.readDefaultStyle();
         this.groups[gid] = {
             id: gid,
             title: this.uniqueGroupTitle('组'),
@@ -676,14 +800,14 @@ const Workspace2CanvasGroups = {
         const el = document.createElement('div');
         el.className = 'xzg-group-box';
         el.dataset.groupId = group.id;
-        const bw = group.borderWidth || 2;
+        const bw = finiteNumber(group.borderWidth, 2);
         const bo = group.borderOpacity ?? 0.65;
         el.style.cssText = `position:absolute;pointer-events:none;border:${bw}px solid hsla(48,100%,55%,${bo});border-radius:8px;background:transparent;box-sizing:border-box;z-index:5;`;
         const fs = group.fontSize || 14;
         const showTitle = (group.title || '').trim() !== '';
         const headerHeight = Math.max(18, fs + 4);
         el.innerHTML = `
-            <div class="xzg-group-header" style="display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || 'rgba(0,0,0,0.4)') : 'transparent'};border-radius:7px 7px 0 0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
+            <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || 'rgba(0,0,0,0.4)') : 'transparent'};border-radius:7px 7px 0 0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
                 <div style="flex:1 1 auto;min-width:0;overflow:hidden;">
                     <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
                 </div>
@@ -857,6 +981,7 @@ const Workspace2CanvasGroups = {
 
     /* ── 设置弹窗 ── */
     openSettings(group) {
+        const self = this;
         group = this.groups[group.id] || group;
         const gid = group.id;
 
@@ -868,7 +993,11 @@ const Workspace2CanvasGroups = {
             headerBgColor: group.headerBgColor,
             colorHue: group.colorHue, colorSat: group.colorSat, colorLit: group.colorLit,
             effect: group.effect, effectSpeed: group.effectSpeed,
-            borderWidth: group.borderWidth, borderOpacity: group.borderOpacity
+            borderWidth: group.borderWidth, borderOpacity: group.borderOpacity,
+            shadowSize: group.shadowSize,
+            shadowColor: group.shadowColor,
+            contentPadding: group.contentPadding,
+            bounds: group.bounds ? { ...group.bounds } : null
         };
         const revertSnapshot = () => {
             Object.assign(group, {
@@ -878,10 +1007,18 @@ const Workspace2CanvasGroups = {
                 headerBgColor: _snapshot.headerBgColor,
                 colorHue: _snapshot.colorHue, colorSat: _snapshot.colorSat, colorLit: _snapshot.colorLit,
                 effect: _snapshot.effect, effectSpeed: _snapshot.effectSpeed,
-                borderWidth: _snapshot.borderWidth, borderOpacity: _snapshot.borderOpacity
+                borderWidth: _snapshot.borderWidth, borderOpacity: _snapshot.borderOpacity,
+                shadowSize: _snapshot.shadowSize,
+                shadowColor: _snapshot.shadowColor,
+                contentPadding: _snapshot.contentPadding,
+                bounds: _snapshot.bounds ? { ..._snapshot.bounds } : group.bounds
             });
+            delete group._previewBounds;
+            delete group._previewContentPadding;
             // 重建 DOM 恢复视觉状态
             this.rebuildGroupEl(group);
+            this.syncGroupsToExtra();
+            this.writeGroupDataToNodes();
             app.graph?.setDirtyCanvas?.(true, true);
         };
 
@@ -891,8 +1028,10 @@ const Workspace2CanvasGroups = {
 
         const modal = document.createElement('div');
         modal.className = 'xzg-settings-modal';
-        modal.style.cssText = `position:fixed;left:0;top:0;background:#1e1e1e;border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:0 16px 16px 16px;z-index:9999;min-width:300px;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow-y:auto;box-shadow:0 0 20px rgba(0,0,0,0.8);visibility:hidden;`;
+        modal.style.cssText = `position:fixed;left:0;top:0;background:#1e1e1e;border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:0 10px 12px 10px;z-index:9999;min-width:200px;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow-y:auto;box-shadow:0 0 20px rgba(0,0,0,0.8);visibility:hidden;`;
         const curH = group.colorHue || 48, curS = group.colorSat ?? 100, curL = group.colorLit ?? 55;
+        const activePresetSnapshot = this.readActivePreset();
+        let activePresetIndex = activePresetSnapshot;
 
         const curKey = this.shortcutKey || 'g';
         const initRgba = group.headerBgColor || 'rgba(0,0,0,0.4)';
@@ -909,61 +1048,64 @@ const Workspace2CanvasGroups = {
             </div>
             <div style="margin-bottom:12px;">
                 <label style="color:#ff8c00;font-size:14px;display:block;margin-bottom:8px;font-weight:600;">标题栏设置</label>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:72px;">名称</label>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">名称</label>
                     <input class="xzg-set-title" value="${group.title}" style="flex:1;height:28px;padding:0 8px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;">
-                    <div style="width:72px;flex-shrink:0;"></div>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:72px;">文字大小</label>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">文字大小</label>
                     <input class="xzg-set-fontsize" type="range" min="6" max="48" value="${group.fontSize || 14}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:6px;height:28px;">
-                        <span class="xzg-set-fs-val" style="color:#fff;font-size:12px;width:28px;text-align:left;">${group.fontSize || 14}</span>
-                        <div class="xzg-title-color-swatch" style="width:22px;height:22px;border-radius:4px;cursor:pointer;background:${group.titleColor || '#FFD700'};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
+                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
+                        <span class="xzg-set-fs-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${group.fontSize || 14}</span>
+                        <div class="xzg-title-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${group.titleColor || '#FFD700'};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                     </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:72px;">背景色</label>
-                    <div class="xzg-header-color-bar" style="flex:1;height:28px;border-radius:4px;cursor:pointer;background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f);border:1px solid rgba(255,255,255,0.2);position:relative;">
-                        <input class="xzg-set-headerbgcolor" type="color" value="${initHex}" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;">
-                    </div>
-                    <div style="width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;height:28px;">
-                        <button class="xzg-reset-headerbg" type="button" style="height:26px;padding:0 10px;background:#3a3a3a;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;line-height:1;">重置</button>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;">
-                    <span style="color:#fff;font-size:12px;flex-shrink:0;width:72px;">透明度</span>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">背景</label>
                     <input class="xzg-set-headeropacity" type="range" min="0" max="100" value="${Math.round((group.headerBgColor || 'rgba(0,0,0,0.4)').replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1') * 100)}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
-                        <span class="xzg-header-opacity-val" style="color:#fff;font-size:12px;width:36px;text-align:left;">${Math.round((group.headerBgColor || 'rgba(0,0,0,0.4)').replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1') * 100)}%</span>
+                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
+                        <span class="xzg-header-opacity-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.round((group.headerBgColor || 'rgba(0,0,0,0.4)').replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1') * 100)}%</span>
+                        <div class="xzg-header-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${initHex};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
+                        <input class="xzg-set-headerbgcolor" type="color" value="${initHex}" style="position:absolute;width:0;height:0;opacity:0;padding:0;border:0;">
                     </div>
                 </div>
             </div>
             <div style="border-top:1px solid rgba(255,255,255,0.1);margin-bottom:12px;padding-top:0;"></div>
             <div style="margin-bottom:12px;">
                 <label style="color:#ff8c00;font-size:14px;display:block;margin-bottom:8px;font-weight:600;">边框设置</label>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:72px;">边框颜色</label>
-                    <div class="xzg-custom-color-trigger" style="flex:1;height:28px;border-radius:4px;cursor:pointer;background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f);border:1px solid rgba(255,255,255,0.2);"></div>
-                    <div style="width:72px;flex-shrink:0;"></div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:72px;">边框粗细</label>
-                    <input class="xzg-set-borderwidth" type="range" min="1" max="10" value="${group.borderWidth||2}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
-                        <span class="xzg-set-bw-val" style="color:#fff;font-size:12px;text-align:left;">${group.borderWidth||2}px</span>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:72px;">边框透明度</label>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边框颜色</label>
                     <input class="xzg-set-borderopacity" type="range" min="5" max="100" value="${Math.round((group.borderOpacity??0.65)*100)}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
-                        <span class="xzg-set-bo-val" style="color:#fff;font-size:12px;text-align:left;">${Math.round((group.borderOpacity??0.65)*100)}%</span>
+                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
+                        <span class="xzg-set-bo-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.round((group.borderOpacity??0.65)*100)}%</span>
+                        <div class="xzg-custom-color-trigger" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${this.hslToHex(curH, curS, curL)};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                     </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:72px;">边框动画</label>
-                    <select class="xzg-set-effect" style="flex:1;height:28px;padding:0 8px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;">
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边框粗细</label>
+                    <input class="xzg-set-borderwidth" type="range" min="0" max="5" value="${finiteNumber(group.borderWidth, 2)}" style="flex:1;height:28px;margin:0;">
+                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
+                        <span class="xzg-set-bw-val" style="color:#fff;font-size:12px;text-align:left;">${finiteNumber(group.borderWidth, 2)}px</span>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边框阴影</label>
+                    <input class="xzg-set-shadowsize" type="range" min="0" max="40" value="${Math.max(0, finiteNumber(group.shadowSize, 0))}" style="flex:1;height:28px;margin:0;">
+                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
+                        <span class="xzg-set-shadow-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.max(0, finiteNumber(group.shadowSize, 0))}px</span>
+                        <div class="xzg-shadow-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${group.shadowColor || DEFAULT_SHADOW_COLOR};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边框边距</label>
+                    <input class="xzg-set-contentpadding" type="range" min="0" max="80" value="${group.contentPadding ?? DEFAULT_CONTENT_PADDING}" style="flex:1;height:28px;margin:0;">
+                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
+                        <span class="xzg-set-cp-val" style="color:#fff;font-size:12px;text-align:left;">${group.contentPadding ?? DEFAULT_CONTENT_PADDING}px</span>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:30px;">动画</label>
+                    <select class="xzg-set-effect" style="width:90px;height:28px;padding:0 6px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         <option value="none" ${!group.effect||group.effect==='none'?'selected':''}>无</option>
                         <option value="rainbow" ${group.effect==='rainbow'?'selected':''}>渐变彩虹</option>
                         <option value="pulse" ${group.effect==='pulse'?'selected':''}>明暗呼吸</option>
@@ -971,25 +1113,32 @@ const Workspace2CanvasGroups = {
                         <option value="marquee" ${group.effect==='marquee'?'selected':''}>流光溢彩</option>
                         <option value="marqueebreathe" ${group.effect==='marqueebreathe'?'selected':''}>流光溢彩+明暗呼吸</option>
                     </select>
-                    <div style="width:72px;flex-shrink:0;"></div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;height:28px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:72px;">动画速度</label>
-                    <input class="xzg-set-speed" type="range" min="1" max="10" value="${group.effectSpeed||3}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
-                        <span class="xzg-set-spd-val" style="color:#fff;font-size:12px;text-align:left;">${group.effectSpeed||3}</span>
+                    <div style="flex:1;min-width:0;position:relative;display:flex;align-items:center;height:28px;">
+                        <input class="xzg-set-speed" type="range" min="1" max="10" value="${group.effectSpeed||3}" style="width:34px;min-width:34px;max-width:34px;height:28px;margin:0;">
+                        <span class="xzg-set-spd-val" style="position:absolute;right:0;color:#fff;font-size:12px;width:48px;text-align:left;">${group.effectSpeed||3}</span>
                     </div>
                 </div>
             </div>
-            <div style="display:flex;gap:8px;justify-content:space-between;padding-top:4px;">
-                <div style="display:flex;gap:8px;">
-                    <button class="xzg-set-default" type="button" style="height:28px;padding:0 12px;background:#31415c;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#d8e7ff;cursor:pointer;font-size:12px;" title="将当前样式保存为以后新建编组的默认样式">设为默认</button>
-                    <button class="xzg-reset-default" type="button" style="height:28px;padding:0 12px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;" title="清除自定义默认样式">恢复默认</button>
-                    <button class="xzg-set-apply-all" type="button" style="height:28px;padding:0 12px;background:#665500;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#FFD700;cursor:pointer;font-size:12px;" title="将颜色和动画应用到所有编组">应用到全部</button>
+            <div style="display:flex;flex-direction:column;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.12);">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:2px;min-width:0;">
+                        <span style="color:#bbb;font-size:12px;white-space:nowrap;">预设</span>
+                        <button class="xzg-preset-btn" data-preset="0" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">1</button>
+                        <button class="xzg-preset-btn" data-preset="1" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">2</button>
+                        <button class="xzg-preset-btn" data-preset="2" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">3</button>
+                        <button class="xzg-preset-btn" data-preset="3" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">4</button>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
+                        <button class="xzg-save-preset" type="button" style="height:26px;width:60px;padding:0;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:11px;white-space:nowrap;" title="保存当前样式到当前预设">保存预设</button>
+                        <button class="xzg-reset-default" type="button" style="height:26px;width:22px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:14px;line-height:1;padding:0;" title="恢复当前预设">↺</button>
+                    </div>
                 </div>
-                <div style="display:flex;gap:8px;">
-                    <button class="xzg-set-cancel" type="button" style="height:28px;padding:0 16px;background:#333;border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">取消</button>
-                    <button class="xzg-set-apply" type="button" style="height:28px;padding:0 16px;background:#444;border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">应用</button>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.12);">
+                    <button class="xzg-set-apply-all" type="button" style="height:28px;width:62px;padding:0;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;" title="将当前样式应用到所有编组">全局应用</button>
+                    <div style="display:flex;align-items:center;gap:4px;">
+                        <button class="xzg-set-cancel" type="button" style="height:28px;width:44px;padding:0;background:#333;border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">取消</button>
+                        <button class="xzg-set-apply" type="button" style="height:28px;width:44px;padding:0;background:#0a84ff;border:1px solid rgba(90,200,250,0.85);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">应用</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -1058,6 +1207,7 @@ const Workspace2CanvasGroups = {
         spdR.addEventListener('input', () => {
             spdV.textContent = spdR.value;
             group.effectSpeed = parseInt(spdR.value) || 3;
+            self.updateGroupStyle(group.id);
         });
 
         // 边框粗细滑块（实时预览）
@@ -1065,7 +1215,17 @@ const Workspace2CanvasGroups = {
         const bwV = modal.querySelector('.xzg-set-bw-val');
         bwR.addEventListener('input', () => {
             bwV.textContent = bwR.value;
-            group.borderWidth = parseInt(bwR.value) || 2;
+            group.borderWidth = finiteNumber(bwR.value, 2);
+            self.updateGroupStyle(group.id);
+        });
+
+        // 边框阴影滑块（实时预览）
+        const shadowR = modal.querySelector('.xzg-set-shadowsize');
+        const shadowV = modal.querySelector('.xzg-set-shadow-val');
+        shadowR.addEventListener('input', () => {
+            const v = Math.max(0, finiteNumber(shadowR.value, 0));
+            shadowV.textContent = `${v}px`;
+            group.shadowSize = v;
             self.updateGroupStyle(group.id);
         });
 
@@ -1078,6 +1238,15 @@ const Workspace2CanvasGroups = {
             self.updateGroupStyle(group.id);
         });
 
+        // 节点边距滑块（实时重算边界）
+        const cpR = modal.querySelector('.xzg-set-contentpadding');
+        const cpV = modal.querySelector('.xzg-set-cp-val');
+        cpR.addEventListener('input', () => {
+            const v = Math.max(0, parseInt(cpR.value) || 0);
+            cpV.textContent = `${v}px`;
+            self.previewGroupLayout(group.id, { contentPadding: v });
+        });
+
         // 标题大小滑块
         const fsR = modal.querySelector('.xzg-set-fontsize');
         const fsV = modal.querySelector('.xzg-set-fs-val');
@@ -1087,6 +1256,7 @@ const Workspace2CanvasGroups = {
             group.fontSize = v;
             const span = self.groupEls[group.id]?.querySelector('.xzg-group-title-text');
             if (span) span.style.fontSize = v + 'px';
+            self.previewGroupLayout(group.id, { fontSize: v });
         });
 
         // 文字颜色 - 隐藏颜色选择器
@@ -1107,6 +1277,23 @@ const Workspace2CanvasGroups = {
             if (span) span.style.color = c;
         });
 
+        // 阴影颜色 - 隐藏颜色选择器
+        const shadowColorPicker = document.createElement('input');
+        shadowColorPicker.type = 'color';
+        shadowColorPicker.value = group.shadowColor || DEFAULT_SHADOW_COLOR;
+        shadowColorPicker.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;padding:0;border:0;opacity:0;';
+        modal.appendChild(shadowColorPicker);
+        const shadowColorSwatch = modal.querySelector('.xzg-shadow-color-swatch');
+        if (shadowColorSwatch) {
+            shadowColorSwatch.addEventListener('click', () => shadowColorPicker.click());
+        }
+        shadowColorPicker.addEventListener('input', () => {
+            const c = shadowColorPicker.value;
+            if (shadowColorSwatch) shadowColorSwatch.style.background = c;
+            group.shadowColor = c;
+            self.updateGroupStyle(group.id);
+        });
+
         // 隐藏颜色选择器（边框自定义颜色）
         let sel = { h: curH, s: curS, l: curL };
         const hiddenPicker = document.createElement('input');
@@ -1114,10 +1301,12 @@ const Workspace2CanvasGroups = {
         hiddenPicker.value = this.hslToHex(curH, curS, curL);
         hiddenPicker.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;padding:0;border:0;opacity:0;';
         modal.appendChild(hiddenPicker);
+        const colorTrigger = modal.querySelector('.xzg-custom-color-trigger');
 
         const syncColorFromHSL = (h, s, l) => {
             sel = { h, s, l };
             hiddenPicker.value = this.hslToHex(h, s, l);
+            if (colorTrigger) colorTrigger.style.background = hiddenPicker.value;
             // 实时预览到编组框体
             group.colorHue = h;
             group.colorSat = s;
@@ -1127,7 +1316,6 @@ const Workspace2CanvasGroups = {
         syncColorFromHSL(curH, curS, curL);
 
         // 七彩条点击→弹出系统颜色选择器
-        const colorTrigger = modal.querySelector('.xzg-custom-color-trigger');
         if (colorTrigger) {
             colorTrigger.addEventListener('click', () => hiddenPicker.click());
         }
@@ -1140,6 +1328,7 @@ const Workspace2CanvasGroups = {
 
         // 标题栏背景色 - 颜色选择器已在 HTML 中
         const headerColorPicker = modal.querySelector('.xzg-set-headerbgcolor');
+        const headerColorSwatch = modal.querySelector('.xzg-header-color-swatch');
         const headerOpacitySlider = modal.querySelector('.xzg-set-headeropacity');
         const headerOpacityVal = modal.querySelector('.xzg-header-opacity-val');
         let headerAlpha = initAlpha;
@@ -1155,9 +1344,13 @@ const Workspace2CanvasGroups = {
             const b = parseInt(hex.slice(5,7),16);
             const rgba = `rgba(${r},${g},${b},${headerAlpha})`;
             group.headerBgColor = rgba;
+            if (headerColorSwatch) headerColorSwatch.style.background = hex;
             if (headerEl) headerEl.style.background = rgba;
         };
 
+        if (headerColorSwatch) {
+            headerColorSwatch.addEventListener('click', () => headerColorPicker.click());
+        }
         headerColorPicker.addEventListener('input', updateHeaderBg);
         headerColorPicker.addEventListener('change', updateHeaderBg);
 
@@ -1180,23 +1373,100 @@ const Workspace2CanvasGroups = {
             });
         }
 
+        const rgbaFromHeaderControls = () => {
+            const hex = headerColorPicker.value;
+            const r = parseInt(hex.slice(1,3),16);
+            const g = parseInt(hex.slice(3,5),16);
+            const b = parseInt(hex.slice(5,7),16);
+            return `rgba(${r},${g},${b},${headerAlpha})`;
+        };
+
+        const readControlsStyle = () => ({
+            fontSize: parseInt(fsR.value) || 14,
+            colorHue: sel.h,
+            colorSat: sel.s,
+            colorLit: sel.l,
+            effect: effectSel.value,
+            effectSpeed: parseInt(spdR.value) || 3,
+            borderWidth: finiteNumber(bwR.value, 2),
+            borderOpacity: (parseInt(boR.value) || 65) / 100,
+            shadowSize: Math.max(0, finiteNumber(shadowR.value, 0)),
+            shadowColor: shadowColorPicker.value || DEFAULT_SHADOW_COLOR,
+            contentPadding: Math.max(0, parseInt(cpR.value) || 0),
+            headerBgColor: rgbaFromHeaderControls(),
+            titleColor: titleColorPicker.value || '#FFD700',
+        });
+
+        const applyStyleToGroupPreview = (style) => {
+            Object.assign(group, style);
+            self.previewGroupLayout(group.id, {
+                fontSize: group.fontSize,
+                contentPadding: group.contentPadding,
+            });
+            const span = self.groupEls[group.id]?.querySelector('.xzg-group-title-text');
+            if (span) {
+                span.style.fontSize = group.fontSize + 'px';
+                span.style.color = group.titleColor || '#FFD700';
+            }
+            const header = self.groupEls[group.id]?.querySelector('.xzg-group-header');
+            if (header) {
+                header.style.height = Math.max(18, group.fontSize + 4) + 'px';
+                header.style.background = group.headerBgColor || 'rgba(0,0,0,0.4)';
+            }
+            self.updateGroupStyle(group.id);
+        };
+
+        const parseRgbaColor = (rgba, fallbackHex = '#000000', fallbackAlpha = 0.4) => {
+            const m = String(rgba || '').match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/);
+            if (!m) return { hex: fallbackHex, alpha: fallbackAlpha };
+            const hex = '#' + [m[1], m[2], m[3]].map(x => parseInt(x).toString(16).padStart(2, '0')).join('');
+            return { hex, alpha: m[4] !== undefined ? parseFloat(m[4]) : 1 };
+        };
+
+        const applyStyleToControls = (style) => {
+            const merged = { ...self.getBuiltInStyle(), ...style };
+            fsR.value = merged.fontSize;
+            fsV.textContent = String(merged.fontSize);
+            titleColorPicker.value = merged.titleColor || '#FFD700';
+            if (titleColorSwatch) titleColorSwatch.style.background = titleColorPicker.value;
+            syncColorFromHSL(merged.colorHue, merged.colorSat, merged.colorLit);
+            effectSel.value = merged.effect || 'none';
+            spdR.value = merged.effectSpeed || 3;
+            spdV.textContent = spdR.value;
+            bwR.value = finiteNumber(merged.borderWidth, 2);
+            bwV.textContent = `${bwR.value}px`;
+            boR.value = Math.round((merged.borderOpacity ?? 0.65) * 100);
+            boV.textContent = `${boR.value}%`;
+            shadowR.value = Math.max(0, finiteNumber(merged.shadowSize, 0));
+            shadowV.textContent = `${shadowR.value}px`;
+            shadowColorPicker.value = merged.shadowColor || DEFAULT_SHADOW_COLOR;
+            if (shadowColorSwatch) shadowColorSwatch.style.background = shadowColorPicker.value;
+            cpR.value = merged.contentPadding ?? DEFAULT_CONTENT_PADDING;
+            cpV.textContent = `${cpR.value}px`;
+            const header = parseRgbaColor(merged.headerBgColor, '#000000', 0.4);
+            headerColorPicker.value = header.hex;
+            headerAlpha = Math.max(0, Math.min(1, header.alpha));
+            headerOpacitySlider.value = Math.round(headerAlpha * 100);
+            headerOpacityVal.textContent = `${headerOpacitySlider.value}%`;
+            updateHeaderBg();
+            applyStyleToGroupPreview(readControlsStyle());
+        };
+
+        const refreshPresetButtons = () => {
+            modal.querySelectorAll('.xzg-preset-btn').forEach(btn => {
+                const isActive = parseInt(btn.dataset.preset) === activePresetIndex;
+                btn.style.background = isActive ? '#0a84ff' : '#333';
+                btn.style.borderColor = isActive ? 'rgba(90,200,250,0.95)' : 'rgba(255,255,255,0.15)';
+                btn.style.color = isActive ? '#fff' : '#ddd';
+                btn.style.boxShadow = isActive ? '0 0 0 1px rgba(10,132,255,0.35)' : 'none';
+            });
+        };
+        refreshPresetButtons();
+
         const applySettings = (targetGroup) => {
             const newTitle = modal.querySelector('.xzg-set-title').value.trim();
             targetGroup.title = newTitle;
-            targetGroup.fontSize = parseInt(modal.querySelector('.xzg-set-fontsize').value) || 14;
-            targetGroup.colorHue = sel.h; targetGroup.colorSat = sel.s; targetGroup.colorLit = sel.l;
-            targetGroup.effect = modal.querySelector('.xzg-set-effect').value;
-            targetGroup.effectSpeed = parseInt(modal.querySelector('.xzg-set-speed').value) || 3;
-            targetGroup.borderWidth = parseInt(modal.querySelector('.xzg-set-borderwidth').value) || 2;
-            targetGroup.borderOpacity = (parseInt(modal.querySelector('.xzg-set-borderopacity').value) || 65) / 100;
-            targetGroup.headerBgColor = (() => {
-                const hex = headerColorPicker.value;
-                const r = parseInt(hex.slice(1,3),16);
-                const g = parseInt(hex.slice(3,5),16);
-                const b = parseInt(hex.slice(5,7),16);
-                return `rgba(${r},${g},${b},${headerAlpha})`;
-            })();
-            targetGroup.titleColor = titleColorPicker.value || '#FFD700';
+            Object.assign(targetGroup, readControlsStyle());
 
             // 快捷键自定义
             const sk = modal.querySelector('.xzg-set-shortcut').value.trim().toLowerCase();
@@ -1231,6 +1501,13 @@ const Workspace2CanvasGroups = {
             const currentGroup = this.groups[targetGroup.id] || targetGroup;
             Object.assign(currentGroup, targetGroup);
             this.groups[targetGroup.id] = currentGroup;
+            if (currentGroup._previewBounds) {
+                currentGroup.bounds = { ...currentGroup._previewBounds };
+                delete currentGroup._previewBounds;
+                delete currentGroup._previewContentPadding;
+            } else {
+                this.updateGroupBoundsFromMembers(currentGroup);
+            }
             this.rebuildGroupEl(currentGroup);
 
             this.syncGroupsToExtra();
@@ -1263,12 +1540,14 @@ const Workspace2CanvasGroups = {
             if (closeOutFn) document.removeEventListener('mousedown', closeOutFn);
             if (hiddenPicker && hiddenPicker.parentNode) hiddenPicker.remove();
             if (titleColorPicker && titleColorPicker.parentNode) titleColorPicker.remove();
+            if (shadowColorPicker && shadowColorPicker.parentNode) shadowColorPicker.remove();
             if (modal.parentNode) modal.remove();
         };
-        closeOutFn = e => { if (!modal.contains(e.target)) { revertSnapshot(); cleanupModal(); } };
+        closeOutFn = e => { if (!modal.contains(e.target)) { this.setActivePreset(activePresetSnapshot); revertSnapshot(); cleanupModal(); } };
         setTimeout(() => document.addEventListener('mousedown', closeOutFn), 50);
 
         modal.querySelector('.xzg-set-cancel').addEventListener('click', () => {
+            this.setActivePreset(activePresetSnapshot);
             revertSnapshot();
             cleanupModal();
         });
@@ -1277,48 +1556,34 @@ const Workspace2CanvasGroups = {
             cleanupModal();
         });
 
-        modal.querySelector('.xzg-set-default').addEventListener('click', () => {
-            applySettings(group);
-            const saved = this.saveDefaultStyle(this.groups[group.id] || group);
-            window.Workspace2CanvasGroupsLastDefaultStyle = { at: Date.now(), style: saved };
-            cleanupModal();
+        modal.querySelectorAll('.xzg-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                activePresetIndex = this.setActivePreset(parseInt(btn.dataset.preset) || 0);
+                applyStyleToControls(this.readStylePresets()[activePresetIndex]);
+                refreshPresetButtons();
+            });
+        });
+
+        modal.querySelector('.xzg-save-preset').addEventListener('click', () => {
+            this.saveStylePreset(activePresetIndex, readControlsStyle());
+            refreshPresetButtons();
         });
 
         modal.querySelector('.xzg-reset-default').addEventListener('click', () => {
-            const reset = this.resetDefaultStyle();
-            window.Workspace2CanvasGroupsLastDefaultStyle = { at: Date.now(), style: reset, reset: true };
-            cleanupModal();
+            const reset = this.getBuiltInStyle();
+            this.saveStylePreset(activePresetIndex, reset);
+            applyStyleToControls(reset);
+            refreshPresetButtons();
         });
 
-        // 应用到全部
+        // 全局应用
         modal.querySelector('.xzg-set-apply-all').addEventListener('click', () => {
-            const effect = modal.querySelector('.xzg-set-effect').value;
-            const speed = parseInt(modal.querySelector('.xzg-set-speed').value) || 3;
-            const fontSize = parseInt(modal.querySelector('.xzg-set-fontsize').value) || 14;
-            const bw = parseInt(modal.querySelector('.xzg-set-borderwidth').value) || 2;
-            const bo = (parseInt(modal.querySelector('.xzg-set-borderopacity').value) || 65) / 100;
-            const headerBgColor = (() => {
-                const hex = headerColorPicker.value;
-                const r = parseInt(hex.slice(1,3),16);
-                const g = parseInt(hex.slice(3,5),16);
-                const b = parseInt(hex.slice(5,7),16);
-                return `rgba(${r},${g},${b},${headerAlpha})`;
-            })();
+            const style = readControlsStyle();
             for (const [, g2] of Object.entries(this.groups)) {
-                if (g2.id === gid) continue;
-                g2.colorHue = sel.h; g2.colorSat = sel.s; g2.colorLit = sel.l;
-                g2.effect = effect; g2.effectSpeed = speed; g2.fontSize = fontSize;
-                g2.borderWidth = bw; g2.borderOpacity = bo;
-                g2.headerBgColor = headerBgColor;
-                g2.titleColor = titleColorPicker.value || '#FFD700';
-                this.updateGroupStyle(g2.id);
-                const span = this.groupEls[g2.id]?.querySelector('.xzg-group-title-text');
-                if (span) {
-                    span.style.fontSize = fontSize + 'px';
-                    span.style.color = titleColorPicker.value || '#FFD700';
-                }
-                const header = this.groupEls[g2.id]?.querySelector('.xzg-group-header');
-                if (header) header.style.background = headerBgColor;
+                Object.assign(g2, style);
+                delete g2._previewBounds;
+                delete g2._previewContentPadding;
+                this.updateGroupBoundsFromMembers(g2);
             }
             this.rebuildAllEls();
 
@@ -1530,12 +1795,12 @@ const Workspace2CanvasGroups = {
         const scale = app?.canvas?.ds?.scale || 1;
         const hasEffect = g.effect && g.effect !== 'none';
         const refs = this._ensureRefs(el);
-        const bw = (g.borderWidth || 2) * scale;
+        const bw = finiteNumber(g.borderWidth, 2) * scale;
         const bo = g.borderOpacity ?? 0.65;
 
         if (g.bypassed) {
             el.style.border = `${bw}px solid hsla(280,60%,55%,${bo})`;
-            el.style.boxShadow = 'none';
+            this.applyUserShadow(el, g, scale);
             el.style.borderImage = 'none';
             el.style.background = 'transparent';
             if (refs.title) refs.title.style.color = 'hsla(280,60%,65%,0.85)';
@@ -1546,6 +1811,7 @@ const Workspace2CanvasGroups = {
             const s = g.colorSat ?? 100;
             const l = g.colorLit ?? 55;
             if (!hasEffect) el.style.border = `${bw}px solid hsla(${h},${s}%,${l}%,${bo})`;
+            if (!hasEffect) this.applyUserShadow(el, g, scale);
             el.style.background = 'transparent';
             if (refs.title) {
                 if (!hasEffect) {
@@ -1799,6 +2065,9 @@ const Workspace2CanvasGroups = {
             effectSpeed: g.effectSpeed,
             borderWidth: g.borderWidth,
             borderOpacity: g.borderOpacity,
+            shadowSize: Math.max(0, finiteNumber(g.shadowSize, 0)),
+            shadowColor: g.shadowColor || DEFAULT_SHADOW_COLOR,
+            contentPadding: g.contentPadding ?? DEFAULT_CONTENT_PADDING,
             headerBgColor: g.headerBgColor,
             titleColor: g.titleColor,
         };
@@ -1958,6 +2227,9 @@ const Workspace2CanvasGroups = {
                                 effectSpeed: g.effectSpeed,
                                 borderWidth: g.borderWidth,
                                 borderOpacity: g.borderOpacity,
+                                shadowSize: g.shadowSize,
+                                shadowColor: g.shadowColor,
+                                contentPadding: g.contentPadding,
                                 headerBgColor: g.headerBgColor,
                                 titleColor: g.titleColor,
                             };
@@ -2164,15 +2436,25 @@ const Workspace2CanvasGroups = {
                     fontSize: 14, colorHue: 48, colorSat: 100, colorLit: 55,
                     effect: 'none', effectSpeed: 3,
                     borderWidth: 2, borderOpacity: 0.65,
+                    shadowSize: 0, shadowColor: DEFAULT_SHADOW_COLOR,
+                    contentPadding: DEFAULT_CONTENT_PADDING,
                     headerBgColor: 'rgba(0,0,0,0.4)', titleColor: '#FFD700'
                 };
             } else {
                 this.groups[gid].nodeIds = nids;
+                if (this.groups[gid].contentPadding === undefined) this.groups[gid].contentPadding = DEFAULT_CONTENT_PADDING;
+                if (this.groups[gid].shadowSize === undefined) this.groups[gid].shadowSize = 0;
+                if (!this.groups[gid].shadowColor) this.groups[gid].shadowColor = DEFAULT_SHADOW_COLOR;
                 // 确保bounds存在
                 if (!this.groups[gid].bounds) {
                     this.groups[gid].bounds = this.calcBounds(nids) || { x: 0, y: 0, w: 300, h: 200 };
                 }
             }
+        }
+        for (const group of Object.values(this.groups)) {
+            if (group.contentPadding === undefined) group.contentPadding = DEFAULT_CONTENT_PADDING;
+            if (group.shadowSize === undefined) group.shadowSize = 0;
+            if (!group.shadowColor) group.shadowColor = DEFAULT_SHADOW_COLOR;
         }
         for (const gid of Object.keys(this.groups)) if (!this.groups[gid].nodeIds || !this.groups[gid].nodeIds.length) delete this.groups[gid];
         this.rebuildAllEls();

@@ -19,6 +19,7 @@ from .service.node_library_service import read_node_library, write_node_library
 from .service.official_favorites_probe import probe_official_favorites
 from .service.official_favorites_sync import write_workspace2_favorites_to_official
 from .service.safe_path import safe_join, safe_relative_path
+from .service.template_library_service import read_template_library, write_template_library
 from .service.trash_service import (
     empty_trash_to_system_trash,
     list_trash,
@@ -525,6 +526,28 @@ async def workspace2_nodes_library_save(request):
         if not isinstance(library, dict):
             return _json_error("Node library must be a JSON object")
         saved = await asyncio.to_thread(write_node_library, comfy_path, library)
+        return _json_response({"ok": True, "library": saved})
+    except Exception as exc:
+        return _json_error(str(exc), status=400)
+
+
+@server.PromptServer.instance.routes.get("/workspace2/templates/library")
+async def workspace2_templates_library(_request):
+    try:
+        library = await asyncio.to_thread(read_template_library, comfy_path)
+        return _json_response({"ok": True, "library": library})
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.post("/workspace2/templates/library")
+async def workspace2_templates_library_save(request):
+    try:
+        data = await request.json()
+        library = data.get("library")
+        if not isinstance(library, dict):
+            return _json_error("Template library must be a JSON object")
+        saved = await asyncio.to_thread(write_template_library, comfy_path, library)
         return _json_response({"ok": True, "library": saved})
     except Exception as exc:
         return _json_error(str(exc), status=400)

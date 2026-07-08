@@ -1,19 +1,23 @@
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
-import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260706_fix15";
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260708_group_settings_animation_slider_hitbox";
 
 const EXTENSION_NAME = "comfyui.workspace2";
 const DRAG_TYPE = "application/x-workspace2-item";
 const NODE_DRAG_TYPE = "application/x-workspace2-node";
 const COMFY_NODE_DRAG_TYPE = "application/x-comfy-node";
 const FAVORITE_DRAG_TYPE = "application/x-workspace2-favorite";
+const TEMPLATE_DRAG_TYPE = "application/x-workspace2-template";
+const TEMPLATE_GROUP_DRAG_TYPE = "application/x-workspace2-template-group";
 const FONT_SCALE_KEY = "workspace2.fontScale";
 const FONT_SCALE_LINEAR_KEY = "workspace2.fontScale.linear";
 const WORKFLOW_SORT_KEY = "workspace2.workflows.sort";
 const WORKFLOW_ORDER_KEY = "workspace2.workflows.customOrder";
 const WORKFLOW_CUSTOM_ORDER_KEY = "workspace2.workflows.customOrderEnabled";
 const WORKFLOW_FOLDER_FIRST_KEY = "workspace2.workflows.folderFirst";
+const WORKFLOW_RECENT_KEY = "workspace2.workflows.recent";
+const WORKFLOW_RECENT_LIMIT_KEY = "workspace2.workflows.recentLimit";
 const NODE_FONT_SCALE_KEY = "workspace2.nodes.fontScale";
 const NODE_ROW_SPACING_KEY = "workspace2.nodes.rowSpacing";
 const NODE_UI_SCALE_KEY = "workspace2.nodes.uiScale";
@@ -22,26 +26,108 @@ const NODE_SORT_KEY = "workspace2.nodes.sort";
 const NODE_CUSTOM_ORDER_KEY = "workspace2.nodes.customOrder";
 const NODE_CUSTOM_ORDER_ENABLED_KEY = "workspace2.nodes.customOrderEnabled";
 const NODE_PREVIEW_MODE_KEY = "workspace2.nodes.previewMode";
+const TEMPLATE_SORT_KEY = "workspace2.templates.sort";
+const TEMPLATE_UI_SCALE_KEY = "workspace2.templates.uiScale";
 const OFFICIAL_NODE_ADAPTER_KEY = "workspace2.officialNodeAdapter";
 const CANVAS_GROUP_CTRL_G_KEY = "workspace2.canvasGroups.ctrlGCreate";
+const WORKSPACE2_MODULE_KEY = "workspace2.activeModule";
+const WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY = "workspace2.shortcuts.altCOpenTemplates";
+const WORKSPACE2_SHORTCUT_CLOSE_SAME_KEY = "workspace2.shortcuts.closeSameModule";
 const DEFAULT_LOCALE = "en-US";
 const NODE_DEFAULT_GROUP_ID = "default";
-const WORKFLOWS_TAB_ID = "workspace2-workflows";
-const NODES_TAB_ID = "workspace2-nodes";
+const WORKSPACE2_TAB_ID = "workspace2";
 const CANVAS_GROUPS_TAB_ID = "workspace2-canvas-groups";
+const WORKSPACE2_MODULES = ["workflows", "nodes", "templates"];
 const WORKFLOW_SORTS = ["nameAsc", "nameDesc", "updatedDesc", "updatedAsc"];
 const WORKFLOW_SEARCH_RENDER_DELAY = 100;
 const NODE_SECTION_FILTERS = ["bookmarked", "comfy", "extensions"];
 const NODE_SORTS = ["original", "alphabetical"];
 const NODE_PREVIEW_MODES = ["detailed", "compact"];
+const TEMPLATE_SORTS = ["manual", "nameAsc", "nameDesc", "updatedDesc", "updatedAsc"];
 const NODE_SEARCH_RESULT_LIMIT = 64;
 const NODE_SEARCH_RENDER_DELAY = 100;
+const NODE_OBJECT_INFO_CACHE_DB = "workspace2-node-cache";
+const NODE_OBJECT_INFO_CACHE_STORE = "entries";
+const NODE_OBJECT_INFO_CACHE_KEY = "objectInfo";
+const NODE_OBJECT_INFO_FETCH_TIMEOUT = 45000;
 const DEFAULT_FOLDER_ICON_CLASS = "pi pi-folder";
 const DEFAULT_FOLDER_OPEN_ICON_CLASS = "pi pi-folder-open";
 const DEFAULT_FILE_ICON_CLASS = "pi pi-file";
 
 const FALLBACK_STRINGS = {
   "zh-CN": {
+    "workspace.title": "Workspace2",
+    "workspace.tooltip": "Workspace2",
+    "workspace.tab.workflows": "工作流",
+    "workspace.tab.nodes": "节点",
+    "workspace.tab.templates": "模板",
+    "settings.title": "设置",
+    "settings.shortcuts": "快捷键",
+    "settings.behavior": "打开行为",
+    "settings.recentWorkflows": "打开记录数量",
+    "settings.nodeCache": "节点缓存",
+    "settings.about": "关于",
+    "settings.ctrlG": "启用 Workspace2 编组",
+    "settings.ctrlGHelp": "开启后，Ctrl+G 会替换 ComfyUI 默认编组。",
+    "settings.altCOpenTemplates": "Alt+C 保存后自动打开模板",
+    "settings.closeSameModule": "重复按当前标签快捷键时关闭面板",
+    "settings.shortcuts.workflow": "工作流面板",
+    "settings.shortcuts.nodes": "节点面板",
+    "settings.shortcuts.templates": "模板面板",
+    "settings.shortcuts.saveTemplate": "保存模板",
+    "settings.shortcuts.createGroup": "Workspace2 编组",
+    "settings.shortcuts.ungroup": "取消编组",
+    "settings.shortcuts.shiftLeftClickKey": "Shift + 左键",
+    "settings.shortcuts.toggleGroupIgnore": "切换是否忽略编组",
+    "settings.shortcutsHelp": "常用快捷键",
+    "settings.cacheCount": "缓存节点：{count}",
+    "settings.cacheUpdated": "更新时间：{time}",
+    "settings.cacheEmpty": "暂无缓存",
+    "settings.clearNodeCache": "清空节点缓存",
+    "settings.nodeCacheCleared": "节点缓存已清空",
+    "settings.close": "关闭",
+    "settings.version": "版本：{version}",
+    "settings.github": "GitHub：ZiYao00/ComfyUI-Workspace2",
+    "confirm.cancel": "取消",
+    "confirm.delete": "删除",
+    "confirm.moveToSystemTrash": "移到系统回收站",
+    "confirm.emptyTrash": "清空回收站",
+    "trash.systemDeleteTitle": "移到系统回收站",
+    "trash.emptyTitle": "清空 Workspace2 回收站",
+    "trash.moveToSystem": "清空到系统回收站",
+    "trash.moveAllToSystemShort": "清空到系统回收站",
+    "status.systemTrashPartial": "部分项目移到系统回收站失败：{count} 个。{details}",
+    "workflows.title": "工作流2",
+    "workflows.current": "当前工作流",
+    "workflows.recent": "最近工作流",
+    "workflows.currentEmpty": "未从 Workflows2 打开工作流",
+    "nodes.title": "节点2",
+    "nodes.status": "{count} 个节点",
+    "nodes.searchPlaceholder": "搜索节点",
+    "nodes.categoryBookmarked": "收藏",
+    "nodes.categoryComfy": "Comfy",
+    "nodes.categoryExtensions": "扩展",
+    "nodes.view.bookmarked": "收藏",
+    "nodes.view.comfy": "Comfy",
+    "nodes.view.extensions": "扩展",
+    "nodes.moveToFavoriteRoot": "移到收藏根位置",
+    "nodes.moveToFavoriteRootTitle": "拖拽收藏节点到这里，移到收藏根位置",
+    "nodes.loadingDefinitions": "正在加载节点信息，插件较多时首次打开可能需要几秒。",
+    "nodes.updatingDefinitions": "正在后台更新完整节点信息...",
+    "nodes.officialCategory.3d": "3D",
+    "nodes.officialCategory.advanced": "高级",
+    "nodes.officialCategory.audio": "音频",
+    "nodes.officialCategory.conditioning": "条件",
+    "nodes.officialCategory.experimental": "实验性",
+    "nodes.officialCategory.image": "图像",
+    "nodes.officialCategory.latent": "潜空间",
+    "nodes.officialCategory.model": "模型",
+    "nodes.officialCategory.text": "文本",
+    "nodes.officialCategory.video": "视频",
+    "search.placeholder": "搜索工作流",
+    "root.move": "移到根目录",
+    "status.loading": "正在加载...",
+    "status.error": "错误：{message}",
     "workflows.sort.nameAsc": "名称 A-Z",
     "workflows.sort.nameDesc": "名称 Z-A",
     "workflows.sort.updatedDesc": "修改时间新到旧",
@@ -50,13 +136,16 @@ const FALLBACK_STRINGS = {
     "workflows.folderFirst": "优先文件夹",
     "workflows.sortTitle": "工作流排序：{sort}。点击打开菜单。",
     "workflows.reorderHandle": "拖动调整顺序",
+    "font.size": "列表字号",
     "search.clear": "清空搜索",
     "nodes.customOrder": "自定义顺序",
     "nodes.reorderHandle": "拖动调整顺序",
     "nodes.defaultGroupName": "新建分组",
     "nodes.previewModeDetailed": "节点预览：完整",
     "nodes.previewModeCompact": "节点预览：紧凑",
+    "nodes.uiScaleTitle": "列表字号",
     "nodes.categoryUnknown": "来源未知",
+    "nodes.deleteGroupTitle": "删除收藏分组",
     "menu.newSubfolder": "新建子文件夹",
     "row.openLocation": "打开工作流位置",
     "folder.personalize": "个性化",
@@ -88,8 +177,119 @@ const FALLBACK_STRINGS = {
     "canvasGroups.toggleBypass": "绕过 / 恢复编组",
     "canvasGroups.delete": "删除编组",
     "canvasGroups.confirmDelete": "删除编组“{name}”？不会删除节点。",
+    "templates.title": "模板",
+    "templates.status": "{count} 个模板",
+    "templates.searchPlaceholder": "搜索模板",
+    "templates.saveSelected": "保存选中节点为模板",
+    "templates.empty": "还没有模板。选择画布上的节点后按 Alt+C 保存。",
+    "templates.noMatches": "没有匹配的模板。",
+    "templates.promptName": "模板名称",
+    "templates.defaultName": "节点模板",
+    "templates.saved": "已保存模板：{name}",
+    "templates.selectNodesFirst": "请先在画布上选中节点。",
+    "templates.canvasUnavailable": "当前画布不可用。",
+    "templates.createFailed": "无法创建节点：{type}",
+    "templates.restoreMissing": "有 {count} 个节点无法创建：{types}",
+    "templates.dropHint": "拖到画布创建模板",
+    "templates.pendingPlace": "点击画布放置模板：{name}",
+    "templates.meta": "{nodes} 个节点 · {links} 条连线",
+    "templates.rename": "重命名",
+    "templates.placeCenter": "放置到画布中心",
+    "templates.delete": "删除模板",
+    "templates.copyName": "复制模板名称",
+    "templates.confirmDelete": "删除模板“{name}”？",
+    "templates.deleteTitle": "删除模板",
+    "templates.deleted": "已删除模板",
+    "templates.newGroup": "新建模板分组",
+    "templates.defaultGroupName": "新建模板分组",
+    "templates.renameGroup": "重命名分组",
+    "templates.deleteGroup": "删除分组",
+    "templates.confirmDeleteGroup": "删除分组“{name}”？其中的模板会移到模板根位置。",
+    "templates.deleteGroupTitle": "删除模板分组",
+    "templates.moveToRoot": "移到模板根位置",
+    "templates.moveToRootTitle": "拖拽模板到这里，移到模板根位置",
+    "templates.emptyGroup": "这个分组还没有模板。",
+    "templates.uiScaleTitle": "列表字号",
+    "templates.sort.manual": "自定义顺序",
+    "templates.sort.nameAsc": "名称 A-Z",
+    "templates.sort.nameDesc": "名称 Z-A",
+    "templates.sort.updatedDesc": "最近更新",
+    "templates.sort.updatedAsc": "最早更新",
+    "templates.sortTitle": "模板排序：{sort}。点击打开菜单。",
   },
   "en-US": {
+    "workspace.title": "Workspace2",
+    "workspace.tooltip": "Workspace2",
+    "workspace.tab.workflows": "Workflows",
+    "workspace.tab.nodes": "Nodes",
+    "workspace.tab.templates": "Templates",
+    "settings.title": "Settings",
+    "settings.shortcuts": "Shortcuts",
+    "settings.behavior": "Open behavior",
+    "settings.recentWorkflows": "Open history count",
+    "settings.nodeCache": "Node cache",
+    "settings.about": "About",
+    "settings.ctrlG": "Enable Workspace2 groups",
+    "settings.ctrlGHelp": "When enabled, Ctrl+G replaces the ComfyUI default group command.",
+    "settings.altCOpenTemplates": "Open Templates after Alt+C saves",
+    "settings.closeSameModule": "Close the panel when pressing the current tab shortcut again",
+    "settings.shortcuts.workflow": "Workflows panel",
+    "settings.shortcuts.nodes": "Nodes panel",
+    "settings.shortcuts.templates": "Templates panel",
+    "settings.shortcuts.saveTemplate": "Save template",
+    "settings.shortcuts.createGroup": "Workspace2 group",
+    "settings.shortcuts.ungroup": "Ungroup",
+    "settings.shortcuts.shiftLeftClickKey": "Shift + Left Click",
+    "settings.shortcuts.toggleGroupIgnore": "Toggle group ignore",
+    "settings.shortcutsHelp": "Common shortcuts",
+    "settings.cacheCount": "Cached nodes: {count}",
+    "settings.cacheUpdated": "Updated: {time}",
+    "settings.cacheEmpty": "No cache yet",
+    "settings.clearNodeCache": "Clear node cache",
+    "settings.nodeCacheCleared": "Node cache cleared",
+    "settings.close": "Close",
+    "settings.version": "Version: {version}",
+    "settings.github": "GitHub: ZiYao00/ComfyUI-Workspace2",
+    "confirm.cancel": "Cancel",
+    "confirm.delete": "Delete",
+    "confirm.moveToSystemTrash": "Move to system trash",
+    "confirm.emptyTrash": "Empty trash",
+    "trash.systemDeleteTitle": "Move to system trash",
+    "trash.emptyTitle": "Empty Workspace2 trash",
+    "trash.moveToSystem": "Move All to System Trash",
+    "trash.moveAllToSystemShort": "Move All to System Trash",
+    "status.systemTrashPartial": "Move to system trash partial: {count} failed. {details}",
+    "workflows.title": "Workflows 2",
+    "workflows.current": "Current workflow",
+    "workflows.recent": "Recent workflows",
+    "workflows.currentEmpty": "No workflow opened from Workflows2",
+    "nodes.title": "Nodes 2",
+    "nodes.status": "{count} nodes",
+    "nodes.searchPlaceholder": "Search nodes",
+    "nodes.categoryBookmarked": "Favorites",
+    "nodes.categoryComfy": "Comfy",
+    "nodes.categoryExtensions": "Extensions",
+    "nodes.view.bookmarked": "Favorites",
+    "nodes.view.comfy": "Comfy",
+    "nodes.view.extensions": "Extensions",
+    "nodes.moveToFavoriteRoot": "Move to Favorites Root",
+    "nodes.moveToFavoriteRootTitle": "Drop a favorite node here to move it to the favorites root",
+    "nodes.loadingDefinitions": "Loading node information. Large plugin setups may take a few seconds the first time.",
+    "nodes.updatingDefinitions": "Updating full node information in the background...",
+    "nodes.officialCategory.3d": "3D",
+    "nodes.officialCategory.advanced": "Advanced",
+    "nodes.officialCategory.audio": "Audio",
+    "nodes.officialCategory.conditioning": "Conditioning",
+    "nodes.officialCategory.experimental": "Experimental",
+    "nodes.officialCategory.image": "Image",
+    "nodes.officialCategory.latent": "Latent",
+    "nodes.officialCategory.model": "Model",
+    "nodes.officialCategory.text": "Text",
+    "nodes.officialCategory.video": "Video",
+    "search.placeholder": "Search workflows",
+    "root.move": "Move to Root",
+    "status.loading": "Loading...",
+    "status.error": "Error: {message}",
     "workflows.sort.nameAsc": "Name A-Z",
     "workflows.sort.nameDesc": "Name Z-A",
     "workflows.sort.updatedDesc": "Newest modified",
@@ -98,13 +298,16 @@ const FALLBACK_STRINGS = {
     "workflows.folderFirst": "Folders first",
     "workflows.sortTitle": "Workflow sort: {sort}. Click to open menu.",
     "workflows.reorderHandle": "Drag to reorder",
+    "font.size": "List text size",
     "search.clear": "Clear search",
     "nodes.customOrder": "Custom order",
     "nodes.reorderHandle": "Drag to reorder",
     "nodes.defaultGroupName": "New group",
     "nodes.previewModeDetailed": "Node preview: Detailed",
     "nodes.previewModeCompact": "Node preview: Compact",
+    "nodes.uiScaleTitle": "List text size",
     "nodes.categoryUnknown": "Unknown source",
+    "nodes.deleteGroupTitle": "Delete favorite group",
     "menu.newSubfolder": "New subfolder",
     "row.openLocation": "Show workflow in folder",
     "folder.personalize": "Personalize",
@@ -136,6 +339,45 @@ const FALLBACK_STRINGS = {
     "canvasGroups.toggleBypass": "Bypass / restore group",
     "canvasGroups.delete": "Delete group",
     "canvasGroups.confirmDelete": "Delete group \"{name}\"? Nodes will not be deleted.",
+    "templates.title": "Templates",
+    "templates.status": "{count} templates",
+    "templates.searchPlaceholder": "Search templates",
+    "templates.saveSelected": "Save selected nodes as template",
+    "templates.empty": "No templates yet. Select canvas nodes and press Alt+C to save.",
+    "templates.noMatches": "No matching templates.",
+    "templates.promptName": "Template name",
+    "templates.defaultName": "Node template",
+    "templates.saved": "Saved template: {name}",
+    "templates.selectNodesFirst": "Select nodes on the canvas first.",
+    "templates.canvasUnavailable": "Canvas is not available.",
+    "templates.createFailed": "Could not create node: {type}",
+    "templates.restoreMissing": "{count} nodes could not be created: {types}",
+    "templates.dropHint": "Drag to canvas to create template",
+    "templates.pendingPlace": "Click the canvas to place template: {name}",
+    "templates.meta": "{nodes} nodes · {links} links",
+    "templates.rename": "Rename",
+    "templates.placeCenter": "Place at canvas center",
+    "templates.delete": "Delete template",
+    "templates.copyName": "Copy template name",
+    "templates.confirmDelete": "Delete template \"{name}\"?",
+    "templates.deleteTitle": "Delete template",
+    "templates.deleted": "Deleted template",
+    "templates.newGroup": "New template group",
+    "templates.defaultGroupName": "New template group",
+    "templates.renameGroup": "Rename group",
+    "templates.deleteGroup": "Delete group",
+    "templates.confirmDeleteGroup": "Delete group \"{name}\"? Templates in it will move to the template root.",
+    "templates.deleteGroupTitle": "Delete template group",
+    "templates.moveToRoot": "Move to Template Root",
+    "templates.moveToRootTitle": "Drop a template here to move it to the template root",
+    "templates.emptyGroup": "No templates in this group.",
+    "templates.uiScaleTitle": "List text size",
+    "templates.sort.manual": "Custom order",
+    "templates.sort.nameAsc": "Name A-Z",
+    "templates.sort.nameDesc": "Name Z-A",
+    "templates.sort.updatedDesc": "Recently updated",
+    "templates.sort.updatedAsc": "Oldest updated",
+    "templates.sortTitle": "Template sort: {sort}. Click to open menu.",
   },
 };
 const CORE_NODE_MODULES = new Set(["nodes", "comfy_extras", "comfy_api_nodes"]);
@@ -252,11 +494,43 @@ const canvasGroupsState = {
   renderTarget: null,
 };
 
+const workspaceState = {
+  activeModule: normalizeWorkspaceModule(localStorage.getItem(WORKSPACE2_MODULE_KEY)),
+  renderTarget: null,
+  settingsElement: null,
+  settingsCloseHandler: null,
+};
+
+const templatesState = {
+  query: "",
+  library: null,
+  loading: false,
+  error: "",
+  renderTarget: null,
+  draggingTemplate: null,
+  draggingGroupId: "",
+  pendingTemplate: null,
+  editingTemplateId: "",
+  editingGroupId: "",
+  expanded: new Set(),
+  sort: TEMPLATE_SORTS.includes(localStorage.getItem(TEMPLATE_SORT_KEY)) ? localStorage.getItem(TEMPLATE_SORT_KEY) : "manual",
+  uiScale: Number(localStorage.getItem(TEMPLATE_UI_SCALE_KEY) || "50"),
+  contextMenuElement: null,
+  contextMenu: null,
+  contextMenuCloseHandler: null,
+  sortMenuElement: null,
+  sortMenuCloseHandler: null,
+};
+
 const nodesState = {
   query: "",
   library: null,
   objectInfo: null,
   loading: false,
+  objectInfoLoading: false,
+  objectInfoError: "",
+  objectInfoCachedAt: 0,
+  objectInfoFromCache: false,
   error: "",
   expanded: new Set([NODE_DEFAULT_GROUP_ID, "__bookmarked__", "__comfy__", "__extensions__"]),
   draggingNode: null,
@@ -293,6 +567,7 @@ const nodesState = {
   nodeDefinitionsCache: null,
   nodeDefinitionMapCache: null,
   nodeDefinitionsSource: null,
+  loadPromise: null,
 };
 
 function ownKeys(value) {
@@ -692,6 +967,10 @@ function cssEscape(value) {
   return String(value).replace(/["\\]/g, "\\$&");
 }
 
+function normalizeWorkspaceModule(moduleId) {
+  return WORKSPACE2_MODULES.includes(moduleId) ? moduleId : "workflows";
+}
+
 function scrollSnapshot(el) {
   const tree = el?.querySelector?.(".workspace2-tree");
   const active = document.activeElement;
@@ -726,7 +1005,21 @@ function t(key, values = {}) {
   const localeFallback = FALLBACK_STRINGS[state.locale]?.[key];
   const defaultFallback = FALLBACK_STRINGS[DEFAULT_LOCALE]?.[key];
   const template = localeFallback || state.strings[key] || defaultFallback || key;
+  if (template === key) {
+    warnMissingTranslation(key);
+  }
   return String(template).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? "");
+}
+
+function warnMissingTranslation(key) {
+  if (!warnMissingTranslation.seen) {
+    warnMissingTranslation.seen = new Set();
+  }
+  if (warnMissingTranslation.seen.has(key)) {
+    return;
+  }
+  warnMissingTranslation.seen.add(key);
+  console.warn(`[Workspace2] Missing translation key: ${key}`);
 }
 
 function isEditableTarget(target) {
@@ -757,6 +1050,23 @@ function setupWorkspaceShortcuts() {
   }
   setupWorkspaceShortcuts.ready = true;
   const handler = (event) => {
+    if (
+      !event.workspace2Handled
+      && event.altKey
+      && !event.ctrlKey
+      && !event.shiftKey
+      && !event.metaKey
+      && !event.repeat
+      && event.code === "KeyC"
+      && !isEditableTarget(event.target)
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      event.workspace2Handled = true;
+      saveSelectedNodesAsTemplateFromShortcut();
+      return;
+    }
     if (event.workspace2Handled || event.altKey || event.metaKey || event.repeat) {
       return;
     }
@@ -767,14 +1077,21 @@ function setupWorkspaceShortcuts() {
       event.preventDefault();
       event.stopPropagation();
       event.workspace2Handled = true;
-      activateWorkspace2Tab(WORKFLOWS_TAB_ID);
+      activateWorkspace2Module("workflows");
       return;
     }
     if (event.shiftKey && !event.ctrlKey && (event.code === "KeyN" || event.code === "Digit2")) {
       event.preventDefault();
       event.stopPropagation();
       event.workspace2Handled = true;
-      activateWorkspace2Tab(NODES_TAB_ID);
+      activateWorkspace2Module("nodes");
+      return;
+    }
+    if (event.shiftKey && !event.ctrlKey && event.code === "Digit3") {
+      event.preventDefault();
+      event.stopPropagation();
+      event.workspace2Handled = true;
+      activateWorkspace2Module("templates");
       return;
     }
     if (event.shiftKey && !event.ctrlKey && event.code === "KeyG") {
@@ -804,6 +1121,57 @@ function isWorkspace2CtrlGCreateEnabled() {
   return localStorage.getItem(CANVAS_GROUP_CTRL_G_KEY) !== "0";
 }
 
+function isWorkspace2PanelOpen() {
+  return Boolean(workspaceState.renderTarget?.isConnected && workspaceState.renderTarget.querySelector?.(".workspace2-shell"));
+}
+
+function closeWorkspace2Sidebar() {
+  const manager = app.extensionManager;
+  const methodNames = [
+    "closeSidebarTab",
+    "hideSidebarTab",
+    "toggleSidebarTab",
+    "closeSidebar",
+    "hideSidebar",
+  ];
+  for (const methodName of methodNames) {
+    if (typeof manager?.[methodName] !== "function") {
+      continue;
+    }
+    try {
+      manager[methodName](WORKSPACE2_TAB_ID);
+      return true;
+    } catch (error) {
+      console.debug(`[Workspace2] ${methodName} close failed`, error);
+    }
+  }
+  const element = findWorkspace2SidebarTabElement(WORKSPACE2_TAB_ID);
+  if (element) {
+    element.click();
+    return true;
+  }
+  return false;
+}
+
+function activateWorkspace2Module(moduleId) {
+  const nextModule = normalizeWorkspaceModule(moduleId);
+  if (isWorkspace2ShortcutCloseSameEnabled() && isWorkspace2PanelOpen() && workspaceState.activeModule === nextModule) {
+    return closeWorkspace2Sidebar();
+  }
+  return openWorkspace2Module(nextModule);
+}
+
+function openWorkspace2Module(moduleId) {
+  const nextModule = normalizeWorkspaceModule(moduleId);
+  workspaceState.activeModule = nextModule;
+  localStorage.setItem(WORKSPACE2_MODULE_KEY, nextModule);
+  if (isWorkspace2PanelOpen()) {
+    renderWorkspace2Panel(workspaceState.renderTarget);
+    return true;
+  }
+  return activateWorkspace2Tab(WORKSPACE2_TAB_ID);
+}
+
 function notifyCtrlGConflict() {
   if (Date.now() - (notifyCtrlGConflict.lastShown || 0) < 5000) {
     return;
@@ -818,6 +1186,204 @@ function notifyCtrlGConflict() {
   } else {
     console.warn(`[Workspace2] ${message}`);
   }
+}
+
+function isWorkspace2AltCOpenTemplatesEnabled() {
+  return localStorage.getItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY) !== "0";
+}
+
+function isWorkspace2ShortcutCloseSameEnabled() {
+  return localStorage.getItem(WORKSPACE2_SHORTCUT_CLOSE_SAME_KEY) !== "0";
+}
+
+function closeWorkspaceSettings() {
+  if (workspaceState.settingsCloseHandler) {
+    window.removeEventListener("keydown", workspaceState.settingsCloseHandler, true);
+    workspaceState.settingsCloseHandler = null;
+  }
+  workspaceState.settingsElement?.remove();
+  workspaceState.settingsElement = null;
+}
+
+function formatTimestamp(timestamp) {
+  const value = Number(timestamp || 0);
+  if (!value) {
+    return t("settings.cacheEmpty");
+  }
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return String(value);
+  }
+}
+
+function settingsCheckbox(label, checked, onChange) {
+  const row = document.createElement("div");
+  row.className = "workspace2-settings-row";
+  const wrapper = document.createElement("label");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = checked;
+  input.addEventListener("change", () => onChange(input.checked));
+  wrapper.append(input, document.createTextNode(label));
+  row.append(wrapper);
+  return row;
+}
+
+function settingsSection(title, children = []) {
+  const section = document.createElement("section");
+  section.className = "workspace2-settings-section";
+  const heading = document.createElement("div");
+  heading.className = "workspace2-settings-section-title";
+  heading.textContent = title;
+  section.append(heading, ...children);
+  return section;
+}
+
+function settingsHelp(text) {
+  const help = document.createElement("div");
+  help.className = "workspace2-settings-help";
+  help.textContent = text;
+  return help;
+}
+
+function settingsShortcutGrid() {
+  const shortcuts = [
+    ["Shift + 1", t("settings.shortcuts.workflow")],
+    ["Shift + 2", t("settings.shortcuts.nodes")],
+    ["Shift + 3", t("settings.shortcuts.templates")],
+    ["Alt + C", t("settings.shortcuts.saveTemplate")],
+    ["Ctrl + G", t("settings.shortcuts.createGroup")],
+    ["Shift + G", t("settings.shortcuts.ungroup")],
+    [t("settings.shortcuts.shiftLeftClickKey"), t("settings.shortcuts.toggleGroupIgnore")],
+  ];
+  const grid = document.createElement("div");
+  grid.className = "workspace2-settings-shortcut-grid";
+  grid.style.cssText = "display:grid;grid-auto-flow:column;grid-template-rows:repeat(4,auto);grid-template-columns:1fr 1fr;gap:6px 12px;margin:4px 0 10px;";
+  for (const [keys, label] of shortcuts) {
+    const item = document.createElement("div");
+    item.className = "workspace2-settings-shortcut-item";
+    item.style.cssText = "display:grid;grid-template-columns:72px minmax(0,1fr);gap:7px;align-items:center;min-width:0;font-size:12px;line-height:1.35;";
+    const key = document.createElement("span");
+    key.textContent = keys;
+    key.style.cssText = "color:var(--descrip-text,#aaa);font-weight:400;white-space:nowrap;";
+    const text = document.createElement("span");
+    text.textContent = label;
+    text.style.cssText = "color:var(--descrip-text,#aaa);font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+    item.append(key, text);
+    grid.append(item);
+  }
+  return grid;
+}
+
+function settingsRange(label, value, { min, max, step = 1, snap, onChange }) {
+  const row = document.createElement("div");
+  row.className = "workspace2-settings-row";
+  const text = document.createElement("span");
+  text.textContent = label;
+  const control = document.createElement("label");
+  control.className = "workspace2-settings-range";
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = String(min);
+  slider.max = String(max);
+  slider.step = String(step);
+  slider.value = String(value);
+  isolateComfyKeys(slider);
+  const output = document.createElement("span");
+  output.textContent = String(value);
+  slider.addEventListener("input", () => {
+    const next = typeof snap === "function" ? snap(slider.value) : Number(slider.value);
+    slider.value = String(next);
+    output.textContent = String(next);
+    onChange?.(next);
+  });
+  control.append(slider, output);
+  row.append(text, control);
+  return row;
+}
+
+function openWorkspaceSettings() {
+  closeWorkspaceSettings();
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "workspace2-settings-backdrop";
+  backdrop.addEventListener("pointerdown", (event) => {
+    if (event.target === backdrop) {
+      closeWorkspaceSettings();
+    }
+  });
+
+  const dialog = document.createElement("div");
+  dialog.className = "workspace2-settings-dialog";
+  dialog.addEventListener("pointerdown", (event) => event.stopPropagation());
+  dialog.addEventListener("click", (event) => event.stopPropagation());
+
+  const header = document.createElement("div");
+  header.className = "workspace2-settings-header";
+  const title = document.createElement("div");
+  title.className = "workspace2-settings-title";
+  title.textContent = t("settings.title");
+  const close = toolbarButton("x", t("settings.close"), closeWorkspaceSettings);
+  header.append(title, close);
+
+  const shortcuts = settingsSection(t("settings.shortcuts"), [
+    settingsShortcutGrid(),
+    settingsCheckbox(t("settings.ctrlG"), isWorkspace2CtrlGCreateEnabled(), (checked) => {
+      localStorage.setItem(CANVAS_GROUP_CTRL_G_KEY, checked ? "1" : "0");
+    }),
+    settingsHelp(t("settings.ctrlGHelp")),
+  ]);
+
+  const behavior = settingsSection(t("settings.behavior"), [
+    settingsCheckbox(t("settings.altCOpenTemplates"), isWorkspace2AltCOpenTemplatesEnabled(), (checked) => {
+      localStorage.setItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY, checked ? "1" : "0");
+    }),
+    settingsRange(t("settings.recentWorkflows"), workflowRecentLimit(), {
+      min: 2,
+      max: 20,
+      snap: snapWorkflowRecentLimit,
+      onChange: (value) => {
+        setWorkflowRecentLimit(value);
+      },
+    }),
+  ]);
+
+  const cacheCount = nodesState.objectInfo ? Object.keys(nodesState.objectInfo).length : 0;
+  const cacheInfo = settingsHelp(cacheCount
+    ? `${t("settings.cacheCount", { count: cacheCount })}\n${t("settings.cacheUpdated", { time: formatTimestamp(nodesState.objectInfoCachedAt) })}`
+    : t("settings.cacheEmpty"));
+  const clearCache = toolbarButton("trash", t("settings.clearNodeCache"), async () => {
+    try {
+      await clearCachedObjectInfo();
+      cacheInfo.textContent = t("settings.nodeCacheCleared");
+    } catch (error) {
+      cacheInfo.textContent = error.message || String(error);
+    }
+  });
+  const cacheRow = document.createElement("div");
+  cacheRow.className = "workspace2-settings-row";
+  cacheRow.append(cacheInfo, clearCache);
+  const nodeCache = settingsSection(t("settings.nodeCache"), [cacheRow]);
+
+  const about = settingsSection(t("settings.about"), [
+    settingsHelp(t("settings.version", { version: "0.2.0-beta" })),
+    settingsHelp(t("settings.github")),
+  ]);
+
+  dialog.append(header, shortcuts, behavior, nodeCache, about);
+  backdrop.append(dialog);
+  document.body.append(backdrop);
+  workspaceState.settingsElement = backdrop;
+
+  const closeOnEscape = (event) => {
+    if (event.key !== "Escape" || workspaceState.settingsElement !== backdrop) {
+      return;
+    }
+    closeWorkspaceSettings();
+  };
+  workspaceState.settingsCloseHandler = closeOnEscape;
+  window.addEventListener("keydown", closeOnEscape, true);
 }
 
 function registerWorkspace2CanvasGroupCommands() {
@@ -894,11 +1460,9 @@ function findWorkspace2SidebarTabElement(tabId) {
     }
   }
 
-  const expectedTitle = tabId === WORKFLOWS_TAB_ID
-    ? t("workflows.title")
-    : tabId === NODES_TAB_ID
-      ? t("nodes.title")
-      : t("canvasGroups.title");
+  const expectedTitle = tabId === WORKSPACE2_TAB_ID
+    ? t("workspace.title")
+    : t("canvasGroups.title");
   const candidates = document.querySelectorAll("button,[role='tab'],[role='button'],.p-tab,.p-button");
   for (const candidate of candidates) {
     if (!(candidate instanceof HTMLElement)) {
@@ -924,21 +1488,174 @@ function isolateComfyKeys(element) {
   return element;
 }
 
+let workspace2ConfirmClose = null;
+let workspace2InlineConfirmClose = null;
+
+function closeWorkspace2OverlaysForConfirm() {
+  try { hideNodePreview(); } catch (error) {}
+  try { closeTemplateContextMenu(); } catch (error) {}
+  try { closeNodeContextMenu(); } catch (error) {}
+  try { closeContextMenu(); } catch (error) {}
+}
+
+function workspace2Confirm({ title = "", message = "", confirmText = t("confirm.delete"), danger = true } = {}) {
+  if (workspace2ConfirmClose) {
+    workspace2ConfirmClose(false);
+  }
+  closeWorkspace2OverlaysForConfirm();
+  return new Promise((resolve) => {
+    let settled = false;
+    const backdrop = document.createElement("div");
+    backdrop.className = "workspace2-confirm-backdrop";
+    const dialog = document.createElement("div");
+    dialog.className = "workspace2-confirm-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    isolateComfyKeys(dialog);
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "workspace2-confirm-title";
+    titleEl.textContent = title || confirmText;
+    const messageEl = document.createElement("div");
+    messageEl.className = "workspace2-confirm-message";
+    messageEl.textContent = message;
+    const actions = document.createElement("div");
+    actions.className = "workspace2-confirm-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "workspace2-confirm-button is-secondary";
+    cancel.textContent = t("confirm.cancel");
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = `workspace2-confirm-button${danger ? " is-danger" : ""}`;
+    confirm.textContent = confirmText;
+    actions.append(cancel, confirm);
+    dialog.append(titleEl, messageEl, actions);
+    backdrop.append(dialog);
+
+    const cleanup = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      document.removeEventListener("keydown", onKeydown, true);
+      workspace2ConfirmClose = null;
+      backdrop.remove();
+      resolve(Boolean(result));
+    };
+    const onKeydown = (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cleanup(false);
+      }
+    };
+    workspace2ConfirmClose = cleanup;
+    backdrop.addEventListener("pointerdown", (event) => {
+      if (event.target === backdrop) {
+        cleanup(false);
+      }
+      event.stopPropagation();
+    });
+    backdrop.addEventListener("click", (event) => event.stopPropagation());
+    dialog.addEventListener("pointerdown", (event) => event.stopPropagation());
+    cancel.addEventListener("click", () => cleanup(false));
+    confirm.addEventListener("click", () => cleanup(true));
+    document.addEventListener("keydown", onKeydown, true);
+    document.body.append(backdrop);
+    setTimeout(() => cancel.focus(), 0);
+  });
+}
+
+function workspace2InlineConfirm(anchor, { confirmText = t("confirm.delete"), onConfirm } = {}) {
+  if (!anchor || typeof onConfirm !== "function") {
+    return;
+  }
+  if (workspace2InlineConfirmClose) {
+    workspace2InlineConfirmClose();
+  }
+  closeWorkspace2OverlaysForConfirm();
+
+  const container = anchor.classList?.contains("workspace2-actions")
+    ? anchor
+    : anchor.closest?.(".workspace2-actions") || anchor.closest?.(".workspace2-root-row") || anchor.parentElement;
+  if (!container) {
+    return;
+  }
+  const replaceActions = container.classList?.contains("workspace2-actions");
+  const replaceRootRowControl = container.classList?.contains("workspace2-root-row");
+  const originalChildren = (replaceActions || replaceRootRowControl) ? Array.from(container.childNodes) : [];
+  const inline = document.createElement("span");
+  inline.className = "workspace2-inline-confirm";
+  isolateComfyKeys(inline);
+
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "workspace2-inline-confirm-button";
+  cancel.textContent = t("confirm.cancel");
+  const confirm = document.createElement("button");
+  confirm.type = "button";
+  confirm.className = "workspace2-inline-confirm-button is-danger";
+  confirm.textContent = confirmText;
+  inline.append(cancel, confirm);
+
+  const cleanup = () => {
+    if (workspace2InlineConfirmClose !== cleanup) {
+      return;
+    }
+    workspace2InlineConfirmClose = null;
+    if (!container.isConnected) {
+      return;
+    }
+    if (replaceActions || replaceRootRowControl) {
+      container.replaceChildren(...originalChildren);
+    } else {
+      inline.remove();
+    }
+  };
+  workspace2InlineConfirmClose = cleanup;
+  cancel.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cleanup();
+  });
+  confirm.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cleanup();
+    await onConfirm();
+  });
+  inline.addEventListener("pointerdown", (event) => event.stopPropagation());
+  inline.addEventListener("click", (event) => event.stopPropagation());
+
+  if (replaceActions) {
+    container.replaceChildren(inline);
+  } else if (replaceRootRowControl) {
+    container.replaceChildren(originalChildren[0], inline);
+  } else {
+    container.append(inline);
+  }
+}
+
 async function loadLocale() {
   state.locale = detectLocale();
   state.strings = {};
   try {
-    const response = await fetch(`${api.api_base}/extensions/comfyui-workspace2/locales/${state.locale}.json`, { cache: "no-store" });
+    const response = await fetch(localeAssetUrl(state.locale), { cache: "no-store" });
     if (!response.ok) {
       throw new Error(response.statusText);
     }
     state.strings = await response.json();
   } catch (error) {
     if (state.locale !== DEFAULT_LOCALE) {
-      const response = await fetch(`${api.api_base}/extensions/comfyui-workspace2/locales/${DEFAULT_LOCALE}.json`, { cache: "no-store" });
+      const response = await fetch(localeAssetUrl(DEFAULT_LOCALE), { cache: "no-store" });
       state.strings = response.ok ? await response.json() : {};
     }
   }
+}
+
+function localeAssetUrl(locale) {
+  return new URL(`./locales/${locale}.json`, import.meta.url).href;
 }
 
 async function refreshLocaleIfChanged() {
@@ -1068,6 +1785,234 @@ function styles() {
       --workspace2-node-list-gap: 6px;
     }
     .workspace2-panel * { box-sizing: border-box; }
+    .workspace2-shell {
+      height: 100%;
+      max-height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--p-content-background, var(--comfy-menu-bg, #202124));
+    }
+    .workspace2-module-tabs {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr)) 30px;
+      gap: 6px;
+      padding: 8px 10px 6px;
+      border-bottom: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 62%, transparent);
+      background: var(--p-content-background, var(--comfy-menu-bg, #202124));
+    }
+    .workspace2-module-tab {
+      min-height: 28px;
+      border: 1px solid var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14)));
+      border-radius: var(--p-border-radius, 6px);
+      color: var(--p-text-muted-color, rgba(255, 255, 255, 0.62));
+      background: transparent;
+      font: 12px/1.2 var(--font-family, Arial, sans-serif);
+      cursor: pointer;
+    }
+    .workspace2-module-tab:hover {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-list-option-hover-background, rgba(255, 255, 255, 0.075));
+    }
+    .workspace2-module-tab.is-active {
+      color: var(--p-primary-color, var(--accent-color, #0A84FF));
+      border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 42%, transparent);
+      background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 12%, transparent);
+    }
+    .workspace2-module-settings {
+      min-width: 30px;
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14)));
+      border-radius: var(--p-border-radius, 6px);
+      color: var(--p-text-muted-color, rgba(255, 255, 255, 0.62));
+      background: transparent;
+      cursor: pointer;
+    }
+    .workspace2-module-settings:hover {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-list-option-hover-background, rgba(255, 255, 255, 0.075));
+    }
+    .workspace2-module-settings svg {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      fill: none;
+    }
+    .workspace2-module-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .workspace2-settings-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100002;
+      background: rgba(0, 0, 0, 0.35);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 8vh 16px 16px;
+    }
+    .workspace2-settings-dialog {
+      width: min(430px, calc(100vw - 32px));
+      max-height: min(720px, calc(100vh - 64px));
+      overflow: auto;
+      border: 1px solid var(--workspace2-border, rgba(255, 255, 255, 0.14));
+      border-radius: 10px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-content-background, var(--comfy-menu-bg, #202124));
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
+      padding: 12px;
+    }
+    .workspace2-settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .workspace2-settings-title {
+      font: 600 14px/1.3 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-settings-section {
+      border-top: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
+      padding: 10px 0;
+    }
+    .workspace2-settings-section-title {
+      color: var(--workspace2-muted, rgba(255,255,255,.55));
+      font: 600 11px/1.3 var(--font-family, Arial, sans-serif);
+      margin-bottom: 8px;
+    }
+    .workspace2-settings-row {
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .workspace2-settings-row label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .workspace2-settings-range {
+      width: 148px;
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) 24px;
+      align-items: center;
+      gap: 8px;
+      cursor: default !important;
+    }
+    .workspace2-settings-range input {
+      min-width: 0;
+      width: 100%;
+      accent-color: var(--workspace2-accent);
+    }
+    .workspace2-settings-range span {
+      color: var(--workspace2-muted);
+      text-align: right;
+      font-size: 11px;
+    }
+    .workspace2-settings-help {
+      color: var(--workspace2-muted, rgba(255,255,255,.55));
+      font-size: 11px;
+      line-height: 1.45;
+      margin: 4px 0 8px;
+    }
+    .workspace2-confirm-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100010;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(0, 0, 0, 0.34);
+    }
+    .workspace2-confirm-dialog {
+      width: min(360px, calc(100vw - 36px));
+      border: 1px solid var(--workspace2-border, rgba(255, 255, 255, 0.14));
+      border-radius: 12px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-content-background, var(--comfy-menu-bg, #202124));
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.44);
+      padding: 14px;
+    }
+    .workspace2-confirm-title {
+      font: 650 14px/1.35 var(--font-family, Arial, sans-serif);
+      margin-bottom: 7px;
+    }
+    .workspace2-confirm-message {
+      color: var(--p-text-muted-color, var(--workspace2-muted, rgba(255,255,255,.62)));
+      font: 12px/1.55 var(--font-family, Arial, sans-serif);
+      word-break: break-word;
+      margin-bottom: 14px;
+    }
+    .workspace2-confirm-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .workspace2-confirm-button {
+      min-height: 28px;
+      padding: 0 12px;
+      border: 1px solid var(--workspace2-border, rgba(255, 255, 255, 0.14));
+      border-radius: 8px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-content-background, rgba(255, 255, 255, 0.05));
+      cursor: pointer;
+      font: 12px/1 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-confirm-button:hover {
+      background: var(--p-list-option-hover-background, rgba(255, 255, 255, 0.08));
+    }
+    .workspace2-confirm-button.is-danger {
+      border-color: color-mix(in srgb, var(--p-red-500, #ff453a) 58%, transparent);
+      color: #fff;
+      background: color-mix(in srgb, var(--p-red-500, #ff453a) 76%, #000);
+    }
+    .workspace2-confirm-button.is-danger:hover {
+      background: color-mix(in srgb, var(--p-red-500, #ff453a) 88%, #000);
+    }
+    .workspace2-inline-confirm {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      min-width: max-content;
+    }
+    .workspace2-inline-confirm-button {
+      min-height: 24px;
+      padding: 0 8px;
+      border: 1px solid var(--workspace2-border, rgba(255, 255, 255, 0.14));
+      border-radius: 7px;
+      color: var(--p-text-muted-color, var(--workspace2-muted, rgba(255,255,255,.62)));
+      background: color-mix(in srgb, var(--p-content-background, #202124) 88%, white);
+      cursor: pointer;
+      font: 12px/1 var(--font-family, Arial, sans-serif);
+      white-space: nowrap;
+    }
+    .workspace2-inline-confirm-button:hover {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-list-option-hover-background, rgba(255, 255, 255, 0.08));
+    }
+    .workspace2-inline-confirm-button.is-danger {
+      border-color: color-mix(in srgb, var(--p-red-500, #ff453a) 55%, transparent);
+      color: #fff;
+      background: color-mix(in srgb, var(--p-red-500, #ff453a) 74%, #000);
+    }
+    .workspace2-inline-confirm-button.is-danger:hover {
+      background: color-mix(in srgb, var(--p-red-500, #ff453a) 88%, #000);
+    }
     .workspace2-header {
       display: flex;
       align-items: center;
@@ -1221,6 +2166,9 @@ function styles() {
     .workspace2-tree {
       flex: 1 1 auto;
       min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--workspace2-node-list-gap);
       overflow: auto;
       border: 1px dashed transparent;
       border-radius: var(--workspace2-radius);
@@ -1241,10 +2189,14 @@ function styles() {
       border: 1px solid transparent;
       border-radius: var(--workspace2-radius-sm);
       cursor: default;
-      font-size: var(--workspace2-tree-font);
+      font-size: var(--workspace2-folder-font);
     }
     .workspace2-row.is-file {
       grid-template-columns: 16px 18px minmax(0, 1fr) auto;
+      font-size: var(--workspace2-tree-font);
+    }
+    .workspace2-row.is-folder {
+      font-weight: 500;
     }
     .workspace2-row.is-file .workspace2-spacer {
       display: none;
@@ -1260,10 +2212,113 @@ function styles() {
       background: var(--workspace2-accent-mid);
       border-color: var(--workspace2-accent-border);
     }
+    .workspace2-template-row {
+      min-height: var(--workspace2-node-row-height);
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: calc(var(--workspace2-node-row-padding-y) + 1px) 7px;
+      border: 1px solid transparent;
+      border-radius: var(--workspace2-radius-sm);
+      cursor: grab;
+      font-size: var(--workspace2-node-font);
+    }
+    .workspace2-template-row:hover {
+      background: var(--workspace2-hover);
+      border-color: var(--workspace2-border);
+    }
+    .workspace2-template-row.is-selected {
+      background: var(--workspace2-accent-mid);
+      border-color: var(--workspace2-accent-border);
+    }
+    .workspace2-template-list > .workspace2-template-row {
+      margin-left: var(--indent, 0px);
+    }
+    .workspace2-template-row:active {
+      cursor: grabbing;
+    }
+    .workspace2-template-row svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      opacity: 0.78;
+    }
+    .workspace2-template-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .workspace2-template-info {
+      min-width: 0;
+    }
+    .workspace2-template-meta {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--workspace2-muted);
+      font-size: var(--workspace2-meta-font);
+    }
+    .workspace2-recent-workflows {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin: 3px 0 4px;
+      padding: 7px 0 8px;
+      border-top: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 42%, transparent);
+    }
+    .workspace2-current-workflow {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-height: 25px;
+      padding: 2px 4px 2px 6px;
+      border-radius: var(--workspace2-radius-sm);
+    }
+    .workspace2-current-workflow:hover,
+    .workspace2-current-workflow.is-selected {
+      background: var(--workspace2-hover);
+    }
+    .workspace2-current-workflow-label {
+      color: var(--workspace2-muted);
+      font-size: var(--workspace2-meta-font);
+      line-height: 1.2;
+      padding: 0 6px 2px;
+    }
+    .workspace2-current-workflow-info {
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      color: inherit;
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+    }
+    .workspace2-current-workflow-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: var(--workspace2-tree-font);
+      font-weight: 500;
+    }
+    .workspace2-current-workflow-name.is-empty {
+      padding: 1px 6px;
+      color: var(--workspace2-muted);
+      font-weight: 400;
+    }
+    .workspace2-current-workflow .workspace2-actions {
+      opacity: 1;
+    }
     .workspace2-row.is-drop,
     .workspace2-root.is-drop,
     .workspace2-root-row.is-drop,
-    [data-workspace2-favorite-target].is-drop {
+    [data-workspace2-favorite-target].is-drop,
+    [data-workspace2-template-target].is-drop {
       border-color: var(--workspace2-accent);
       background: var(--workspace2-accent-strong);
       box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 30%, transparent);
@@ -1402,10 +2457,19 @@ function styles() {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .workspace2-row.is-folder > .workspace2-name,
+    .workspace2-node-folder-header > .workspace2-name {
+      opacity: 1;
+    }
+    .workspace2-row.is-file > .workspace2-name,
+    .workspace2-node-row .workspace2-name,
+    .workspace2-template-name {
+      opacity: .8;
+    }
     .workspace2-meta {
       color: var(--workspace2-muted);
       opacity: 1;
-      font-size: 9.5px;
+      font-size: var(--workspace2-meta-font);
       margin-left: 6px;
     }
     .workspace2-actions {
@@ -1417,6 +2481,7 @@ function styles() {
     .workspace2-row.is-selected .workspace2-actions,
     .workspace2-node-row:hover .workspace2-actions,
     .workspace2-node-row.is-selected .workspace2-actions,
+    .workspace2-template-row:hover .workspace2-actions,
     .workspace2-node-folder-header:hover .workspace2-actions {
       opacity: 1;
     }
@@ -1457,6 +2522,14 @@ function styles() {
     .workspace2-icon-button.is-favorite-active:hover {
       border-color: rgba(255, 214, 10, 0.65);
       background: rgba(255, 214, 10, 0.16);
+    }
+    .workspace2-icon-button.is-danger-action {
+      color: var(--workspace2-muted);
+    }
+    .workspace2-icon-button.is-danger-action:hover {
+      color: var(--workspace2-danger);
+      border-color: var(--workspace2-danger-border);
+      background: var(--workspace2-danger-soft);
     }
     .workspace2-rename-input {
       width: 100%;
@@ -1631,6 +2704,16 @@ function styles() {
     .workspace2-node-preview-body {
       padding: 0;
     }
+    .workspace2-template-minimap {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin-bottom: 8px;
+      border: 1px solid #494c55;
+      border-radius: 10px;
+      background: #181a1f;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
     .workspace2-node-preview-card {
       margin-bottom: 0;
       overflow: hidden;
@@ -1638,6 +2721,9 @@ function styles() {
       border-radius: 12px;
       background: #282a2e;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    }
+    .workspace2-node-preview-card + .workspace2-node-preview-card {
+      margin-top: 8px;
     }
     .workspace2-node-preview-card-header {
       min-height: 31px;
@@ -1719,7 +2805,7 @@ function styles() {
       min-width: 0;
       color: #bebfc4;
       font-size: 11.5px;
-      font-weight: 500;
+      font-weight: 600;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -2058,17 +3144,6 @@ function styles() {
       transition: opacity 120ms ease, transform 120ms ease;
       z-index: 2;
     }
-    .workspace2-scale-default-mark {
-      position: absolute;
-      left: 50%;
-      top: 7px;
-      width: 1px;
-      height: 14px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--workspace2-muted) 72%, transparent);
-      pointer-events: none;
-      transform: translateX(-50%);
-    }
     .workspace2-font-control.is-adjusting .workspace2-slider-value,
     .workspace2-node-density.is-adjusting .workspace2-slider-value,
     .workspace2-font-control:focus-within .workspace2-slider-value,
@@ -2358,11 +3433,37 @@ function styles() {
 
 async function fetchJson(path, options) {
   const response = await api.fetchApi(path, options);
-  const data = await response.json();
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(response.ok
+      ? `Empty response from ${path}`
+      : `Request failed: ${response.status} ${response.statusText || path}`);
+  }
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Invalid JSON from ${path}: ${error.message}`);
+  }
   if (!response.ok || data.ok === false) {
     throw new Error(data.error || response.statusText);
   }
   return data;
+}
+
+async function fetchJsonWithTimeout(path, timeoutMs = NODE_OBJECT_INFO_FETCH_TIMEOUT) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchJson(path, { signal: controller.signal });
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s: ${path}`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 async function fetchStaticJson(path) {
@@ -2700,6 +3801,80 @@ function personalizeWorkflowFolder(el, item, anchor = null) {
   });
 }
 
+function openNodeCacheDb() {
+  return new Promise((resolve, reject) => {
+    if (!globalThis.indexedDB) {
+      reject(new Error("IndexedDB is not available."));
+      return;
+    }
+    const request = indexedDB.open(NODE_OBJECT_INFO_CACHE_DB, 1);
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore(NODE_OBJECT_INFO_CACHE_STORE, { keyPath: "key" });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Failed to open IndexedDB."));
+  });
+}
+
+async function readCachedObjectInfo() {
+  let db;
+  try {
+    db = await openNodeCacheDb();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(NODE_OBJECT_INFO_CACHE_STORE, "readonly");
+      const store = tx.objectStore(NODE_OBJECT_INFO_CACHE_STORE);
+      const request = store.get(NODE_OBJECT_INFO_CACHE_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error || new Error("Failed to read node cache."));
+    });
+  } finally {
+    db?.close?.();
+  }
+}
+
+async function writeCachedObjectInfo(objectInfo) {
+  if (!objectInfo || typeof objectInfo !== "object" || Array.isArray(objectInfo)) {
+    return;
+  }
+  let db;
+  try {
+    db = await openNodeCacheDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(NODE_OBJECT_INFO_CACHE_STORE, "readwrite");
+      const store = tx.objectStore(NODE_OBJECT_INFO_CACHE_STORE);
+      store.put({
+        key: NODE_OBJECT_INFO_CACHE_KEY,
+        updatedAt: Date.now(),
+        count: Object.keys(objectInfo).length,
+        objectInfo,
+      });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("Failed to write node cache."));
+      tx.onabort = () => reject(tx.error || new Error("Node cache write was aborted."));
+    });
+  } finally {
+    db?.close?.();
+  }
+}
+
+async function clearCachedObjectInfo() {
+  let db;
+  try {
+    db = await openNodeCacheDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(NODE_OBJECT_INFO_CACHE_STORE, "readwrite");
+      tx.objectStore(NODE_OBJECT_INFO_CACHE_STORE).delete(NODE_OBJECT_INFO_CACHE_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error("Failed to clear node cache."));
+      tx.onabort = () => reject(tx.error || new Error("Node cache clear was aborted."));
+    });
+    nodesState.objectInfoCachedAt = 0;
+    nodesState.objectInfoFromCache = false;
+  } finally {
+    db?.close?.();
+  }
+}
+
 function readWorkflowCustomOrder() {
   try {
     const parsed = JSON.parse(localStorage.getItem(WORKFLOW_ORDER_KEY) || "{}");
@@ -2966,6 +4141,7 @@ async function openWorkflow(path) {
     await app.loadGraphData(data.workflow);
   }
   state.selectedPath = path;
+  recordRecentWorkflow(path);
 }
 
 async function openWorkflowLocation(path) {
@@ -3175,9 +4351,6 @@ async function restoreTrashItemSmart(el, item) {
 }
 
 async function moveTrashItemToSystemTrash(el, item) {
-  if (!window.confirm(t("trash.confirmSystemDelete", { name: item.name }))) {
-    return;
-  }
   await postJson("/workspace2/trash/system_delete", { trash_id: item.id });
   state.status = t("status.systemDeleted");
   await loadTrash();
@@ -3188,13 +4361,15 @@ async function emptyTrash(el) {
   if (!state.trashItems.length) {
     return;
   }
-  if (!window.confirm(t("trash.confirmEmpty", { count: state.trashItems.length }))) {
-    return;
-  }
   const result = await postJson("/workspace2/trash/empty", {});
   await loadTrash();
+  const details = (result.errors || [])
+    .slice(0, 3)
+    .map((item) => `${item.name || item.id || ""}: ${item.error || ""}`.trim())
+    .filter(Boolean)
+    .join("；");
   state.status = result.errors?.length
-    ? t("status.systemTrashPartial", { count: result.errors.length })
+    ? t("status.systemTrashPartial", { count: result.errors.length, details })
     : t("status.systemTrashDone");
   renderPanel(el);
 }
@@ -3207,12 +4382,14 @@ function iconSvg(name) {
     folderOpen: '<path d="M3 7h5l2 2h11"/><path d="M3 7v13h16l3-9H6l-3 9"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     trashPage: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+    archiveTray: '<path d="M4 4h16v5H4z"/><path d="M4 9l2 11h12l2-11"/><path d="M9 14h6"/><path d="M8 4l1.5-2h5L16 4"/>',
     systemTrash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11l4 4"/><path d="M14 11l-4 4"/>',
     files: '<path d="M8 2h8l4 4v12a2 2 0 0 1-2 2H8z"/><path d="M16 2v5h5"/><path d="M4 6v16h12"/>',
     open: '<path d="M7 17L17 7"/><path d="M8 7h9v9"/>',
     edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/>',
     palette: '<path d="M12 3a9 9 0 0 0 0 18h1.5a1.8 1.8 0 0 0 1.3-3.1 1.8 1.8 0 0 1 1.3-3h1.9A3 3 0 0 0 21 12a9 9 0 0 0-9-9z"/><circle cx="7.5" cy="10" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="14" cy="7.5" r="1"/><circle cx="16.5" cy="10" r="1"/>',
     badge: '<path d="M5 5h14v14H5z"/><path d="M8 9h8"/><path d="M8 13h5"/>',
+    template: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8"/><path d="M8 12h5"/><path d="M8 16h8"/>',
     previewDetailed: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M7 8h10"/><path d="M7 12h10"/><path d="M7 16h6"/>',
     previewCompact: '<rect x="5" y="6" width="14" height="12" rx="2"/><path d="M8 10h8"/><path d="M8 14h5"/>',
     restore: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/>',
@@ -3226,6 +4403,7 @@ function iconSvg(name) {
     upload: '<path d="M12 21V9"/><path d="M7 14l5-5 5 5"/><path d="M5 3h14"/>',
     star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
     starFilled: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z" fill="currentColor"/>',
+    settings: '<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4l.1.1a1.7 1.7 0 0 0 1.9.3h.1A1.7 1.7 0 0 0 10 2.9V3a2 2 0 1 1 4 0v-.1a1.7 1.7 0 0 0 1 1.6h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.9 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     x: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>',
   };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -3263,6 +4441,12 @@ function iconButton(iconName, title, onClick) {
     event.stopPropagation();
     onClick(event);
   });
+  return element;
+}
+
+function dangerIconButton(iconName, title, onClick) {
+  const element = iconButton(iconName, title, onClick);
+  element.classList.add("is-danger-action");
   return element;
 }
 
@@ -3344,20 +4528,47 @@ function normalizeNodeLibrary(library) {
 }
 
 async function loadNodeLibrary() {
+  if (nodesState.loadPromise) {
+    return nodesState.loadPromise;
+  }
+  nodesState.loadPromise = loadNodeLibraryInternal().finally(() => {
+    nodesState.loadPromise = null;
+  });
+  return nodesState.loadPromise;
+}
+
+async function loadNodeLibraryInternal() {
   nodesState.loading = true;
+  nodesState.objectInfoLoading = true;
   nodesState.error = "";
+  nodesState.objectInfoError = "";
   try {
-    const [libraryData, objectInfoData, nodeFrequencyData] = await Promise.all([
+    const [libraryData, nodeFrequencyData, cachedObjectInfo] = await Promise.all([
       fetchJson("/workspace2/nodes/library"),
-      fetchJson("/object_info"),
       fetchStaticJson("/assets/sorted-custom-node-map.json").catch(() => ({})),
+      readCachedObjectInfo().catch((error) => {
+        console.debug("[Workspace2] Node cache read failed", error);
+        return null;
+      }),
     ]);
     nodesState.library = normalizeNodeLibrary(libraryData.library);
-    nodesState.objectInfo = objectInfoData || {};
     nodesState.nodeFrequencyLookup = nodeFrequencyData && typeof nodeFrequencyData === "object" ? nodeFrequencyData : {};
+    if (cachedObjectInfo?.objectInfo && typeof cachedObjectInfo.objectInfo === "object") {
+      nodesState.objectInfo = cachedObjectInfo.objectInfo;
+      nodesState.objectInfoCachedAt = Number(cachedObjectInfo.updatedAt || 0);
+      nodesState.objectInfoFromCache = true;
+    }
     nodesState.nodeDefinitionsCache = null;
     nodesState.nodeDefinitionMapCache = null;
     nodesState.nodeDefinitionsSource = null;
+    nodesState.loading = false;
+    if (nodesState.renderTarget?.isConnected) {
+      renderNodesPanel(nodesState.renderTarget);
+    }
+    loadFullObjectInfo().catch((error) => {
+      nodesState.objectInfoError = error.message || String(error);
+      nodesState.objectInfoLoading = false;
+    });
   } catch (error) {
     nodesState.error = error.message;
     nodesState.library = emptyNodeLibrary();
@@ -3366,8 +4577,31 @@ async function loadNodeLibrary() {
     nodesState.nodeDefinitionsCache = null;
     nodesState.nodeDefinitionMapCache = null;
     nodesState.nodeDefinitionsSource = null;
-  } finally {
     nodesState.loading = false;
+    nodesState.objectInfoLoading = false;
+  }
+}
+
+async function loadFullObjectInfo() {
+  try {
+    const objectInfoData = await fetchJsonWithTimeout("/object_info");
+    nodesState.objectInfo = objectInfoData || {};
+    nodesState.objectInfoCachedAt = Date.now();
+    nodesState.objectInfoFromCache = false;
+    nodesState.nodeDefinitionsCache = null;
+    nodesState.nodeDefinitionMapCache = null;
+    nodesState.nodeDefinitionsSource = null;
+    nodesState.objectInfoError = "";
+    writeCachedObjectInfo(nodesState.objectInfo).catch((error) => {
+      console.debug("[Workspace2] Node cache write failed", error);
+    });
+  } catch (error) {
+    nodesState.objectInfoError = error.message || String(error);
+  } finally {
+    nodesState.objectInfoLoading = false;
+    if (nodesState.renderTarget?.isConnected) {
+      renderNodesPanel(nodesState.renderTarget);
+    }
   }
 }
 
@@ -3377,6 +4611,1087 @@ async function saveNodeLibrary(el) {
   if (el) {
     renderNodesPanel(el);
   }
+}
+
+function emptyTemplateLibrary() {
+  return {
+    version: 1,
+    groups: [],
+    templates: [],
+    settings: {},
+  };
+}
+
+function normalizeTemplateLibrary(library) {
+  const fallback = emptyTemplateLibrary();
+  if (!library || typeof library !== "object") {
+    return fallback;
+  }
+  const groups = Array.isArray(library.groups)
+    ? library.groups.map((group, index) => ({
+        id: String(group.id || `group-${index}`),
+        name: String(group.name || group.id || `Group ${index + 1}`),
+        parentId: String(group.parentId || ""),
+        order: Number(group.order ?? index),
+        collapsed: Boolean(group.collapsed),
+        icon: String(group.icon || ""),
+        color: String(group.color || ""),
+      }))
+    : [];
+  const groupIds = new Set(groups.map((group) => group.id));
+  for (const group of groups) {
+    if (group.parentId === group.id || !groupIds.has(group.parentId)) {
+      group.parentId = "";
+    }
+  }
+  const templates = Array.isArray(library.templates)
+    ? library.templates
+        .filter((template) => template?.id && template?.name)
+        .map((template, index) => ({
+          id: String(template.id),
+          name: String(template.name),
+          groupId: groupIds.has(template.groupId) ? String(template.groupId) : "",
+          order: Number(template.order ?? index),
+          nodes: Array.isArray(template.nodes) ? template.nodes : [],
+          links: Array.isArray(template.links) ? template.links : [],
+          bounds: template.bounds && typeof template.bounds === "object" ? template.bounds : {},
+          createdAt: Number(template.createdAt || Date.now()),
+          updatedAt: Number(template.updatedAt || Date.now()),
+          useCount: Number(template.useCount || 0),
+          lastUsed: Number(template.lastUsed || 0),
+          source: String(template.source || "workspace2"),
+        }))
+    : [];
+  return {
+    ...fallback,
+    ...library,
+    groups,
+    templates,
+    settings: { ...fallback.settings, ...(library.settings || {}) },
+  };
+}
+
+async function loadTemplateLibrary() {
+  templatesState.loading = true;
+  templatesState.error = "";
+  try {
+    const data = await fetchJson("/workspace2/templates/library");
+    templatesState.library = normalizeTemplateLibrary(data.library);
+  } catch (error) {
+    templatesState.error = error.message;
+    templatesState.library = emptyTemplateLibrary();
+  } finally {
+    templatesState.loading = false;
+  }
+}
+
+async function saveTemplateLibrary(el) {
+  const data = await postJson("/workspace2/templates/library", { library: templatesState.library });
+  templatesState.library = normalizeTemplateLibrary(data.library);
+  if (el?.isConnected) {
+    renderTemplatesPanel(el);
+  }
+}
+
+function uniqueTemplateGroupName(baseName = t("templates.defaultGroupName")) {
+  const existing = new Set((templatesState.library?.groups || []).map((group) => String(group.name || "").toLowerCase()));
+  let name = baseName;
+  let index = 2;
+  while (existing.has(name.toLowerCase())) {
+    name = `${baseName} ${index}`;
+    index += 1;
+  }
+  return name;
+}
+
+function getTemplateGroup(groupId) {
+  return (templatesState.library?.groups || []).find((group) => group.id === groupId) || null;
+}
+
+function childTemplateGroups(parentId = "") {
+  return [...(templatesState.library?.groups || [])]
+    .filter((group) => (group.parentId || "") === parentId)
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+}
+
+function templateGroupKeys(groupId) {
+  const keys = [];
+  const group = getTemplateGroup(groupId);
+  if (!group) {
+    return keys;
+  }
+  keys.push(group.id);
+  for (const child of childTemplateGroups(group.id)) {
+    keys.push(...templateGroupKeys(child.id));
+  }
+  return keys;
+}
+
+function isTemplateGroupDescendant(groupId, possibleAncestorId) {
+  let current = getTemplateGroup(groupId);
+  const visited = new Set();
+  while (current?.parentId) {
+    if (current.parentId === possibleAncestorId) {
+      return true;
+    }
+    if (visited.has(current.parentId)) {
+      return false;
+    }
+    visited.add(current.parentId);
+    current = getTemplateGroup(current.parentId);
+  }
+  return false;
+}
+
+function normalizeTemplateOrders(groupId = "") {
+  (templatesState.library?.templates || [])
+    .filter((template) => (template.groupId || "") === groupId)
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+    .forEach((template, index) => {
+      template.order = index;
+    });
+}
+
+async function createTemplateGroup(el, parentId = "") {
+  templatesState.library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
+  const normalizedParentId = parentId && getTemplateGroup(parentId) ? String(parentId) : "";
+  const id = `template-group-${Date.now().toString(36)}`;
+  const siblings = childTemplateGroups(normalizedParentId);
+  templatesState.library.groups.push({
+    id,
+    name: uniqueTemplateGroupName(),
+    parentId: normalizedParentId,
+    order: siblings.length ? Math.max(...siblings.map((group) => Number(group.order) || 0)) + 1 : 0,
+    collapsed: false,
+    icon: "",
+    color: "",
+  });
+  if (normalizedParentId) {
+    templatesState.expanded.add(normalizedParentId);
+  }
+  templatesState.expanded.add(id);
+  templatesState.editingGroupId = id;
+  await saveTemplateLibrary(el);
+}
+
+async function commitTemplateGroupRename(el, group, value) {
+  const name = String(value || "").trim();
+  if (!name || name === group.name) {
+    templatesState.editingGroupId = "";
+    renderTemplatesPanel(el);
+    return;
+  }
+  group.name = name;
+  templatesState.editingGroupId = "";
+  await saveTemplateLibrary(el);
+}
+
+async function deleteTemplateGroup(el, group) {
+  for (const template of templatesState.library.templates || []) {
+    if (template.groupId === group.id) {
+      template.groupId = "";
+    }
+  }
+  for (const child of templatesState.library.groups || []) {
+    if (child.parentId === group.id) {
+      child.parentId = "";
+    }
+  }
+  templatesState.library.groups = (templatesState.library.groups || []).filter((item) => item.id !== group.id);
+  templatesState.expanded.delete(group.id);
+  normalizeTemplateOrders("");
+  await saveTemplateLibrary(el);
+}
+
+function requestDeleteTemplateGroup(el, group, anchor = null) {
+  const target = anchor || el?.querySelector?.(`[data-workspace2-template-group-id="${cssEscape(group.id)}"] .workspace2-actions`);
+  workspace2InlineConfirm(target, {
+    confirmText: t("confirm.delete"),
+    onConfirm: async () => {
+      try {
+        await deleteTemplateGroup(el, group);
+      } catch (error) {
+        templatesState.error = error.message;
+        renderTemplatesPanel(el);
+      }
+    },
+  });
+}
+
+async function resetTemplateGroupStyle(el, group) {
+  group.icon = "";
+  group.color = "";
+  await saveTemplateLibrary(el);
+}
+
+function personalizeTemplateGroup(el, group, anchor = null) {
+  openPersonalizationPanel({
+    title: t("folder.personalizeTitle"),
+    name: group.name,
+    icon: group.icon || "",
+    color: group.color || "",
+    anchor,
+    onApply: async (value) => {
+      group.icon = value.icon;
+      group.color = value.color;
+      await saveTemplateLibrary(el);
+    },
+    onReset: async () => {
+      await resetTemplateGroupStyle(el, group);
+    },
+  });
+}
+
+async function moveTemplateToGroup(el, templateId, targetGroupId = "", beforeTemplateId = "") {
+  const template = (templatesState.library?.templates || []).find((item) => item.id === templateId);
+  if (!template) {
+    return;
+  }
+  const normalizedTarget = targetGroupId && getTemplateGroup(targetGroupId) ? String(targetGroupId) : "";
+  const sourceGroupId = template.groupId || "";
+  if (sourceGroupId === normalizedTarget && beforeTemplateId === template.id) {
+    return;
+  }
+  template.groupId = normalizedTarget;
+  normalizeTemplateOrders(sourceGroupId);
+  const targetItems = (templatesState.library.templates || [])
+    .filter((item) => (item.groupId || "") === normalizedTarget && item.id !== template.id)
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+  const beforeIndex = beforeTemplateId ? targetItems.findIndex((item) => item.id === beforeTemplateId) : -1;
+  const insertIndex = beforeIndex >= 0 ? beforeIndex : targetItems.length;
+  targetItems.splice(insertIndex, 0, template);
+  targetItems.forEach((item, index) => {
+    item.order = index;
+  });
+  if (normalizedTarget) {
+    templatesState.expanded.add(normalizedTarget);
+  }
+  await saveTemplateLibrary(el);
+}
+
+async function moveTemplateGroupToParent(el, groupId, targetParentId = "") {
+  const group = getTemplateGroup(groupId);
+  if (!group) {
+    return;
+  }
+  const normalizedParentId = targetParentId && getTemplateGroup(targetParentId) ? String(targetParentId) : "";
+  if (normalizedParentId === group.id || isTemplateGroupDescendant(normalizedParentId, group.id)) {
+    return;
+  }
+  if ((group.parentId || "") === normalizedParentId) {
+    return;
+  }
+  group.parentId = normalizedParentId;
+  const siblings = childTemplateGroups(normalizedParentId).filter((item) => item.id !== group.id);
+  group.order = siblings.length ? Math.max(...siblings.map((item) => Number(item.order) || 0)) + 1 : 0;
+  if (normalizedParentId) {
+    templatesState.expanded.add(normalizedParentId);
+  }
+  await saveTemplateLibrary(el);
+}
+
+function selectedGraphNodes() {
+  const selected = app.canvas?.selected_nodes;
+  if (selected instanceof Map) {
+    return [...selected.values()].filter(Boolean);
+  }
+  if (Array.isArray(selected)) {
+    return selected.filter(Boolean);
+  }
+  if (selected && typeof selected === "object") {
+    return Object.values(selected).filter(Boolean);
+  }
+  return (app.graph?._nodes || []).filter((node) => node?.selected);
+}
+
+function cloneJsonSafe(value, fallback = null) {
+  if (value == null) {
+    return fallback;
+  }
+  try {
+    if (typeof structuredClone === "function") {
+      return structuredClone(value);
+    }
+  } catch {}
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return fallback;
+  }
+}
+
+function graphLinksArray() {
+  const links = app.graph?.links;
+  if (!links) {
+    return [];
+  }
+  if (Array.isArray(links)) {
+    return links.filter(Boolean);
+  }
+  if (links instanceof Map) {
+    return [...links.values()].filter(Boolean);
+  }
+  if (typeof links === "object") {
+    return Object.values(links).filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeGraphLink(link) {
+  if (Array.isArray(link)) {
+    return {
+      id: link[0],
+      origin_id: link[1],
+      origin_slot: link[2],
+      target_id: link[3],
+      target_slot: link[4],
+      type: link[5] || "",
+    };
+  }
+  return {
+    id: link.id,
+    origin_id: link.origin_id,
+    origin_slot: link.origin_slot,
+    target_id: link.target_id,
+    target_slot: link.target_slot,
+    type: link.type || "",
+  };
+}
+
+function vectorPair(value, fallback = [0, 0]) {
+  if (Array.isArray(value) || ArrayBuffer.isView(value)) {
+    return [
+      Number(value[0] ?? fallback[0] ?? 0),
+      Number(value[1] ?? fallback[1] ?? 0),
+    ];
+  }
+  if (value && typeof value === "object") {
+    return [
+      Number(value.x ?? value[0] ?? fallback[0] ?? 0),
+      Number(value.y ?? value[1] ?? fallback[1] ?? 0),
+    ];
+  }
+  return [Number(fallback[0] || 0), Number(fallback[1] || 0)];
+}
+
+function nodePosition(node, serialized = null) {
+  const source = serialized?.pos ?? node?.pos;
+  return vectorPair(source, [0, 0]);
+}
+
+function nodeSize(node, serialized = null) {
+  const source = serialized?.size ?? node?.size;
+  return vectorPair(source, [180, 80]);
+}
+
+function serializeTemplateNode(node) {
+  const serialized = cloneJsonSafe(node.serialize?.(), {}) || {};
+  const pos = nodePosition(node, serialized);
+  const size = nodeSize(node, serialized);
+  return {
+    id: node.id,
+    type: node.type || serialized.type || "",
+    title: node.title || serialized.title || "",
+    pos,
+    size,
+    flags: cloneJsonSafe(serialized.flags || node.flags || {}, {}),
+    order: Number(serialized.order ?? node.order ?? 0),
+    mode: Number(serialized.mode ?? node.mode ?? 0),
+    properties: cloneJsonSafe(serialized.properties || node.properties || {}, {}),
+    widgets_values: Array.isArray(serialized.widgets_values)
+      ? cloneJsonSafe(serialized.widgets_values, [])
+      : cloneJsonSafe((node.widgets || []).map((widget) => widget?.value), []),
+    color: serialized.color || node.color || "",
+    bgcolor: serialized.bgcolor || node.bgcolor || "",
+    inputs: cloneJsonSafe(serialized.inputs || node.inputs || [], []),
+    outputs: cloneJsonSafe(serialized.outputs || node.outputs || [], []),
+  };
+}
+
+function templateBounds(nodes) {
+  if (!nodes.length) {
+    return { x: 0, y: 0, width: 0, height: 0 };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    const x = Number(node.pos?.[0] || 0);
+    const y = Number(node.pos?.[1] || 0);
+    const width = Number(node.size?.[0] || 180);
+    const height = Number(node.size?.[1] || 80);
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + width);
+    maxY = Math.max(maxY, y + height);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+function defaultTemplateName(nodes) {
+  if (!nodes.length) {
+    return t("templates.defaultName");
+  }
+  if (nodes.length === 1) {
+    return nodes[0].title || nodes[0].type || t("templates.defaultName");
+  }
+  const first = nodes[0].title || nodes[0].type || t("templates.defaultName");
+  return `${first} + ${nodes.length - 1}`;
+}
+
+function uniqueTemplateName(baseName = t("templates.defaultName")) {
+  const existing = new Set((templatesState.library?.templates || []).map((template) => template.name.toLocaleLowerCase()));
+  let name = baseName;
+  let index = 2;
+  while (existing.has(name.toLocaleLowerCase())) {
+    name = `${baseName} ${index}`;
+    index += 1;
+  }
+  return name;
+}
+
+function serializeSelectedTemplate(name = "") {
+  const selectedNodes = selectedGraphNodes();
+  if (!selectedNodes.length) {
+    throw new Error(t("templates.selectNodesFirst"));
+  }
+  const nodeIds = new Set(selectedNodes.map((node) => Number(node.id)));
+  const nodes = selectedNodes.map(serializeTemplateNode).filter((node) => node.type);
+  const bounds = templateBounds(nodes);
+  for (const node of nodes) {
+    node.relPos = [
+      Number(node.pos?.[0] || 0) - Number(bounds.x || 0),
+      Number(node.pos?.[1] || 0) - Number(bounds.y || 0),
+    ];
+  }
+  const links = graphLinksArray()
+    .map(normalizeGraphLink)
+    .filter((link) => nodeIds.has(Number(link.origin_id)) && nodeIds.has(Number(link.target_id)))
+    .map((link) => ({
+      id: link.id,
+      origin_id: link.origin_id,
+      origin_slot: Number(link.origin_slot || 0),
+      target_id: link.target_id,
+      target_slot: Number(link.target_slot || 0),
+      type: String(link.type || ""),
+    }));
+  const now = Date.now();
+  return {
+    id: `template-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    name: name.trim() || uniqueTemplateName(defaultTemplateName(selectedNodes)),
+    groupId: "",
+    order: templatesState.library?.templates?.length || 0,
+    nodes,
+    links,
+    bounds,
+    createdAt: now,
+    updatedAt: now,
+    useCount: 0,
+    lastUsed: 0,
+    source: "workspace2",
+  };
+}
+
+async function saveSelectedNodesAsTemplate(el = templatesState.renderTarget) {
+  if (!templatesState.library) {
+    await loadTemplateLibrary();
+  }
+  const selectedNodes = selectedGraphNodes();
+  if (!selectedNodes.length) {
+    alert(t("templates.selectNodesFirst"));
+    return null;
+  }
+  const template = serializeSelectedTemplate(uniqueTemplateName(defaultTemplateName(selectedNodes)));
+  templatesState.library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
+  templatesState.library.templates.push(template);
+  templatesState.editingTemplateId = template.id;
+  await saveTemplateLibrary(el);
+  const toast = app.extensionManager?.toast;
+  const message = t("templates.saved", { name: template.name });
+  if (toast?.add) {
+    toast.add({ severity: "success", summary: "Workspace2", detail: message, life: 2500 });
+  } else {
+    console.info(`[Workspace2] ${message}`);
+  }
+  return template;
+}
+
+async function saveSelectedNodesAsTemplateFromShortcut() {
+  try {
+    const template = await saveSelectedNodesAsTemplate(null);
+    if (!template) {
+      return;
+    }
+    templatesState.editingTemplateId = template.id;
+    if (isWorkspace2AltCOpenTemplatesEnabled()) {
+      openWorkspace2Module("templates");
+    } else if (templatesState.renderTarget?.isConnected) {
+      renderTemplatesPanel(templatesState.renderTarget);
+    }
+  } catch (error) {
+    templatesState.error = error.message || String(error);
+    if (templatesState.renderTarget?.isConnected) {
+      renderTemplatesPanel(templatesState.renderTarget);
+    } else {
+      alert(templatesState.error);
+    }
+  }
+}
+
+function templateSearchFields(template) {
+  const nodeFields = (template.nodes || []).flatMap((node) => [
+    node?.title,
+    node?.type,
+    splitCamelCase(node?.type || ""),
+  ]);
+  return compactSearchFields([
+    template.name,
+    ...nodeFields,
+  ], [
+    template.name,
+    ...nodeFields,
+  ]);
+}
+
+function templateMatchesQuery(template, query) {
+  if (!query) {
+    return true;
+  }
+  return genericSearchScores(templateSearchFields(template), query)[0] < 9;
+}
+
+function sortedVisibleTemplates() {
+  const query = templatesState.query.trim().toLocaleLowerCase();
+  const templates = [...(templatesState.library?.templates || [])]
+    .filter((template) => templateMatchesQuery(template, query));
+  if (query) {
+    templates.sort((a, b) => compareSearchScores(
+      genericSearchScores(templateSearchFields(a), query),
+      genericSearchScores(templateSearchFields(b), query),
+    ) || a.name.localeCompare(b.name));
+  } else {
+    templates.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+  }
+  return templates;
+}
+
+function compareTemplatesBySort(a, b, query = "") {
+  if (query) {
+    return compareSearchScores(
+      genericSearchScores(templateSearchFields(a), query),
+      genericSearchScores(templateSearchFields(b), query),
+    ) || a.name.localeCompare(b.name);
+  }
+  if (templatesState.sort === "nameAsc") {
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  }
+  if (templatesState.sort === "nameDesc") {
+    return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
+  }
+  if (templatesState.sort === "updatedDesc") {
+    return Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0) || a.name.localeCompare(b.name);
+  }
+  if (templatesState.sort === "updatedAsc") {
+    return Number(a.updatedAt || a.createdAt || 0) - Number(b.updatedAt || b.createdAt || 0) || a.name.localeCompare(b.name);
+  }
+  return a.order - b.order || a.name.localeCompare(b.name);
+}
+
+function canvasCenterPosition() {
+  const canvasElement = app.canvas?.canvas || app.canvasEl || document.querySelector("canvas");
+  if (!canvasElement) {
+    return null;
+  }
+  const rect = canvasElement.getBoundingClientRect();
+  return canvasPositionFromClient(rect.left + rect.width / 2, rect.top + rect.height / 2);
+}
+
+function nextGraphNodeId(graph, reserved) {
+  const ids = (graph?._nodes || [])
+    .map((node) => Number(node?.id || 0))
+    .filter((id) => Number.isFinite(id));
+  for (const id of reserved) {
+    ids.push(Number(id || 0));
+  }
+  const next = Math.max(0, ...ids) + 1;
+  reserved.add(next);
+  return next;
+}
+
+function applyTemplateNodeData(node, data) {
+  if (data.title) {
+    node.title = data.title;
+  }
+  if (Array.isArray(data.size)) {
+    node.size = [Number(data.size[0] || 0), Number(data.size[1] || 0)];
+  }
+  if (data.flags && typeof data.flags === "object") {
+    node.flags = cloneJsonSafe(data.flags, {});
+  }
+  if (Number.isFinite(Number(data.mode))) {
+    node.mode = Number(data.mode);
+  }
+  if (data.properties && typeof data.properties === "object") {
+    node.properties = { ...(node.properties || {}), ...cloneJsonSafe(data.properties, {}) };
+  }
+  if (data.color) {
+    node.color = data.color;
+  }
+  if (data.bgcolor) {
+    node.bgcolor = data.bgcolor;
+  }
+  if (Array.isArray(data.widgets_values) && Array.isArray(node.widgets)) {
+    data.widgets_values.forEach((value, index) => {
+      if (node.widgets[index]) {
+        node.widgets[index].value = cloneJsonSafe(value, value);
+      }
+    });
+  }
+}
+
+async function addTemplateToCanvas(template, pos) {
+  if (!globalThis.LiteGraph?.createNode || !app.graph) {
+    throw new Error(t("templates.canvasUnavailable"));
+  }
+  const nodes = Array.isArray(template?.nodes) ? template.nodes : [];
+  if (!nodes.length) {
+    throw new Error(t("templates.canvasUnavailable"));
+  }
+  const target = pos || canvasCenterPosition();
+  if (!target) {
+    throw new Error(t("templates.canvasUnavailable"));
+  }
+  const bounds = template.bounds && Number.isFinite(Number(template.bounds.x))
+    ? template.bounds
+    : templateBounds(nodes);
+  const origin = [Number(bounds.x || 0), Number(bounds.y || 0)];
+  const idMap = new Map();
+  const reserved = new Set();
+  const created = [];
+  const missing = [];
+
+  for (const data of nodes) {
+    const node = globalThis.LiteGraph.createNode(data.type);
+    if (!node) {
+      missing.push(data.type);
+      continue;
+    }
+    const newId = nextGraphNodeId(app.graph, reserved);
+    idMap.set(String(data.id), newId);
+    node.id = newId;
+    const relPos = Array.isArray(data.relPos)
+      ? vectorPair(data.relPos, [0, 0])
+      : [
+          Number(data.pos?.[0] || 0) - origin[0],
+          Number(data.pos?.[1] || 0) - origin[1],
+        ];
+    node.pos = [target[0] + relPos[0], target[1] + relPos[1]];
+    applyTemplateNodeData(node, data);
+    app.graph.add(node);
+    node.onAdded?.();
+    created.push(node);
+  }
+
+  for (const link of template.links || []) {
+    const originId = idMap.get(String(link.origin_id));
+    const targetId = idMap.get(String(link.target_id));
+    if (!originId || !targetId) {
+      continue;
+    }
+    const originNode = app.graph.getNodeById?.(originId);
+    const targetNode = app.graph.getNodeById?.(targetId);
+    if (!originNode || !targetNode) {
+      continue;
+    }
+    try {
+      originNode.connect(Number(link.origin_slot || 0), targetNode, Number(link.target_slot || 0));
+    } catch (error) {
+      console.debug("[Workspace2] Template link restore failed", error);
+    }
+  }
+
+  if (!created.length && missing.length) {
+    throw new Error(t("templates.restoreMissing", { count: missing.length, types: [...new Set(missing)].join(", ") }));
+  }
+  if (missing.length) {
+    alert(t("templates.restoreMissing", { count: missing.length, types: [...new Set(missing)].join(", ") }));
+  }
+  app.canvas?.selectNodes?.(created);
+  app.canvas?.setDirty?.(true, true);
+  app.graph.setDirtyCanvas?.(true, true);
+  app.graph.change?.();
+  return created;
+}
+
+async function recordTemplateUse(el, templateId) {
+  const template = templatesState.library?.templates?.find((item) => item.id === templateId);
+  if (!template) {
+    return;
+  }
+  template.useCount = Number(template.useCount || 0) + 1;
+  template.lastUsed = Date.now();
+  await saveTemplateLibrary(el);
+}
+
+async function renameTemplate(el, template, newName) {
+  const name = String(newName || "").trim();
+  templatesState.editingTemplateId = "";
+  if (!name || name === template.name) {
+    renderTemplatesPanel(el);
+    return;
+  }
+  template.name = name;
+  template.updatedAt = Date.now();
+  await saveTemplateLibrary(el);
+}
+
+function closeTemplateContextMenu() {
+  if (templatesState.contextMenuCloseHandler) {
+    window.removeEventListener("pointerdown", templatesState.contextMenuCloseHandler, true);
+    document.removeEventListener("pointerdown", templatesState.contextMenuCloseHandler, true);
+    window.removeEventListener("keydown", templatesState.contextMenuCloseHandler, true);
+    templatesState.contextMenuCloseHandler = null;
+  }
+  templatesState.contextMenuElement?.remove();
+  templatesState.contextMenuElement = null;
+  templatesState.contextMenu = null;
+}
+
+function openTemplateContextMenu(el, event, template) {
+  event.preventDefault();
+  event.stopPropagation();
+  templatesState.contextMenu = {
+    x: event.clientX,
+    y: event.clientY,
+    template,
+  };
+  renderTemplateContextMenu(el);
+}
+
+async function placeTemplateAtCanvasCenter(el, template) {
+  await addTemplateToCanvas(template, canvasCenterPosition());
+  await recordTemplateUse(el, template.id);
+}
+
+function updatePendingTemplateUi() {
+  const target = templatesState.renderTarget;
+  if (!target?.isConnected) {
+    return;
+  }
+  const selectedId = templatesState.pendingTemplate?.id || "";
+  const status = target.querySelector("[data-workspace2-templates-status]");
+  if (status) {
+    const templates = templatesState.library?.templates || [];
+    status.textContent = selectedId
+      ? t("templates.pendingPlace", { name: templatesState.pendingTemplate.name })
+      : t("templates.status", { count: templates.length });
+  }
+  target.querySelectorAll(".workspace2-template-row.is-selected").forEach((row) => {
+    row.classList.remove("is-selected");
+  });
+  if (!selectedId) {
+    return;
+  }
+  target.querySelectorAll(`[data-workspace2-template-id="${cssEscape(selectedId)}"]`).forEach((row) => {
+    row.classList.add("is-selected");
+  });
+}
+
+function setPendingTemplate(template) {
+  templatesState.pendingTemplate = template
+    ? {
+        ...template,
+        nodes: Array.isArray(template.nodes) ? cloneJsonSafe(template.nodes, []) : [],
+        links: Array.isArray(template.links) ? cloneJsonSafe(template.links, []) : [],
+      }
+    : null;
+  if (templatesState.pendingTemplate) {
+    setPendingNode(null);
+  } else {
+    hideNodePreview();
+  }
+  updatePendingTemplateUi();
+}
+
+async function placePendingTemplateAt(clientX, clientY) {
+  if (!templatesState.pendingTemplate) {
+    return false;
+  }
+  const template = templatesState.pendingTemplate;
+  const pos = canvasPositionFromClient(clientX, clientY);
+  setPendingTemplate(null);
+  await addTemplateToCanvas(template, pos);
+  await recordTemplateUse(templatesState.renderTarget, template.id);
+  return true;
+}
+
+async function deleteTemplate(el, template) {
+  if (templatesState.pendingTemplate?.id === template.id) {
+    setPendingTemplate(null);
+  }
+  templatesState.library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
+  templatesState.library.templates = templatesState.library.templates.filter((item) => item.id !== template.id);
+  templatesState.editingTemplateId = "";
+  await saveTemplateLibrary(el);
+}
+
+function requestDeleteTemplate(el, template, anchor = null) {
+  hideNodePreview();
+  const target = anchor || el?.querySelector?.(`[data-workspace2-template-id="${cssEscape(template.id)}"] .workspace2-actions`);
+  workspace2InlineConfirm(target, {
+    confirmText: t("confirm.delete"),
+    onConfirm: async () => {
+      try {
+        await deleteTemplate(el, template);
+      } catch (error) {
+        templatesState.error = error.message;
+        renderTemplatesPanel(el);
+      }
+    },
+  });
+}
+
+async function copyText(value) {
+  const text = String(value || "");
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.style.position = "fixed";
+  input.style.left = "-9999px";
+  document.body.append(input);
+  input.select();
+  document.execCommand("copy");
+  input.remove();
+}
+
+function renderTemplateContextMenu(el) {
+  if (templatesState.contextMenuCloseHandler) {
+    window.removeEventListener("pointerdown", templatesState.contextMenuCloseHandler, true);
+    document.removeEventListener("pointerdown", templatesState.contextMenuCloseHandler, true);
+    window.removeEventListener("keydown", templatesState.contextMenuCloseHandler, true);
+    templatesState.contextMenuCloseHandler = null;
+  }
+  templatesState.contextMenuElement?.remove();
+  templatesState.contextMenuElement = null;
+  const context = templatesState.contextMenu;
+  if (!context) {
+    return;
+  }
+  const { template, x, y } = context;
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  menu.addEventListener("click", (event) => event.stopPropagation());
+  menu.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  const addItem = (label, onClick) => {
+    const button = document.createElement("button");
+    button.className = "workspace2-menu-item";
+    button.type = "button";
+    button.textContent = label;
+    button.addEventListener("click", async () => {
+      closeTemplateContextMenu();
+      try {
+        await onClick();
+      } catch (error) {
+        templatesState.error = error.message;
+        renderTemplatesPanel(el);
+      }
+    });
+    menu.append(button);
+  };
+
+  addItem(t("templates.rename"), () => {
+    templatesState.editingTemplateId = template.id;
+    renderTemplatesPanel(el);
+  });
+  addItem(t("templates.placeCenter"), () => placeTemplateAtCanvasCenter(el, template));
+  addItem(t("templates.copyName"), () => copyText(template.name));
+  addItem(t("templates.delete"), () => requestDeleteTemplate(el, template));
+
+  document.body.append(menu);
+  templatesState.contextMenuElement = menu;
+
+  const closeHandler = (event) => {
+    if (event.type === "keydown" && event.key !== "Escape") {
+      return;
+    }
+    if (menu.contains(event.target)) {
+      return;
+    }
+    closeTemplateContextMenu();
+  };
+  templatesState.contextMenuCloseHandler = closeHandler;
+  setTimeout(() => {
+    if (templatesState.contextMenuCloseHandler !== closeHandler) {
+      return;
+    }
+    window.addEventListener("pointerdown", closeHandler, true);
+    document.addEventListener("pointerdown", closeHandler, true);
+    window.addEventListener("keydown", closeHandler, true);
+  }, 0);
+}
+
+function readDraggedTemplate(event) {
+  const raw = event.dataTransfer?.getData(TEMPLATE_DRAG_TYPE);
+  if (raw) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return templatesState.draggingTemplate;
+    }
+  }
+  return templatesState.draggingTemplate;
+}
+
+function readDraggedTemplateGroup(event) {
+  const raw = event.dataTransfer?.getData(TEMPLATE_GROUP_DRAG_TYPE);
+  if (!raw) {
+    return templatesState.draggingGroupId ? { id: templatesState.draggingGroupId } : null;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return templatesState.draggingGroupId ? { id: templatesState.draggingGroupId } : null;
+  }
+}
+
+function makeTemplateGroupDragSource(row, group) {
+  row.draggable = true;
+  row.addEventListener("dragstart", (event) => {
+    if (event.target.closest("button,input,.workspace2-actions,.workspace2-disclosure")) {
+      event.preventDefault();
+      return;
+    }
+    templatesState.draggingGroupId = group.id;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(TEMPLATE_GROUP_DRAG_TYPE, JSON.stringify({ id: group.id }));
+    event.dataTransfer.setData("text/plain", group.name);
+    row.closest(".workspace2-panel")?.classList.add("is-dragging");
+  });
+  row.addEventListener("dragend", () => {
+    templatesState.draggingGroupId = "";
+    row.closest(".workspace2-panel")?.classList.remove("is-dragging");
+  });
+}
+
+function makeTemplateDropTarget(el, target, groupId = "", beforeTemplateId = "") {
+  target.dataset.workspace2TemplateTarget = groupId;
+  target.dataset.workspace2TemplateBefore = beforeTemplateId;
+  target.addEventListener("dragover", (event) => {
+    const template = readDraggedTemplate(event);
+    const group = readDraggedTemplateGroup(event);
+    if (!template?.id && !group?.id) {
+      return;
+    }
+    if (group?.id && (group.id === groupId || isTemplateGroupDescendant(groupId, group.id))) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    target.classList.add("is-drop");
+  });
+  target.addEventListener("dragleave", () => {
+    target.classList.remove("is-drop");
+  });
+  target.addEventListener("drop", async (event) => {
+    const template = readDraggedTemplate(event);
+    const group = readDraggedTemplateGroup(event);
+    target.classList.remove("is-drop");
+    if (!template?.id && !group?.id) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      if (group?.id) {
+        await moveTemplateGroupToParent(el, group.id, groupId);
+      } else {
+        await moveTemplateToGroup(el, template.id, groupId, beforeTemplateId);
+      }
+    } catch (error) {
+      templatesState.error = error.message;
+      renderTemplatesPanel(el);
+    }
+  });
+}
+
+function toggleTemplateGroup(el, groupId, recursive = false) {
+  const isOpen = templatesState.expanded.has(groupId);
+  if (recursive) {
+    setExpandedRecursive(templatesState.expanded, templateGroupKeys(groupId), !isOpen);
+  } else if (isOpen) {
+    templatesState.expanded.delete(groupId);
+  } else {
+    templatesState.expanded.add(groupId);
+  }
+  renderTemplatesPanel(el);
+}
+
+function closeTemplateContextMenuFromEvent(event) {
+  if (event.type === "keydown" && event.key !== "Escape") {
+    return;
+  }
+  if (templatesState.contextMenuElement?.contains?.(event.target)) {
+    return;
+  }
+  closeTemplateContextMenu();
+}
+
+function openTemplateGroupContextMenu(el, event, group) {
+  event.preventDefault();
+  event.stopPropagation();
+  closeTemplateContextMenu();
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  menu.addEventListener("pointerdown", (menuEvent) => menuEvent.stopPropagation());
+  menu.addEventListener("click", (menuEvent) => menuEvent.stopPropagation());
+  menu.addEventListener("contextmenu", (menuEvent) => menuEvent.preventDefault());
+
+  const addItem = (label, handler) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace2-menu-item";
+    button.textContent = label;
+    button.addEventListener("click", async (clickEvent) => {
+      clickEvent.stopPropagation();
+      closeTemplateContextMenu();
+      try {
+        await handler();
+      } catch (error) {
+        templatesState.error = error.message;
+        renderTemplatesPanel(el);
+      }
+    });
+    menu.append(button);
+  };
+
+  addItem(t("menu.newSubfolder"), () => createTemplateGroup(el, group.id));
+  addItem(t("templates.renameGroup"), () => {
+    templatesState.editingGroupId = group.id;
+    renderTemplatesPanel(el);
+  });
+  addItem(t("folder.personalize"), () => personalizeTemplateGroup(el, group, event));
+  addItem(t("folder.resetStyle"), () => resetTemplateGroupStyle(el, group));
+  addItem(t("templates.deleteGroup"), () => requestDeleteTemplateGroup(el, group));
+
+  document.body.append(menu);
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(event.clientX, window.innerWidth - rect.width - 8);
+  const top = Math.min(event.clientY, window.innerHeight - rect.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+  templatesState.contextMenuElement = menu;
+  window.setTimeout(() => {
+    document.addEventListener("pointerdown", closeTemplateContextMenuFromEvent, { once: true, capture: true });
+    document.addEventListener("keydown", closeTemplateContextMenuFromEvent, { once: true, capture: true });
+  }, 0);
 }
 
 function backupNodeLibrary() {
@@ -4056,10 +6371,6 @@ async function deleteNodeGroup(el, group) {
   if (group.id === NODE_DEFAULT_GROUP_ID) {
     return;
   }
-  const confirmed = window.confirm(t("nodes.confirmDeleteGroup", { name: group.name }));
-  if (!confirmed) {
-    return;
-  }
   for (const favorite of nodesState.library.favorites) {
     if (favorite.groupId === group.id) {
       favorite.groupId = NODE_DEFAULT_GROUP_ID;
@@ -4068,6 +6379,20 @@ async function deleteNodeGroup(el, group) {
   nodesState.library.groups = nodesState.library.groups.filter((item) => item.id !== group.id);
   normalizeFavoriteOrders(NODE_DEFAULT_GROUP_ID);
   await saveNodeLibrary(el);
+}
+
+function requestDeleteNodeGroup(el, group, anchor = null) {
+  const target = anchor || el?.querySelector?.(`[data-workspace2-favorite-region="${cssEscape(group.id)}"] .workspace2-actions`);
+  workspace2InlineConfirm(target, {
+    confirmText: t("confirm.delete"),
+    onConfirm: async () => {
+      try {
+        await deleteNodeGroup(el, group);
+      } catch (error) {
+        handleError(el, error);
+      }
+    },
+  });
 }
 
 async function addFavoriteNode(el, node, groupId = NODE_DEFAULT_GROUP_ID, beforeType = "") {
@@ -5461,6 +7786,11 @@ function setupNodeCanvasDrop() {
   nodesState.canvasDropReady = true;
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && templatesState.pendingTemplate) {
+      event.stopPropagation();
+      setPendingTemplate(null);
+      return;
+    }
     if (event.key === "Escape" && nodesState.pendingNode) {
       event.stopPropagation();
       setPendingNode(null);
@@ -5468,6 +7798,19 @@ function setupNodeCanvasDrop() {
   }, true);
 
   document.addEventListener("click", async (event) => {
+    if (templatesState.pendingTemplate && isCanvasDropTarget(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        await placePendingTemplateAt(event.clientX, event.clientY);
+      } catch (error) {
+        templatesState.error = error.message;
+        if (templatesState.renderTarget) {
+          renderTemplatesPanel(templatesState.renderTarget);
+        }
+      }
+      return;
+    }
     if (!nodesState.pendingNode || !isCanvasDropTarget(event.target)) {
       return;
     }
@@ -5484,6 +7827,14 @@ function setupNodeCanvasDrop() {
   }, true);
 
   document.addEventListener("mousemove", (event) => {
+    if (templatesState.pendingTemplate) {
+      if (!isCanvasDropTarget(event.target)) {
+        hideNodePreview();
+        return;
+      }
+      showTemplatePreview(templatesState.pendingTemplate, event, { followCursor: true });
+      return;
+    }
     if (!nodesState.pendingNode) {
       return;
     }
@@ -5495,7 +7846,9 @@ function setupNodeCanvasDrop() {
   }, true);
 
   document.addEventListener("dragover", (event) => {
-    if (!nodesState.draggingNode || !isCanvasDropTarget(event.target)) {
+    const transferTypes = Array.from(event.dataTransfer?.types || []);
+    const hasTemplate = templatesState.draggingTemplate || transferTypes.includes(TEMPLATE_DRAG_TYPE);
+    if ((!nodesState.draggingNode && !hasTemplate) || !isCanvasDropTarget(event.target)) {
       return;
     }
     event.preventDefault();
@@ -5503,6 +7856,24 @@ function setupNodeCanvasDrop() {
   });
 
   document.addEventListener("drop", async (event) => {
+    const template = readDraggedTemplate(event);
+    if (template && isCanvasDropTarget(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const pos = canvasPositionFromClient(event.clientX, event.clientY);
+      try {
+        await addTemplateToCanvas(template, pos);
+        await recordTemplateUse(templatesState.renderTarget, template.id);
+      } catch (error) {
+        templatesState.error = error.message;
+        if (templatesState.renderTarget) {
+          renderTemplatesPanel(templatesState.renderTarget);
+        }
+      } finally {
+        templatesState.draggingTemplate = null;
+      }
+      return;
+    }
     const dragged = readDraggedNode(event);
     if (!dragged || !isCanvasDropTarget(event.target)) {
       return;
@@ -5541,9 +7912,6 @@ function fontControl(el) {
   isolateComfyKeys(slider);
   slider.setAttribute("aria-label", t("font.size"));
   const valueLabel = createSliderValueLabel(workflowScaleLabel(current));
-  const defaultMark = document.createElement("span");
-  defaultMark.className = "workspace2-scale-default-mark";
-
   slider.addEventListener("click", (event) => event.stopPropagation());
   slider.addEventListener("input", () => {
     state.fontScale = snapUiScaleValue(slider.value);
@@ -5560,7 +7928,7 @@ function fontControl(el) {
   slider.addEventListener("change", () => hideSliderValueSoon(wrap));
   slider.addEventListener("blur", () => hideSliderValueSoon(wrap));
 
-  wrap.append(defaultMark, slider, valueLabel);
+  wrap.append(slider, valueLabel);
   return wrap;
 }
 
@@ -5575,6 +7943,61 @@ function normalizeWorkflowFontScale(value) {
 function snapUiScaleValue(value) {
   const normalized = normalizeWorkflowFontScale(value);
   return Math.abs(normalized - 50) <= 3 ? 50 : normalized;
+}
+
+function snapWorkflowRecentLimit(value) {
+  const normalized = Math.max(2, Math.min(20, Math.round(Number(value) || 5)));
+  return Math.abs(normalized - 5) <= 1 ? 5 : normalized;
+}
+
+function workflowRecentLimit() {
+  return snapWorkflowRecentLimit(localStorage.getItem(WORKFLOW_RECENT_LIMIT_KEY) || "5");
+}
+
+function setWorkflowRecentLimit(value) {
+  const limit = snapWorkflowRecentLimit(value);
+  localStorage.setItem(WORKFLOW_RECENT_LIMIT_KEY, String(limit));
+  writeRecentWorkflows(readRecentWorkflows().slice(0, limit));
+  if (state.workflowsTarget) {
+    renderPanel(state.workflowsTarget);
+  }
+}
+
+function readRecentWorkflows() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WORKFLOW_RECENT_KEY) || "[]");
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed
+      .map((item) => ({
+        path: String(item?.path || ""),
+        name: String(item?.name || ""),
+        openedAt: Number(item?.openedAt || 0),
+      }))
+      .filter((item) => item.path);
+  } catch (error) {
+    return [];
+  }
+}
+
+function writeRecentWorkflows(items) {
+  localStorage.setItem(WORKFLOW_RECENT_KEY, JSON.stringify(items.slice(0, workflowRecentLimit())));
+}
+
+function recordRecentWorkflow(path) {
+  const normalizedPath = String(path || "");
+  if (!normalizedPath) {
+    return;
+  }
+  const item = state.items.find((entry) => entry.path === normalizedPath);
+  const next = {
+    path: normalizedPath,
+    name: item ? workflowDisplayName(item) : normalizedPath.split(/[\\/]/).pop() || normalizedPath,
+    openedAt: Date.now(),
+  };
+  const remaining = readRecentWorkflows().filter((entry) => entry.path !== normalizedPath);
+  writeRecentWorkflows([next, ...remaining]);
 }
 
 function createSliderValueLabel(text) {
@@ -5601,11 +8024,15 @@ function formatPx(value) {
 }
 
 function workflowScaleLabel(value) {
-  return formatPx(workflowUiScaleVars(value).treeFont);
+  return formatPx(workspaceUiScaleVars(value).itemFont);
 }
 
 function nodeScaleLabel(value) {
-  return formatPx(nodeUiScaleVars(value).nodeFont);
+  return formatPx(workspaceUiScaleVars(value).itemFont);
+}
+
+function templateScaleLabel(value) {
+  return formatPx(workspaceUiScaleVars(value).itemFont);
 }
 
 function readWorkflowFontScale() {
@@ -5626,25 +8053,29 @@ function readWorkflowFontScale() {
   return normalizeWorkflowFontScale(value);
 }
 
-function workflowUiScaleVars(value) {
+function workspaceUiScaleVars(value) {
   const scale = normalizeWorkflowFontScale(value) / 100;
   return {
-    treeFont: `${11 + scale * 6}px`,
-    folderFont: `${11.5 + scale * 6}px`,
-    nodeFont: `${10.5 + scale * 5.5}px`,
+    itemFont: `${11 + scale * 6}px`,
+    folderFont: `${13 + scale * 6}px`,
     metaFont: `${9 + scale * 3}px`,
     rowHeight: `${28 + scale * 14}px`,
+    rowPaddingY: `${2 + scale * 3}px`,
+    listGap: `${2 + scale * 2}px`,
   };
 }
 
 function applyWorkflowUiScale(panel) {
   state.fontScale = normalizeWorkflowFontScale(state.fontScale);
-  const vars = workflowUiScaleVars(state.fontScale);
-  panel.style.setProperty("--workspace2-tree-font", vars.treeFont);
+  const vars = workspaceUiScaleVars(state.fontScale);
+  panel.style.setProperty("--workspace2-tree-font", vars.itemFont);
   panel.style.setProperty("--workspace2-folder-font", vars.folderFont);
-  panel.style.setProperty("--workspace2-node-font", vars.nodeFont);
+  panel.style.setProperty("--workspace2-node-font", vars.itemFont);
   panel.style.setProperty("--workspace2-meta-font", vars.metaFont);
   panel.style.setProperty("--workspace2-row-height", vars.rowHeight);
+  panel.style.setProperty("--workspace2-node-row-height", vars.rowHeight);
+  panel.style.setProperty("--workspace2-node-row-padding-y", vars.rowPaddingY);
+  panel.style.setProperty("--workspace2-node-list-gap", vars.listGap);
 }
 
 function clampNodeUiScale(value) {
@@ -5652,22 +8083,34 @@ function clampNodeUiScale(value) {
 }
 
 function nodeUiScaleVars(value) {
-  const base = workflowUiScaleVars(clampNodeUiScale(value));
-  const scale = clampNodeUiScale(value) / 100;
+  const base = workspaceUiScaleVars(clampNodeUiScale(value));
   return {
-    treeFont: base.treeFont,
-    folderFont: `${12 + scale * 6}px`,
-    nodeFont: `${11 + scale * 5}px`,
+    treeFont: base.itemFont,
+    folderFont: base.folderFont,
+    nodeFont: base.itemFont,
     metaFont: base.metaFont,
     rowHeight: base.rowHeight,
-    nodePaddingY: `${2 + scale * 3}px`,
-    nodeGap: `${2 + scale * 2}px`,
+    nodePaddingY: base.rowPaddingY,
+    nodeGap: base.listGap,
   };
 }
 
 function applyNodeUiScale(panel) {
   nodesState.uiScale = clampNodeUiScale(nodesState.uiScale);
   const vars = nodeUiScaleVars(nodesState.uiScale);
+  panel.style.setProperty("--workspace2-tree-font", vars.treeFont);
+  panel.style.setProperty("--workspace2-folder-font", vars.folderFont);
+  panel.style.setProperty("--workspace2-node-font", vars.nodeFont);
+  panel.style.setProperty("--workspace2-meta-font", vars.metaFont);
+  panel.style.setProperty("--workspace2-row-height", vars.rowHeight);
+  panel.style.setProperty("--workspace2-node-row-height", vars.rowHeight);
+  panel.style.setProperty("--workspace2-node-row-padding-y", vars.nodePaddingY);
+  panel.style.setProperty("--workspace2-node-list-gap", vars.nodeGap);
+}
+
+function applyTemplateUiScale(panel) {
+  templatesState.uiScale = clampNodeUiScale(templatesState.uiScale);
+  const vars = nodeUiScaleVars(templatesState.uiScale);
   panel.style.setProperty("--workspace2-tree-font", vars.treeFont);
   panel.style.setProperty("--workspace2-folder-font", vars.folderFont);
   panel.style.setProperty("--workspace2-node-font", vars.nodeFont);
@@ -5693,9 +8136,6 @@ function nodesDensityControl(el) {
   isolateComfyKeys(slider);
   slider.setAttribute("aria-label", t("nodes.uiScaleTitle"));
   const valueLabel = createSliderValueLabel(nodeScaleLabel(nodesState.uiScale));
-  const defaultMark = document.createElement("span");
-  defaultMark.className = "workspace2-scale-default-mark";
-
   slider.addEventListener("click", (event) => event.stopPropagation());
 
   slider.addEventListener("input", () => {
@@ -5713,8 +8153,54 @@ function nodesDensityControl(el) {
   slider.addEventListener("change", () => hideSliderValueSoon(wrap));
   slider.addEventListener("blur", () => hideSliderValueSoon(wrap));
 
-  wrap.append(defaultMark, slider, valueLabel);
+  wrap.append(slider, valueLabel);
   return wrap;
+}
+
+function templatesDensityControl(el) {
+  templatesState.uiScale = clampNodeUiScale(templatesState.uiScale);
+  const wrap = document.createElement("label");
+  wrap.className = "workspace2-node-density";
+  wrap.title = t("templates.uiScaleTitle");
+
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = "100";
+  slider.step = "1";
+  slider.value = String(templatesState.uiScale);
+  isolateComfyKeys(slider);
+  slider.setAttribute("aria-label", t("templates.uiScaleTitle"));
+  const valueLabel = createSliderValueLabel(templateScaleLabel(templatesState.uiScale));
+  slider.addEventListener("click", (event) => event.stopPropagation());
+  slider.addEventListener("input", () => {
+    templatesState.uiScale = snapUiScaleValue(slider.value);
+    slider.value = String(templatesState.uiScale);
+    localStorage.setItem(TEMPLATE_UI_SCALE_KEY, String(templatesState.uiScale));
+    valueLabel.textContent = templateScaleLabel(templatesState.uiScale);
+    showSliderValue(wrap);
+    const panel = el.querySelector(".workspace2-panel");
+    if (panel) {
+      applyTemplateUiScale(panel);
+    }
+  });
+  slider.addEventListener("pointerup", () => hideSliderValueSoon(wrap));
+  slider.addEventListener("change", () => hideSliderValueSoon(wrap));
+  slider.addEventListener("blur", () => hideSliderValueSoon(wrap));
+
+  wrap.append(slider, valueLabel);
+  return wrap;
+}
+
+function templatesRootRow(el) {
+  return createRootActionRow({
+    className: "workspace2-node-root-row",
+    title: t("templates.moveToRootTitle"),
+    icon: "rootArrow",
+    text: t("templates.moveToRoot"),
+    control: templatesDensityControl(el),
+    setupDrop: (row) => makeTemplateDropTarget(el, row, ""),
+  });
 }
 
 function nodesFavoriteRootRow(el) {
@@ -6099,6 +8585,70 @@ function createRootActionRow({ className = "", title, icon, text, control, setup
     row.append(control);
   }
   return row;
+}
+
+function workspaceModuleLabel(moduleId) {
+  if (moduleId === "nodes") {
+    return t("workspace.tab.nodes");
+  }
+  if (moduleId === "templates") {
+    return t("workspace.tab.templates");
+  }
+  return t("workspace.tab.workflows");
+}
+
+function renderWorkspaceModuleTabs(el) {
+  const tabs = document.createElement("div");
+  tabs.className = "workspace2-module-tabs";
+  for (const moduleId of WORKSPACE2_MODULES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `workspace2-module-tab ${workspaceState.activeModule === moduleId ? "is-active" : ""}`;
+    button.textContent = workspaceModuleLabel(moduleId);
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      workspaceState.activeModule = moduleId;
+      localStorage.setItem(WORKSPACE2_MODULE_KEY, moduleId);
+      renderWorkspace2Panel(el);
+    });
+    tabs.append(button);
+  }
+  const settings = document.createElement("button");
+  settings.type = "button";
+  settings.className = "workspace2-module-settings";
+  settings.title = t("settings.title");
+  settings.setAttribute("aria-label", t("settings.title"));
+  settings.append(iconSvg("settings"));
+  settings.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openWorkspaceSettings();
+  });
+  tabs.append(settings);
+  return tabs;
+}
+
+function renderWorkspace2Panel(el) {
+  workspaceState.renderTarget = el;
+  styles();
+  setupWorkspaceKeyIsolation();
+  prepareWorkspaceHost(el);
+
+  const shell = document.createElement("div");
+  shell.className = "workspace2-shell";
+  const body = document.createElement("div");
+  body.className = "workspace2-module-body";
+  shell.append(renderWorkspaceModuleTabs(el), body);
+  el.append(shell);
+
+  if (workspaceState.activeModule === "nodes") {
+    renderNodesPanel(body);
+  } else if (workspaceState.activeModule === "templates") {
+    renderTemplatesPanel(body);
+  } else {
+    renderPanel(body);
+  }
 }
 
 function readDragItem(event) {
@@ -6570,12 +9120,19 @@ function renderTrashPanel(el, panel) {
       }
     });
 
-    const systemTrash = iconButton("systemTrash", t("trash.systemDelete"), async () => {
-      try {
-        await moveTrashItemToSystemTrash(el, item);
-      } catch (error) {
-        handleError(el, error);
-      }
+    const systemTrash = dangerIconButton("systemTrash", t("trash.systemDelete"), (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      workspace2InlineConfirm(event.currentTarget, {
+        confirmText: t("confirm.moveToSystemTrash"),
+        onConfirm: async () => {
+          try {
+            await moveTrashItemToSystemTrash(el, item);
+          } catch (error) {
+            handleError(el, error);
+          }
+        },
+      });
     });
 
     row.append(info, restore, systemTrash);
@@ -6745,7 +9302,7 @@ function renderNode(el, list, node, depth) {
     }),
   );
   actions.append(
-    iconButton("trash", t("row.moveToTrash"), async () => {
+    dangerIconButton("trash", t("row.moveToTrash"), async () => {
       try {
         await moveToTrash(el, node);
       } catch (error) {
@@ -6811,6 +9368,72 @@ function scheduleWorkflowResultsRefresh(el) {
   }, WORKFLOW_SEARCH_RENDER_DELAY);
 }
 
+function recentWorkflowRows(el) {
+  const existing = new Map(state.items.filter((item) => item.type === "file").map((item) => [item.path, item]));
+  const recent = readRecentWorkflows()
+    .map((entry) => ({ ...entry, item: existing.get(entry.path) }))
+    .filter((entry) => entry.item)
+    .slice(0, workflowRecentLimit());
+  const section = document.createElement("div");
+  section.className = "workspace2-recent-workflows";
+  const label = document.createElement("div");
+  label.className = "workspace2-current-workflow-label";
+  label.textContent = t("workflows.recent");
+  section.append(label);
+
+  if (!recent.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-current-workflow-name is-empty";
+    empty.textContent = t("workflows.currentEmpty");
+    section.append(empty);
+    return section;
+  }
+
+  for (const entry of recent) {
+    const row = document.createElement("div");
+    row.className = "workspace2-current-workflow";
+    if (entry.path === state.selectedPath) {
+      row.classList.add("is-selected");
+    }
+    const info = document.createElement("button");
+    info.type = "button";
+    info.className = "workspace2-current-workflow-info";
+    info.title = entry.path;
+    const name = document.createElement("div");
+    name.className = "workspace2-current-workflow-name";
+    name.textContent = workflowDisplayName(entry.item) || entry.name || entry.path;
+    info.append(name);
+    info.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        state.selectedPath = entry.path;
+        await openWorkflow(entry.path);
+        renderPanel(el);
+      } catch (error) {
+        handleError(el, error);
+      }
+    });
+
+    const actions = document.createElement("div");
+    actions.className = "workspace2-actions";
+    actions.append(
+      iconButton("folderOpen", t("row.openLocation"), async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          await openWorkflowLocation(entry.path);
+        } catch (error) {
+          handleError(el, error);
+        }
+      }),
+    );
+    row.append(info, actions);
+    section.append(row);
+  }
+  return section;
+}
+
 function renderPanel(el) {
   const snapshot = scrollSnapshot(el);
   state.workflowsTarget = el;
@@ -6856,7 +9479,7 @@ function renderPanel(el) {
     }
   });
 
-  const trash = toolbarButton(state.showTrash ? "files" : "trashPage", state.showTrash ? t("toolbar.showFiles") : t("toolbar.showTrash"), async () => {
+  const trash = toolbarButton(state.showTrash ? "files" : "archiveTray", state.showTrash ? t("toolbar.showFiles") : t("toolbar.showTrash"), async () => {
     try {
       state.showTrash = !state.showTrash;
       if (state.showTrash) {
@@ -6892,15 +9515,23 @@ function renderPanel(el) {
       className: "workspace2-empty-trash-row",
       title: t("trash.moveAllToSystemTitle"),
       icon: "systemTrash",
-      text: t("trash.moveToSystem"),
+      text: t("trash.moveAllToSystemShort"),
       control: fontControl(el),
-      onClick: async (event) => {
+      onClick: (event) => {
         event.stopPropagation();
-        try {
-          await emptyTrash(el);
-        } catch (error) {
-          handleError(el, error);
+        if (event.target?.closest?.(".workspace2-inline-confirm")) {
+          return;
         }
+        workspace2InlineConfirm(event.currentTarget, {
+          confirmText: t("confirm.emptyTrash"),
+          onConfirm: async () => {
+            try {
+              await emptyTrash(el);
+            } catch (error) {
+              handleError(el, error);
+            }
+          },
+        });
       },
     });
     top.append(emptyTrashRow);
@@ -6921,7 +9552,7 @@ function renderPanel(el) {
     setupDrop: (row) => makeDropTarget(el, row, ""),
   });
 
-  top.append(moveRootRow);
+  top.append(moveRootRow, recentWorkflowRows(el));
   renderWorkflowTreeBody(el, tree);
 
   panel.append(top, tree);
@@ -7031,7 +9662,7 @@ function renderCanvasGroupRow(el, group) {
       workspace2CanvasGroups.toggleBypass?.(group.id);
       renderCanvasGroupsPanel(el);
     }),
-    iconButton("trash", t("canvasGroups.delete"), () => deleteCanvasGroup(el, group)),
+    dangerIconButton("trash", t("canvasGroups.delete"), () => deleteCanvasGroup(el, group)),
   );
 
   row.append(swatch, info, actions);
@@ -7088,6 +9719,456 @@ function renderCanvasGroupsPanel(el) {
   el.append(panel);
 }
 
+function renderTemplateRow(el, template) {
+  const row = document.createElement("div");
+  row.className = "workspace2-template-row";
+  const isEditing = templatesState.editingTemplateId === template.id;
+  if (templatesState.pendingTemplate?.id === template.id) {
+    row.classList.add("is-selected");
+  }
+  row.draggable = !isEditing;
+  row.title = t("templates.dropHint");
+  row.dataset.workspace2TemplateId = template.id;
+  makeTemplateDropTarget(el, row, template.groupId || "", template.id);
+
+  const icon = iconSvg("template");
+  const info = document.createElement("div");
+  info.className = "workspace2-template-info";
+  const name = document.createElement("div");
+  name.className = "workspace2-template-name";
+  if (isEditing) {
+    const input = document.createElement("input");
+    input.className = "workspace2-rename-input";
+    input.value = template.name;
+    isolateComfyKeys(input);
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          await renameTemplate(el, template, input.value);
+        } catch (error) {
+          templatesState.error = error.message;
+          renderTemplatesPanel(el);
+        }
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        templatesState.editingTemplateId = "";
+        renderTemplatesPanel(el);
+      }
+    });
+    input.addEventListener("blur", async () => {
+      try {
+        await renameTemplate(el, template, input.value);
+      } catch (error) {
+        templatesState.error = error.message;
+        renderTemplatesPanel(el);
+      }
+    });
+    name.append(input);
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  } else {
+    name.textContent = template.name;
+  }
+  const meta = document.createElement("div");
+  meta.className = "workspace2-template-meta";
+  meta.textContent = t("templates.meta", {
+    nodes: template.nodes?.length || 0,
+    links: template.links?.length || 0,
+  });
+  info.append(name, meta);
+  const actions = document.createElement("div");
+  actions.className = "workspace2-actions";
+  actions.addEventListener("pointerenter", hideNodePreview);
+  actions.append(
+    dangerIconButton("trash", t("templates.delete"), (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      requestDeleteTemplate(el, template, event.currentTarget);
+    }),
+  );
+  row.append(icon, info, actions);
+
+  row.addEventListener("dragstart", (event) => {
+    if (event.target?.closest?.("button,input,.workspace2-actions")) {
+      event.preventDefault();
+      return;
+    }
+    hideNodePreview();
+    templatesState.draggingTemplate = template;
+    event.dataTransfer.effectAllowed = "copyMove";
+    event.dataTransfer.setData(TEMPLATE_DRAG_TYPE, JSON.stringify(template));
+    event.dataTransfer.setData("text/plain", template.name);
+  });
+  row.addEventListener("dragend", () => {
+    templatesState.draggingTemplate = null;
+  });
+  row.addEventListener("contextmenu", (event) => {
+    openTemplateContextMenu(el, event, template);
+  });
+  row.addEventListener("click", (event) => {
+    if (isEditing || event.target?.closest?.("button,input,.workspace2-actions")) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setPendingTemplate(templatesState.pendingTemplate?.id === template.id ? null : template);
+  });
+  row.addEventListener("pointerenter", (event) => {
+    if (!isEditing && !templatesState.draggingTemplate && !event.target?.closest?.(".workspace2-actions")) {
+      showTemplatePreview(template, event, { panelElement: el });
+    }
+  });
+  row.addEventListener("pointermove", (event) => {
+    if (event.target?.closest?.(".workspace2-actions")) {
+      hideNodePreview();
+      return;
+    }
+    if (!isEditing && !templatesState.draggingTemplate && nodesState.previewPopover && !nodesState.previewPopover.hidden) {
+      positionNodePreviewPopover(nodesState.previewPopover, event, { panelElement: el });
+    }
+  });
+  row.addEventListener("pointerleave", () => {
+    if (nodesState.previewPopover && !nodesState.previewPopover.hidden) {
+      hideNodePreview();
+    }
+  });
+  row.addEventListener("dblclick", async (event) => {
+    if (event.target?.closest?.("button,input,.workspace2-actions")) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    hideNodePreview();
+    try {
+      await addTemplateToCanvas(template, canvasCenterPosition());
+      await recordTemplateUse(el, template.id);
+    } catch (error) {
+      templatesState.error = error.message;
+      renderTemplatesPanel(el);
+    }
+  });
+  return row;
+}
+
+function templateMatchesGroup(group, query) {
+  const directTemplates = (templatesState.library?.templates || [])
+    .filter((template) => template.groupId === group.id)
+    .some((template) => templateMatchesQuery(template, query));
+  if (directTemplates) {
+    return true;
+  }
+  if (query && group.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) {
+    return true;
+  }
+  return childTemplateGroups(group.id).some((child) => templateMatchesGroup(child, query));
+}
+
+function renderTemplateGroupFolder(el, section, group, query, depth = 0) {
+  const groupTemplates = (templatesState.library?.templates || [])
+    .filter((template) => template.groupId === group.id)
+    .filter((template) => templateMatchesQuery(template, query))
+    .sort((a, b) => compareTemplatesBySort(a, b, query));
+  const childGroups = childTemplateGroups(group.id)
+    .filter((childGroup) => !query || templateMatchesGroup(childGroup, query));
+  if (query && !groupTemplates.length && !childGroups.length) {
+    return;
+  }
+  const groupOpen = templatesState.expanded.has(group.id) || Boolean(query);
+
+  const header = document.createElement("div");
+  header.className = "workspace2-node-folder-header";
+  header.style.setProperty("--indent", `${depth * 16 + 4}px`);
+  header.dataset.workspace2TemplateGroupId = group.id;
+  makeTemplateDropTarget(el, header, group.id);
+  makeTemplateGroupDragSource(header, group);
+  header.addEventListener("click", (event) => {
+    if (event.target.closest("button,input")) {
+      return;
+    }
+    event.stopPropagation();
+    toggleTemplateGroup(el, group.id, event.ctrlKey || event.metaKey);
+  });
+  header.addEventListener("contextmenu", (event) => openTemplateGroupContextMenu(el, event, group));
+
+  const disclosure = document.createElement("button");
+  disclosure.className = `workspace2-disclosure ${groupOpen ? "is-open" : ""}`;
+  disclosure.type = "button";
+  disclosure.title = groupOpen ? t("folder.collapse") : t("folder.expand");
+  disclosure.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleTemplateGroup(el, group.id, event.ctrlKey || event.metaKey);
+  });
+
+  const icon = document.createElement("span");
+  applyDecoratedIcon(icon, group.icon, group.color, groupOpen ? DEFAULT_FOLDER_OPEN_ICON_CLASS : DEFAULT_FOLDER_ICON_CLASS);
+
+  const name = document.createElement("div");
+  name.className = "workspace2-name";
+  if (templatesState.editingGroupId === group.id) {
+    const input = document.createElement("input");
+    input.className = "workspace2-rename-input";
+    input.value = group.name;
+    isolateComfyKeys(input);
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("keydown", async (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        try {
+          await commitTemplateGroupRename(el, group, input.value);
+        } catch (error) {
+          templatesState.error = error.message;
+          renderTemplatesPanel(el);
+        }
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        templatesState.editingGroupId = "";
+        renderTemplatesPanel(el);
+      }
+    });
+    input.addEventListener("blur", async () => {
+      try {
+        await commitTemplateGroupRename(el, group, input.value);
+      } catch (error) {
+        templatesState.error = error.message;
+        renderTemplatesPanel(el);
+      }
+    });
+    name.append(input);
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  } else {
+    name.textContent = group.name;
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "workspace2-actions";
+  actions.append(
+    iconButton("folderPlus", t("menu.newSubfolder"), async () => createTemplateGroup(el, group.id)),
+    iconButton("edit", t("templates.renameGroup"), () => {
+      templatesState.editingGroupId = group.id;
+      renderTemplatesPanel(el);
+    }),
+    dangerIconButton("trash", t("templates.deleteGroupTitle"), (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      requestDeleteTemplateGroup(el, group, event.currentTarget);
+    }),
+  );
+
+  header.append(disclosure, icon, name, actions);
+  section.append(header);
+
+  if (!groupOpen) {
+    return;
+  }
+  for (const childGroup of childGroups) {
+    renderTemplateGroupFolder(el, section, childGroup, query, depth + 1);
+  }
+  const list = document.createElement("div");
+  list.className = "workspace2-node-list workspace2-template-list";
+  list.style.setProperty("--indent", `${(depth + 1) * 16 + 4}px`);
+  makeTemplateDropTarget(el, list, group.id);
+  for (const template of groupTemplates) {
+    list.append(renderTemplateRow(el, template));
+  }
+  section.append(list);
+}
+
+function renderTemplatesBody(el, body) {
+  if (!templatesState.library && !templatesState.loading) {
+    loadTemplateLibrary().then(() => renderTemplatesPanel(el));
+  }
+
+  if (templatesState.loading) {
+    const loading = document.createElement("div");
+    loading.className = "workspace2-empty";
+    loading.textContent = t("status.loading");
+    body.append(loading);
+    return;
+  }
+  if (templatesState.error) {
+    const error = document.createElement("div");
+    error.className = "workspace2-empty";
+    error.textContent = t("status.error", { message: templatesState.error });
+    body.append(error);
+    return;
+  }
+  const query = templatesState.query.trim();
+  const allTemplates = templatesState.library?.templates || [];
+  const rootTemplates = allTemplates
+    .filter((template) => !template.groupId)
+    .filter((template) => templateMatchesQuery(template, query))
+    .sort((a, b) => compareTemplatesBySort(a, b, query));
+  const rootGroups = childTemplateGroups("")
+    .filter((group) => !query || templateMatchesGroup(group, query));
+  const hasMatches = rootTemplates.length || rootGroups.length;
+  if (!hasMatches) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-empty";
+    empty.textContent = query ? t("templates.noMatches") : t("templates.empty");
+    body.append(empty);
+    return;
+  }
+
+  const section = document.createElement("div");
+  section.className = "workspace2-node-section";
+  const rootList = document.createElement("div");
+  rootList.className = "workspace2-node-list workspace2-template-list";
+  makeTemplateDropTarget(el, rootList, "");
+  for (const template of rootTemplates) {
+    rootList.append(renderTemplateRow(el, template));
+  }
+  section.append(rootList);
+  for (const group of rootGroups) {
+    renderTemplateGroupFolder(el, section, group, query, 0);
+  }
+  body.append(section);
+}
+
+function closeTemplateSortMenu() {
+  if (templatesState.sortMenuCloseHandler) {
+    window.removeEventListener("pointerdown", templatesState.sortMenuCloseHandler, true);
+    document.removeEventListener("pointerdown", templatesState.sortMenuCloseHandler, true);
+    window.removeEventListener("click", templatesState.sortMenuCloseHandler, true);
+    document.removeEventListener("click", templatesState.sortMenuCloseHandler, true);
+    window.removeEventListener("keydown", templatesState.sortMenuCloseHandler, true);
+    templatesState.sortMenuCloseHandler = null;
+  }
+  templatesState.sortMenuElement?.remove();
+  templatesState.sortMenuElement = null;
+}
+
+function templatesSortButton(el) {
+  if (!TEMPLATE_SORTS.includes(templatesState.sort)) {
+    templatesState.sort = "manual";
+  }
+  const label = t(`templates.sort.${templatesState.sort}`);
+  const button = toolbarButton("sort", t("templates.sortTitle", { sort: label }), (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (templatesState.sortMenuElement) {
+      closeTemplateSortMenu();
+      return;
+    }
+    openTemplateSortMenu(el, event.currentTarget);
+  });
+  button.classList.add("workspace2-template-sort-button");
+  button.dataset.sort = templatesState.sort;
+  return button;
+}
+
+function openTemplateSortMenu(el, anchor) {
+  closeTemplateSortMenu();
+  const panel = anchor?.closest?.(".workspace2-panel") || el.querySelector(".workspace2-panel");
+  const menu = document.createElement("div");
+  menu.className = "workspace2-context";
+  const rect = anchor.getBoundingClientRect();
+  const panelRect = panel?.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, rect.left - (panelRect?.left || 0))}px`;
+  menu.style.top = `${rect.bottom - (panelRect?.top || 0) + 4}px`;
+  menu.addEventListener("click", (event) => event.stopPropagation());
+  menu.addEventListener("contextmenu", (event) => event.preventDefault());
+
+  for (const sort of TEMPLATE_SORTS) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = `workspace2-menu-item${sort === templatesState.sort ? " is-active" : ""}`;
+    option.textContent = t(`templates.sort.${sort}`);
+    option.addEventListener("click", () => {
+      templatesState.sort = sort;
+      localStorage.setItem(TEMPLATE_SORT_KEY, templatesState.sort);
+      closeTemplateSortMenu();
+      renderTemplatesPanel(el);
+    });
+    menu.append(option);
+  }
+
+  (panel || document.body).append(menu);
+  templatesState.sortMenuElement = menu;
+  templatesState.sortMenuCloseHandler = (event) => {
+    if (event.type === "keydown" && event.key !== "Escape") {
+      return;
+    }
+    if (menu.contains(event.target) || anchor.contains?.(event.target)) {
+      return;
+    }
+    closeTemplateSortMenu();
+  };
+  setTimeout(() => {
+    window.addEventListener("pointerdown", templatesState.sortMenuCloseHandler, true);
+    document.addEventListener("pointerdown", templatesState.sortMenuCloseHandler, true);
+    window.addEventListener("click", templatesState.sortMenuCloseHandler, true);
+    document.addEventListener("click", templatesState.sortMenuCloseHandler, true);
+    window.addEventListener("keydown", templatesState.sortMenuCloseHandler, true);
+  }, 0);
+}
+
+function renderTemplatesPanel(el) {
+  const snapshot = scrollSnapshot(el);
+  templatesState.renderTarget = el;
+  setupNodeCanvasDrop();
+  styles();
+  setupWorkspaceKeyIsolation();
+  closeTemplateContextMenu();
+  closeTemplateSortMenu();
+  prepareWorkspaceHost(el);
+
+  const panel = document.createElement("div");
+  panel.className = "workspace2-panel";
+  applyTemplateUiScale(panel);
+
+  const top = document.createElement("div");
+  top.className = "workspace2-top";
+  const templates = templatesState.library?.templates || [];
+  const header = createPanelHeader(t("templates.title"), t("templates.status", { count: templates.length }), { statusDataset: "workspace2TemplatesStatus" });
+  const newGroup = toolbarButton("folderPlus", t("templates.newGroup"), async () => {
+    try {
+      await createTemplateGroup(el);
+    } catch (error) {
+      templatesState.error = error.message;
+      renderTemplatesPanel(el);
+    }
+  });
+  const save = toolbarButton("template", t("templates.saveSelected"), async () => {
+    try {
+      await saveSelectedNodesAsTemplate(el);
+    } catch (error) {
+      templatesState.error = error.message;
+      renderTemplatesPanel(el);
+    }
+  });
+  const toolbar = createSearchToolbar({
+    focusKey: "templates-search",
+    placeholder: t("templates.searchPlaceholder"),
+    value: templatesState.query,
+    buttons: [newGroup, save, templatesSortButton(el)],
+    onInput: (value) => {
+      templatesState.query = value;
+      renderTemplatesPanel(el);
+    },
+  });
+  const rootRow = templatesRootRow(el);
+  top.append(header, toolbar, rootRow);
+
+  const body = document.createElement("div");
+  body.className = "workspace2-tree";
+  renderTemplatesBody(el, body);
+
+  panel.append(top, body);
+  el.append(panel);
+  restoreScrollSnapshot(el, snapshot);
+}
+
 function renderNodesBody(el, body) {
   if (!nodesState.library && !nodesState.loading) {
     loadNodeLibrary().then(() => renderNodesPanel(el));
@@ -7096,7 +10177,7 @@ function renderNodesBody(el, body) {
   if (nodesState.loading) {
     const loading = document.createElement("div");
     loading.className = "workspace2-empty";
-    loading.textContent = t("status.loading");
+    loading.textContent = t("nodes.loadingDefinitions");
     body.append(loading);
   } else if (nodesState.error) {
     const error = document.createElement("div");
@@ -7104,6 +10185,12 @@ function renderNodesBody(el, body) {
     error.textContent = t("status.error", { message: nodesState.error });
     body.append(error);
   } else if (nodesState.library) {
+    if (nodesState.objectInfoLoading && !nodesState.objectInfo) {
+      const loading = document.createElement("div");
+      loading.className = "workspace2-empty";
+      loading.textContent = t("nodes.updatingDefinitions");
+      body.append(loading);
+    }
     renderNSidebarMigration(el, body);
     renderNodeCategorySections(el, body);
   }
@@ -7156,7 +10243,11 @@ function renderNodesPanel(el) {
   const nodeTypes = getNodeDefinitions();
   const statusText = nodesState.pendingNode
     ? t("nodes.pendingPlace", { name: nodesState.pendingNode.title })
-    : t("nodes.status", { count: nodeTypes.length });
+    : nodesState.loading
+      ? t("status.loading")
+      : nodesState.objectInfoLoading
+        ? `${t("nodes.status", { count: nodeTypes.length })} · ${t("nodes.updatingDefinitions")}`
+        : t("nodes.status", { count: nodeTypes.length });
 
   const newGroup = toolbarButton("folderPlus", t("nodes.newGroup"), async () => {
     try {
@@ -7246,7 +10337,11 @@ function positionNodePreviewPopover(preview, event, options = {}) {
   const gap = 16;
   const previewWidth = Math.min(248, window.innerWidth - 24);
   const targetRect = event?.currentTarget?.getBoundingClientRect?.();
-  const panelRect = nodesState.renderTarget?.getBoundingClientRect?.() || targetRect;
+  const localPanel = event?.currentTarget?.closest?.(".workspace2-panel,.workspace2-shell");
+  const panelRect = options.panelElement?.getBoundingClientRect?.()
+    || localPanel?.getBoundingClientRect?.()
+    || nodesState.renderTarget?.getBoundingClientRect?.()
+    || targetRect;
   const clientX = event?.clientX || 0;
   const clientY = event?.clientY || 0;
   preview.style.left = "0px";
@@ -7321,6 +10416,244 @@ function showNodePreview(node, event, options = {}) {
   positionNodePreviewPopover(preview, event, options);
 }
 
+function templatePreviewNodes(template) {
+  return (Array.isArray(template?.nodes) ? template.nodes : [])
+    .map((node) => {
+      const relPos = Array.isArray(node?.relPos) ? node.relPos : null;
+      const pos = relPos || (Array.isArray(node?.pos) ? node.pos : [0, 0]);
+      const size = vectorPair(node?.size, [180, 80]);
+      return {
+        id: String(node?.id ?? ""),
+        type: String(node?.type || ""),
+        title: String(node?.title || node?.type || ""),
+        x: Number(pos?.[0] || 0),
+        y: Number(pos?.[1] || 0),
+        width: Math.max(40, Number(size[0] || 180)),
+        height: Math.max(24, Number(size[1] || 80)),
+        color: String(node?.color || ""),
+        bgcolor: String(node?.bgcolor || ""),
+        mode: Number(node?.mode || 0),
+      };
+    })
+    .filter((node) => node.type || node.id);
+}
+
+function templatePreviewBounds(nodes) {
+  if (!nodes.length) {
+    return { minX: 0, minY: 0, width: 100, height: 100 };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    minX = Math.min(minX, node.x);
+    minY = Math.min(minY, node.y);
+    maxX = Math.max(maxX, node.x + node.width);
+    maxY = Math.max(maxY, node.y + node.height);
+  }
+  const width = Math.max(100, maxX - minX);
+  const height = Math.max(100, maxY - minY);
+  return { minX, minY, width, height };
+}
+
+function templatePreviewNodeFill(node) {
+  if (node.mode === 4) {
+    return "#45424d";
+  }
+  if (node.bgcolor && /^(#|rgb|hsl)/i.test(node.bgcolor)) {
+    return node.bgcolor;
+  }
+  if (node.color && /^(#|rgb|hsl)/i.test(node.color)) {
+    return node.color;
+  }
+  const normalized = node.type.toLowerCase();
+  if (normalized.includes("image")) return "#335f87";
+  if (normalized.includes("latent")) return "#6f4a82";
+  if (normalized.includes("model")) return "#615384";
+  if (normalized.includes("clip") || normalized.includes("text")) return "#70623e";
+  if (normalized.includes("vae")) return "#804b4b";
+  return "#4f5663";
+}
+
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function renderTemplateMinimap(template, options = {}) {
+  const width = Number(options.width || 320);
+  const height = Number(options.height || 190);
+  const padding = 18;
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  const canvas = document.createElement("canvas");
+  canvas.className = "workspace2-template-minimap";
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = "100%";
+  canvas.style.aspectRatio = `${width} / ${height}`;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return canvas;
+  }
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#181a1f";
+  ctx.fillRect(0, 0, width, height);
+
+  const nodes = templatePreviewNodes(template);
+  if (!nodes.length) {
+    ctx.fillStyle = "#7e828c";
+    ctx.font = "12px sans-serif";
+    ctx.fillText(t("templates.empty"), padding, height / 2);
+    return canvas;
+  }
+
+  const bounds = templatePreviewBounds(nodes);
+  const scale = Math.min(
+    (width - padding * 2) / bounds.width,
+    (height - padding * 2) / bounds.height,
+  );
+  const offsetX = (width - bounds.width * scale) / 2 - bounds.minX * scale;
+  const offsetY = (height - bounds.height * scale) / 2 - bounds.minY * scale;
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const project = (x, y) => [x * scale + offsetX, y * scale + offsetY];
+
+  ctx.save();
+  ctx.lineWidth = 1.2;
+  ctx.strokeStyle = "rgba(178, 184, 196, 0.32)";
+  for (const link of Array.isArray(template?.links) ? template.links : []) {
+    const origin = nodeById.get(String(link?.origin_id ?? ""));
+    const target = nodeById.get(String(link?.target_id ?? ""));
+    if (!origin || !target) {
+      continue;
+    }
+    const [x1, y1] = project(origin.x + origin.width, origin.y + origin.height * 0.5);
+    const [x2, y2] = project(target.x, target.y + target.height * 0.5);
+    const dx = Math.max(16, Math.abs(x2 - x1) * 0.45);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.bezierCurveTo(x1 + dx, y1, x2 - dx, y2, x2, y2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  for (const node of nodes) {
+    const [x, y] = project(node.x, node.y);
+    const nodeWidth = Math.max(12, node.width * scale);
+    const nodeHeight = Math.max(8, node.height * scale);
+    const radius = Math.min(5, Math.max(2, nodeHeight * 0.16));
+    ctx.fillStyle = templatePreviewNodeFill(node);
+    ctx.strokeStyle = "rgba(226, 229, 235, 0.42)";
+    ctx.lineWidth = 1;
+    drawRoundedRect(ctx, x, y, nodeWidth, nodeHeight, radius);
+    ctx.fill();
+    ctx.stroke();
+
+    if (nodeWidth > 28 && nodeHeight > 12) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+      ctx.fillRect(x + 5, y + 5, Math.max(8, nodeWidth * 0.36), 2);
+    }
+  }
+
+  return canvas;
+}
+
+function templateNodePreviewModel(templateNode) {
+  const type = String(templateNode?.type || "");
+  const definition = getNodeDefinitionMap().get(type);
+  const rawDefinition = definition?.definition || {};
+  const node = {
+    type,
+    title: templateNode?.title || definition?.title || type,
+    category: definition?.category || "",
+    definition: rawDefinition,
+  };
+  const storedInputs = Array.isArray(templateNode?.inputs)
+    ? templateNode.inputs
+      .map((input) => ({
+        name: String(input?.name || ""),
+        type: String(input?.type || ""),
+        optional: false,
+      }))
+      .filter((input) => input.name || input.type)
+    : [];
+  const storedOutputs = Array.isArray(templateNode?.outputs)
+    ? templateNode.outputs
+      .map((output) => ({
+        name: String(output?.name || output?.type || ""),
+        type: String(output?.type || output?.name || ""),
+      }))
+      .filter((output) => output.name || output.type)
+    : [];
+  const definitionInputs = rawDefinition ? collectPreviewInputs(rawDefinition) : [];
+  const definitionWidgets = rawDefinition ? collectPreviewWidgets(rawDefinition) : [];
+  const widgetValues = Array.isArray(templateNode?.widgets_values) ? templateNode.widgets_values : [];
+  const widgets = definitionWidgets.map((widget, index) => ({
+    ...widget,
+    value: widgetValues[index] ?? widget.value,
+  }));
+  if (!widgets.length && widgetValues.length) {
+    for (let index = 0; index < Math.min(widgetValues.length, 8); index += 1) {
+      widgets.push({
+        name: `#${index + 1}`,
+        type: "",
+        value: widgetValues[index],
+        optional: false,
+      });
+    }
+  }
+  return {
+    node,
+    inputs: storedInputs.length ? storedInputs : definitionInputs,
+    widgets,
+    outputs: storedOutputs.length ? storedOutputs : (rawDefinition ? collectPreviewOutputs(rawDefinition) : []),
+  };
+}
+
+function showTemplatePreview(template, event, options = {}) {
+  if (!template || !event) {
+    hideNodePreview();
+    return;
+  }
+  const preview = ensureNodePreviewPopover();
+  preview.innerHTML = "";
+  preview.hidden = false;
+  nodesState.previewNode = null;
+
+  const body = document.createElement("div");
+  body.className = "workspace2-node-preview-body";
+  body.append(renderTemplateMinimap(template));
+
+  const details = document.createElement("div");
+  details.className = "workspace2-node-preview-details";
+  const title = document.createElement("div");
+  title.className = "workspace2-node-preview-details-title";
+  title.textContent = template.name || t("templates.defaultName");
+  const meta = document.createElement("div");
+  meta.className = "workspace2-node-preview-meta";
+  meta.textContent = t("templates.meta", {
+    nodes: template.nodes?.length || 0,
+    links: template.links?.length || 0,
+  });
+  details.append(title, meta);
+  body.append(details);
+
+  preview.append(body);
+  positionNodePreviewPopover(preview, event, options);
+}
+
 function moveNodePreview(event) {
   const preview = nodesState.previewPopover;
   if (!preview?.isConnected || preview.hidden) {
@@ -7346,16 +10679,6 @@ function closeNodeContextMenuFromEvent(event) {
     return;
   }
   closeNodeContextMenu();
-}
-
-function copyText(value) {
-  const text = String(value || "");
-  if (!text) {
-    return;
-  }
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).catch(() => {});
-  }
 }
 
 function nodesPreviewModeButton(el) {
@@ -7398,7 +10721,7 @@ function openNodeGroupContextMenu(el, event, group) {
   addItem(t("nodes.renameGroup"), async () => renameNodeGroup(el, group));
   addItem(t("folder.personalize"), async () => personalizeNodeGroup(el, group, event));
   addItem(t("folder.resetStyle"), async () => resetNodeGroupStyle(el, group));
-  addItem(t("nodes.deleteGroup"), async () => deleteNodeGroup(el, group));
+  addItem(t("nodes.deleteGroup"), () => requestDeleteNodeGroup(el, group));
 
   document.body.append(menu);
   const rect = menu.getBoundingClientRect();
@@ -7726,10 +11049,10 @@ function renderFavoriteNodeSections(el, body) {
     renderFavoriteGroupFolder(el, section, group, nodeMap, query, 0);
   }
 
-  if (!rootFavorites.length && !userGroups.length) {
+  if (query && !rootFavorites.length && !userGroups.length) {
     const empty = document.createElement("div");
     empty.className = "workspace2-empty";
-    empty.textContent = query ? t("nodes.noFavoriteMatches") : t("nodes.emptyGroup");
+    empty.textContent = t("nodes.noFavoriteMatches");
     section.append(empty);
   }
 }
@@ -7897,8 +11220,10 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
     iconButton("edit", t("nodes.renameGroup"), async () => {
       await renameNodeGroup(el, group);
     }),
-    iconButton("trash", t("nodes.deleteGroup"), async () => {
-      await deleteNodeGroup(el, group);
+    dangerIconButton("trash", t("nodes.deleteGroupTitle"), (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      requestDeleteNodeGroup(el, group, event.currentTarget);
     }),
   );
   header.append(disclosure, icon, name, actions);
@@ -7914,12 +11239,6 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
     list.dataset.workspace2FavoriteRegion = group.id;
     for (const favorite of groupFavorites) {
       list.append(renderFavoriteNodeRow(el, favorite));
-    }
-    if (!groupFavorites.length) {
-      const empty = document.createElement("div");
-      empty.className = "workspace2-empty";
-      empty.textContent = query ? t("nodes.noFavoriteMatches") : t("nodes.emptyGroup");
-      list.append(empty);
     }
     section.append(list);
   }
@@ -8259,7 +11578,30 @@ function showFallbackPanel() {
   host.style.border = "1px solid #555";
   host.style.boxShadow = "0 8px 24px rgba(0,0,0,.35)";
   document.body.append(host);
-  renderPanel(host);
+  renderWorkspace2Panel(host);
+}
+
+function registerWorkspace2SidebarTab() {
+  if (!app.extensionManager?.registerSidebarTab) {
+    return false;
+  }
+
+  const registry = globalThis.__workspace2RegisteredSidebarTabs ||= new Set();
+  if (registry.has(WORKSPACE2_TAB_ID)) {
+    console.debug("[Workspace2] Sidebar tab already registered; skipping duplicate registration.");
+    return true;
+  }
+
+  app.extensionManager.registerSidebarTab({
+    id: WORKSPACE2_TAB_ID,
+    icon: "pi pi-sitemap",
+    title: t("workspace.title"),
+    tooltip: t("workspace.tooltip"),
+    type: "custom",
+    render: renderWorkspace2Panel,
+  });
+  registry.add(WORKSPACE2_TAB_ID);
+  return true;
 }
 
 app.registerExtension({
@@ -8312,24 +11654,7 @@ app.registerExtension({
     } catch (error) {
       state.status = t("status.error", { message: error.message });
     }
-    if (app.extensionManager?.registerSidebarTab) {
-      app.extensionManager.registerSidebarTab({
-        id: WORKFLOWS_TAB_ID,
-        icon: "pi pi-folder",
-        title: t("workflows.title"),
-        tooltip: "Workspace2 Workflows",
-        type: "custom",
-        render: renderPanel,
-      });
-      app.extensionManager.registerSidebarTab({
-        id: NODES_TAB_ID,
-        icon: "pi pi-sitemap",
-        title: t("nodes.title"),
-        tooltip: "Workspace2 Nodes",
-        type: "custom",
-        render: renderNodesPanel,
-      });
-
+    if (registerWorkspace2SidebarTab()) {
       return;
     }
 
@@ -8337,3 +11662,4 @@ app.registerExtension({
     showFallbackPanel();
   },
 });
+

@@ -2,98 +2,135 @@
 
 English | [中文说明](README.zh-CN.md)
 
-ComfyUI-Workspace2 is a workspace enhancement extension for ComfyUI.
+ComfyUI-Workspace2 is a workspace enhancement extension for ComfyUI. It focuses on practical organization for large workflow libraries, large custom-node setups, node favorites, reusable node templates, and complex canvas layouts.
 
-It was created because some daily ComfyUI workflows become difficult to manage once the number of workflows, custom nodes, favorites, and canvas groups grows. Workspace2 focuses on practical workspace organization: workflow folders, node favorites, node search, canvas groups, and visual title nodes.
+It does not try to replace the official ComfyUI UI. Instead, it adds a focused workspace layer for users who need faster organization, safer file operations, better node reuse, and clearer visual structure.
 
-This project does not try to replace the official ComfyUI UI. It adds a focused set of productivity features for users who need more structure in large ComfyUI setups.
+Current status: **public beta, 0.2.1-beta**. It is usable for daily testing, but it is not a stable 1.0 release yet. Before using it in a main ComfyUI environment, back up your workflows, user settings, important node favorites, and important template data.
 
-Current status: **public beta, 0.1.x**. It is not a stable 1.0 release yet.
+## When Workspace2 Helps
+
+Workspace2 is designed for users who run into these problems after using ComfyUI for a while:
+
+- Too many workflow files to manage comfortably in a plain list.
+- Too many custom nodes and extensions mixed into the node browser.
+- Frequently reused connected node groups that need to be saved as templates.
+- Large workflows that need clearer groups, titles, and visual sections.
+- File operations such as move, rename, and delete that need safer recovery behavior.
+
+Workspace2 brings these daily organization tasks into one workspace sidebar.
 
 ## Main Features
 
-Workspace2 currently provides one sidebar entry with three internal tabs:
+Workspace2 currently provides one unified sidebar entry with three internal tabs:
 
-- **Workflows 2**: Manage workflow files in the official ComfyUI workflow directory.
+- **Workflows 2**: Manage workflow files in the ComfyUI workflow directory.
 - **Nodes 2**: Browse, search, favorite, group, and organize nodes.
 - **Templates**: Save selected connected nodes as reusable templates and organize them with groups.
 
 It also includes two canvas helpers:
 
-- **Group Enhancements**: Better canvas group shortcuts, title-bar context settings, and default group styling.
+- **Group Enhancements**: Better canvas group shortcuts, title-bar style settings, and default group styling.
 - **Title2**: A lightweight visual title / annotation node for large workflows.
 
-## Why Workspace2
+## Features
 
-### Workflow Management Pain Points
+### Workflows 2
 
-When a ComfyUI setup contains many workflows, a plain list becomes hard to manage.
+Workflows 2 is for workflow-file organization, especially when you have many `.json` workflows.
 
-Workspace2 improves this with:
+Key features:
 
-- Tree-style workflow folder management.
-- Folder and subfolder creation.
-- Drag-and-drop workflow organization.
-- Drop support for expanded folder areas and the root area.
-- Plugin trash with restore support before moving items to the operating system trash.
-- Workflow sorting, custom order, and folder-first sorting.
+- Uses the official ComfyUI workflow directory by default.
+- Tree-style folder management with folders and subfolders.
+- Create, rename, and drag workflow files and folders.
+- Drop support for folders, expanded folder areas, and the root area.
+- Plugin-level trash and restore before moving items to the operating system trash.
+- Sorting, custom order, and folder-first sorting.
 - Recent workflow history with configurable item count.
 - Search, clear search, refresh, and direct workflow opening.
+- Open workflow file location.
 - Folder icon and color customization.
 - Recursive expand/collapse with `Ctrl + click`.
 
-### Node Management Pain Points
+Advanced users can choose a custom workflow root. If you use this, choose a dedicated workflow folder. Do not use a disk root, Desktop, Downloads, or a large project directory.
 
-The official node browser is useful for adding nodes, but large setups with many extensions need stronger organization.
+### Nodes 2
 
-Workspace2 improves this with:
+Nodes 2 is for node discovery, favorites, and organization in large ComfyUI installs.
 
-- Nodes2 sidebar node browser.
-- Comfy and Extensions sections.
-- Extension nodes grouped by plugin source.
-- Fuzzy search and pinyin search.
+Key features:
+
+- Reads available nodes from the current ComfyUI environment.
+- Separates **Comfy** nodes and **Extensions**.
+- Groups extension nodes by plugin source.
+- Search with fuzzy search and pinyin search.
 - Favorite root, favorite groups, and favorite subgroups.
 - Drag nodes into favorite groups.
 - Drag favorite nodes between groups.
-- Custom ordering for favorites and global nodes.
+- Drag nodes to canvas.
+- Click a node, then click the canvas to place it.
 - Node preview cards.
-- Drag-to-canvas and click-then-click-to-place node creation.
-- Official ComfyUI favorite import/export with automatic settings backup before writing.
+- Import/export with official ComfyUI favorites, with automatic settings backup before writing.
 - Dimmed display for missing third-party nodes instead of silently deleting them.
+- Node cache for faster first display in large node libraries.
 
-### Canvas Group Pain Points
+### Templates
 
-ComfyUI already supports canvas groups, but Workspace2 adds a workflow closer to common design tools:
+Templates are for reusable connected node groups. They are useful for saving common node structures such as loaders, preprocessors, control blocks, output chains, or post-processing chains.
 
-- `Ctrl+G` to create a group.
-- `Shift+G` to ungroup.
+Key features:
+
+- Press `Alt+C` to save the currently selected nodes as a template.
+- Preserves relative node positions and links.
+- Drag templates to the canvas.
+- Click a template, then click the canvas to place it.
+- Template groups and subgroups.
+- Template search, sorting, rename, and delete.
+- Template hover preview.
+- Template context menu: rename, place at canvas center, copy name, delete.
+- Inline delete confirmation for templates and template groups.
+
+Template data is stored under the ComfyUI user directory in Workspace2 data files. Back up important template data regularly.
+
+### Group Enhancements
+
+Group Enhancements make canvas groups closer to common design-tool behavior.
+
+Key features:
+
+- `Ctrl+G` creates a Workspace2 group from the selected nodes.
+- `Shift+G` ungroups.
+- `Shift + left click` toggles whether Workspace2 groups ignore node selection.
 - Right-click a group title bar to edit group style.
-- Save the current group style as the default group style.
-- Move, resize, rename, and delete groups.
-- Store group data in the workflow.
+- Save the current group style as one of the default group presets.
+- Configure group margin, border, shadow, animation, and related visual settings.
+- Group data is saved into the workflow.
 
-If `Ctrl+G` conflicts with an official ComfyUI keybinding, remove or change the official binding in ComfyUI settings first.
+If `Ctrl+G` conflicts with an official ComfyUI keybinding, change the official keybinding first or disable the Workspace2 Ctrl+G option in settings.
 
-### Visual Title Pain Points
+### Title2
 
-Large workflows often need clear section titles, annotations, and visual dividers. Regular note nodes are not always enough for this job.
+Title2 is a lightweight visual title / annotation node for large workflows.
 
-Workspace2 adds **Title2**:
+Default style:
 
-- Lightweight visual title / annotation node.
-- Designed for workflow sections and visual organization.
-- Text editing and style controls.
-- Default font size: 24.
-- Default transparent background.
-- Default corner radius: 15.
+- Font size: 24
+- Background: transparent
+- Corner radius: 15
 
 ## Shortcuts
 
-- `Shift+W` or `Shift+1`: open Workflows 2.
-- `Shift+N` or `Shift+2`: open Nodes 2.
-- `Ctrl+G`: create canvas group.
-- `Shift+G`: ungroup.
-- `Ctrl + click` folder toggle: recursively expand or collapse folders.
+| Shortcut | Action |
+|---|---|
+| `Shift+1` / `Shift+W` | Open Workflows 2 |
+| `Shift+2` / `Shift+N` | Open Nodes 2 |
+| `Shift+3` | Open Templates |
+| `Alt+C` | Save selected nodes as a template |
+| `Ctrl+G` | Create Workspace2 group |
+| `Shift+G` | Ungroup |
+| `Ctrl + click` folder toggle | Recursively expand or collapse folders / groups |
+| `Shift + left click` | Toggle whether Workspace2 groups ignore node selection |
 
 ## Installation
 
@@ -114,7 +151,7 @@ Workspace2 recommends:
 send2trash
 ```
 
-Install the dependency inside the Python environment used by ComfyUI for cross-platform system trash support:
+Install the dependency inside the Python environment used by ComfyUI for better cross-platform system trash support:
 
 ```bash
 pip install -r requirements.txt
@@ -131,14 +168,6 @@ Workspace2 has two trash layers:
 
 On Windows, Workspace2 has a built-in recycle bin fallback. On other platforms, system trash support depends on `send2trash` and the desktop environment it supports.
 
-## Known Issues
-
-- This is still a public beta.
-- Screenshots and GIF tutorials are not included yet.
-- Very large workflow directories may take longer to scan and refresh.
-- Comfy Registry / ComfyUI Manager metadata is not finalized yet.
-- If you choose a custom workflow root, use a dedicated workflow folder. Do not use a disk root, Desktop, Downloads, or a large project directory.
-
 ## Before First Use
 
 Workspace2 moves, renames, and organizes workflow files. Before using it in a main ComfyUI environment, back up:
@@ -146,16 +175,26 @@ Workspace2 moves, renames, and organizes workflow files. Before using it in a ma
 - Your ComfyUI workflow directory.
 - Your ComfyUI user settings.
 - Important node favorite data.
+- Important template data.
+
+## Known Issues
+
+- This is still a public beta, not a stable 1.0 release.
+- Screenshots and GIF tutorials are not included yet.
+- Very large workflow directories may take longer to scan and refresh.
+- Comfy Registry / ComfyUI Manager metadata is not finalized yet.
+- Template deletion currently uses inline confirmation; undo or template trash can be improved in a future version.
+- Nodes 2 search speed, ranking quality, and pinyin matching still need more testing in very large node libraries.
 
 ## Project Notes
 
-I am a ComfyUI user, designer, and creator, not a professional programmer.
+I am a ComfyUI user, designer, and creator, not a professional programmer. This plugin was built with extensive help from Codex. Codex helped read old plugin code, inspect newer ComfyUI frontend behavior, migrate features, debug problems, and turn design ideas into a working extension.
 
 Maintainer: ZiYao00
 
 Project homepage: https://github.com/ZiYao00/ComfyUI-Workspace2
 
-This plugin was built with extensive help from Codex. Codex helped read old plugin code, inspect newer ComfyUI frontend behavior, migrate features, debug problems, and turn design ideas into a working extension.
+## Credits
 
 Special thanks to the authors of these projects for providing useful foundations, references, and inspiration:
 

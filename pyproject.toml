@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-workspace2"
-description = "A ComfyUI workspace enhancement extension for workflows, node favorites, and canvas grouping."
-version = "0.1.1b0"
+description = "A ComfyUI workspace enhancement extension for workflow organization, node favorites, reusable node templates, and canvas grouping."
+version = "0.2.1b0"
 license = { file = "LICENSE" }
 authors = [
   { name = "ZiYao00" },

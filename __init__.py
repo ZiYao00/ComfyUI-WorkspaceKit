@@ -54,7 +54,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
-VERSION = "0.1.1b0"
+VERSION = "0.2.1b0"
 PLUGIN_NAME = "comfyui-workspace2"
 
 workspace_path = Path(__file__).resolve().parent

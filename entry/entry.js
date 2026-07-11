@@ -1,58 +1,72 @@
 import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
 import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
 import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260708_group_settings_animation_slider_hitbox";
+import { fetchJson, postJson } from "./core/api.js";
+import {
+  installPerformanceDebugApi,
+  measurePromise,
+  startPerformanceSpan,
+} from "./core/performance.js";
+import { withNodeIndexRefreshLock } from "./nodes/cache-coordinator.js";
+import {
+  CANVAS_GROUP_CTRL_G_KEY,
+  CANVAS_GROUPS_TAB_ID,
+  COMFY_NODE_DRAG_TYPE,
+  DEFAULT_FILE_ICON_CLASS,
+  DEFAULT_FOLDER_ICON_CLASS,
+  DEFAULT_FOLDER_OPEN_ICON_CLASS,
+  DEFAULT_LOCALE,
+  DRAG_TYPE,
+  EXTENSION_NAME,
+  FAVORITE_DRAG_TYPE,
+  FONT_SCALE_KEY,
+  FONT_SCALE_LINEAR_KEY,
+  NODE_CUSTOM_ORDER_ENABLED_KEY,
+  NODE_CUSTOM_ORDER_KEY,
+  NODE_DEFAULT_GROUP_ID,
+  NODE_DRAG_TYPE,
+  NODE_FONT_SCALE_KEY,
+  NODE_OBJECT_INFO_CACHE_DB,
+  NODE_OBJECT_INFO_CACHE_KEY,
+  NODE_OBJECT_INFO_CACHE_STORE,
+  NODE_OBJECT_INFO_FETCH_TIMEOUT,
+  NODE_PREVIEW_MODE_KEY,
+  NODE_PREVIEW_MODES,
+  NODE_ROW_SPACING_KEY,
+  NODE_SEARCH_RENDER_DELAY,
+  NODE_SEARCH_RESULT_LIMIT,
+  NODE_SECTION_FILTERS,
+  NODE_SORT_KEY,
+  NODE_SORTS,
+  NODE_UI_SCALE_KEY,
+  NODE_VISIBLE_SECTIONS_KEY,
+  OFFICIAL_NODE_ADAPTER_KEY,
+  TEMPLATE_DRAG_TYPE,
+  TEMPLATE_GROUP_DRAG_TYPE,
+  TEMPLATE_SORT_KEY,
+  TEMPLATE_SORTS,
+  TEMPLATE_UI_SCALE_KEY,
+  WORKFLOW_CUSTOM_ORDER_KEY,
+  WORKFLOW_FOLDER_FIRST_KEY,
+  WORKFLOW_ORDER_KEY,
+  WORKFLOW_RECENT_KEY,
+  WORKFLOW_RECENT_LIMIT_KEY,
+  WORKFLOW_SEARCH_RENDER_DELAY,
+  WORKFLOW_SORT_KEY,
+  WORKFLOW_SORTS,
+  WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY,
+  WORKSPACE2_MODULE_KEY,
+  WORKSPACE2_MODULES,
+  WORKSPACE2_PANEL_BACKGROUND_MODE_KEY,
+  WORKSPACE2_PANEL_GLASS_KEY,
+  WORKSPACE2_PANEL_GLASS_TRANSPARENCY_KEY,
+  WORKSPACE2_PANEL_OPACITY_KEY,
+  WORKSPACE2_SHORTCUT_CLOSE_SAME_KEY,
+  WORKSPACE2_TAB_ID,
+} from "./core/constants.js";
 
-const EXTENSION_NAME = "comfyui.workspace2";
-const DRAG_TYPE = "application/x-workspace2-item";
-const NODE_DRAG_TYPE = "application/x-workspace2-node";
-const COMFY_NODE_DRAG_TYPE = "application/x-comfy-node";
-const FAVORITE_DRAG_TYPE = "application/x-workspace2-favorite";
-const TEMPLATE_DRAG_TYPE = "application/x-workspace2-template";
-const TEMPLATE_GROUP_DRAG_TYPE = "application/x-workspace2-template-group";
-const FONT_SCALE_KEY = "workspace2.fontScale";
-const FONT_SCALE_LINEAR_KEY = "workspace2.fontScale.linear";
-const WORKFLOW_SORT_KEY = "workspace2.workflows.sort";
-const WORKFLOW_ORDER_KEY = "workspace2.workflows.customOrder";
-const WORKFLOW_CUSTOM_ORDER_KEY = "workspace2.workflows.customOrderEnabled";
-const WORKFLOW_FOLDER_FIRST_KEY = "workspace2.workflows.folderFirst";
-const WORKFLOW_RECENT_KEY = "workspace2.workflows.recent";
-const WORKFLOW_RECENT_LIMIT_KEY = "workspace2.workflows.recentLimit";
-const NODE_FONT_SCALE_KEY = "workspace2.nodes.fontScale";
-const NODE_ROW_SPACING_KEY = "workspace2.nodes.rowSpacing";
-const NODE_UI_SCALE_KEY = "workspace2.nodes.uiScale";
-const NODE_VISIBLE_SECTIONS_KEY = "workspace2.nodes.visibleSections";
-const NODE_SORT_KEY = "workspace2.nodes.sort";
-const NODE_CUSTOM_ORDER_KEY = "workspace2.nodes.customOrder";
-const NODE_CUSTOM_ORDER_ENABLED_KEY = "workspace2.nodes.customOrderEnabled";
-const NODE_PREVIEW_MODE_KEY = "workspace2.nodes.previewMode";
-const TEMPLATE_SORT_KEY = "workspace2.templates.sort";
-const TEMPLATE_UI_SCALE_KEY = "workspace2.templates.uiScale";
-const OFFICIAL_NODE_ADAPTER_KEY = "workspace2.officialNodeAdapter";
-const CANVAS_GROUP_CTRL_G_KEY = "workspace2.canvasGroups.ctrlGCreate";
-const WORKSPACE2_MODULE_KEY = "workspace2.activeModule";
-const WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY = "workspace2.shortcuts.altCOpenTemplates";
-const WORKSPACE2_SHORTCUT_CLOSE_SAME_KEY = "workspace2.shortcuts.closeSameModule";
-const DEFAULT_LOCALE = "en-US";
-const NODE_DEFAULT_GROUP_ID = "default";
-const WORKSPACE2_TAB_ID = "workspace2";
-const CANVAS_GROUPS_TAB_ID = "workspace2-canvas-groups";
-const WORKSPACE2_MODULES = ["workflows", "nodes", "templates"];
-const WORKFLOW_SORTS = ["nameAsc", "nameDesc", "updatedDesc", "updatedAsc"];
-const WORKFLOW_SEARCH_RENDER_DELAY = 100;
-const NODE_SECTION_FILTERS = ["bookmarked", "comfy", "extensions"];
-const NODE_SORTS = ["original", "alphabetical"];
-const NODE_PREVIEW_MODES = ["detailed", "compact"];
-const TEMPLATE_SORTS = ["manual", "nameAsc", "nameDesc", "updatedDesc", "updatedAsc"];
-const NODE_SEARCH_RESULT_LIMIT = 64;
-const NODE_SEARCH_RENDER_DELAY = 100;
-const NODE_OBJECT_INFO_CACHE_DB = "workspace2-node-cache";
-const NODE_OBJECT_INFO_CACHE_STORE = "entries";
-const NODE_OBJECT_INFO_CACHE_KEY = "objectInfo";
-const NODE_OBJECT_INFO_FETCH_TIMEOUT = 45000;
-const DEFAULT_FOLDER_ICON_CLASS = "pi pi-folder";
-const DEFAULT_FOLDER_OPEN_ICON_CLASS = "pi pi-folder-open";
-const DEFAULT_FILE_ICON_CLASS = "pi pi-file";
+const WORKFLOW_OPEN_SECTION_COLLAPSED_KEY = "workspace2.workflows.openCollapsed";
+const WORKFLOW_BROWSE_SECTION_COLLAPSED_KEY = "workspace2.workflows.browseCollapsed";
 
 const FALLBACK_STRINGS = {
   "zh-CN": {
@@ -65,6 +79,12 @@ const FALLBACK_STRINGS = {
     "settings.shortcuts": "快捷键",
     "settings.behavior": "打开行为",
     "settings.recentWorkflows": "打开记录数量",
+    "settings.panelOpacity": "面板透明度",
+    "settings.panelGlass": "玻璃背景",
+    "settings.panelBlur": "背景模糊",
+    "settings.backgroundEffect": "背景效果",
+    "settings.transparentBackground": "透明背景",
+    "settings.glassBackground": "磨砂玻璃",
     "settings.nodeCache": "节点缓存",
     "settings.about": "关于",
     "settings.ctrlG": "启用 Workspace2 编组",
@@ -99,8 +119,12 @@ const FALLBACK_STRINGS = {
     "status.systemTrashPartial": "部分项目移到系统回收站失败：{count} 个。{details}",
     "workflows.title": "工作流2",
     "workflows.current": "当前工作流",
-    "workflows.recent": "最近工作流",
+    "workflows.recent": "打开",
+    "workflows.browse": "浏览",
     "workflows.currentEmpty": "未从 Workflows2 打开工作流",
+    "workflows.removeRecent": "从打开记录移除",
+    "workflows.saveCurrent": "保存当前工作流",
+    "toolbar.openWorkflow": "打开工作流",
     "nodes.title": "节点2",
     "nodes.status": "{count} 个节点",
     "nodes.searchPlaceholder": "搜索节点",
@@ -128,6 +152,10 @@ const FALLBACK_STRINGS = {
     "root.move": "移到根目录",
     "status.loading": "正在加载...",
     "status.error": "错误：{message}",
+    "status.openedWorkflowFile": "已打开工作流文件",
+    "status.workflowSaved": "工作流已保存",
+    "status.workflowSaveMismatch": "只能保存当前打开的工作流",
+    "status.workflowSerializeUnavailable": "当前 ComfyUI 前端不支持直接保存当前画布",
     "workflows.sort.nameAsc": "名称 A-Z",
     "workflows.sort.nameDesc": "名称 Z-A",
     "workflows.sort.updatedDesc": "修改时间新到旧",
@@ -227,6 +255,12 @@ const FALLBACK_STRINGS = {
     "settings.shortcuts": "Shortcuts",
     "settings.behavior": "Open behavior",
     "settings.recentWorkflows": "Open history count",
+    "settings.panelOpacity": "Panel opacity",
+    "settings.panelGlass": "Glass background",
+    "settings.panelBlur": "Background blur",
+    "settings.backgroundEffect": "Background effect",
+    "settings.transparentBackground": "Transparent background",
+    "settings.glassBackground": "Frosted glass",
     "settings.nodeCache": "Node cache",
     "settings.about": "About",
     "settings.ctrlG": "Enable Workspace2 groups",
@@ -261,8 +295,12 @@ const FALLBACK_STRINGS = {
     "status.systemTrashPartial": "Move to system trash partial: {count} failed. {details}",
     "workflows.title": "Workflows 2",
     "workflows.current": "Current workflow",
-    "workflows.recent": "Recent workflows",
+    "workflows.recent": "Open",
+    "workflows.browse": "Browse",
     "workflows.currentEmpty": "No workflow opened from Workflows2",
+    "workflows.removeRecent": "Remove from open history",
+    "workflows.saveCurrent": "Save current workflow",
+    "toolbar.openWorkflow": "Open workflow",
     "nodes.title": "Nodes 2",
     "nodes.status": "{count} nodes",
     "nodes.searchPlaceholder": "Search nodes",
@@ -290,6 +328,10 @@ const FALLBACK_STRINGS = {
     "root.move": "Move to Root",
     "status.loading": "Loading...",
     "status.error": "Error: {message}",
+    "status.openedWorkflowFile": "Opened workflow file",
+    "status.workflowSaved": "Workflow saved",
+    "status.workflowSaveMismatch": "Only the current open workflow can be saved",
+    "status.workflowSerializeUnavailable": "The current ComfyUI frontend does not expose a graph serializer",
     "workflows.sort.nameAsc": "Name A-Z",
     "workflows.sort.nameDesc": "Name Z-A",
     "workflows.sort.updatedDesc": "Newest modified",
@@ -532,7 +574,7 @@ const nodesState = {
   objectInfoCachedAt: 0,
   objectInfoFromCache: false,
   error: "",
-  expanded: new Set([NODE_DEFAULT_GROUP_ID, "__bookmarked__", "__comfy__", "__extensions__"]),
+  expanded: new Set([NODE_DEFAULT_GROUP_ID, "__bookmarked__", "__comfy__", "__extensions__", "__unknown__"]),
   draggingNode: null,
   renderTarget: null,
   canvasDropReady: false,
@@ -1196,6 +1238,332 @@ function isWorkspace2ShortcutCloseSameEnabled() {
   return localStorage.getItem(WORKSPACE2_SHORTCUT_CLOSE_SAME_KEY) !== "0";
 }
 
+function snapPanelOpacity(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 100;
+  }
+  return Math.max(5, Math.min(100, Math.round(numeric)));
+}
+
+function panelOpacity() {
+  return snapPanelOpacity(localStorage.getItem(WORKSPACE2_PANEL_OPACITY_KEY) || "100");
+}
+
+function snapGlassTransparency(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 45;
+  }
+  return Math.max(5, Math.min(95, Math.round(numeric)));
+}
+
+function panelBackgroundMode() {
+  const stored = localStorage.getItem(WORKSPACE2_PANEL_BACKGROUND_MODE_KEY);
+  if (stored === "transparent" || stored === "glass") {
+    return stored;
+  }
+  const migrated = localStorage.getItem(WORKSPACE2_PANEL_GLASS_KEY) === "1"
+    ? "glass"
+    : "transparent";
+  localStorage.setItem(WORKSPACE2_PANEL_BACKGROUND_MODE_KEY, migrated);
+  return migrated;
+}
+
+function isPanelGlassEnabled() {
+  return panelBackgroundMode() === "glass";
+}
+
+function glassTransparency() {
+  return snapGlassTransparency(
+    localStorage.getItem(WORKSPACE2_PANEL_GLASS_TRANSPARENCY_KEY) || "70",
+  );
+}
+
+function cleanupWorkspacePanelAncestors() {
+  document.querySelectorAll(".workspace2-sidebar-transparent-root[data-workspace2-transparent-root='1']").forEach((node) => {
+    node.classList.remove("workspace2-sidebar-transparent-root");
+    node.removeAttribute("data-workspace2-transparent-root");
+  });
+}
+
+function isElementVisible(element) {
+  if (!(element instanceof HTMLElement) || !element.isConnected) {
+    return false;
+  }
+  const style = window.getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden") {
+    return false;
+  }
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function refreshWorkspacePanelAncestorsIfVisible() {
+  const host = document.querySelector(".workspace2-host");
+  if (isElementVisible(host)) {
+    applyWorkspaceBackgroundEffect(host);
+    syncWorkspaceGlassOverlay();
+  } else {
+    workspaceState.glassPortalElement?.classList.add("is-workspace2-overlay-hidden");
+    cleanupWorkspacePanelAncestors();
+  }
+}
+
+function hideWorkspace2SidebarSurfaces() {
+  document.querySelectorAll(".workspace2-host").forEach((node) => {
+    node.classList.add("is-workspace2-surface-hidden");
+  });
+  document.querySelectorAll(".workspace2-shell").forEach((node) => {
+    node.classList.add("is-workspace2-overlay-hidden");
+  });
+  workspaceState.glassPortalElement?.classList.add("is-workspace2-overlay-hidden");
+}
+
+function findClosestSidebarTabButton(target) {
+  const element = target instanceof Element
+    ? target
+    : target?.parentElement instanceof Element
+      ? target.parentElement
+      : null;
+  if (!element) {
+    return null;
+  }
+  const button = element.closest([
+    ".side-bar-button",
+    ".assets-tab-button",
+    "[data-sidebar-tab-id]",
+    "[data-tab-id]",
+    "[role='tab']",
+  ].join(","));
+  if (button?.classList.contains("side-bar-button") && button.closest(".sidebar-item-group.mt-auto")) {
+    return null;
+  }
+  return button;
+}
+
+function isWorkspace2SidebarTabButton(button) {
+  if (!(button instanceof Element)) {
+    return false;
+  }
+  if (button.classList.contains("workspace2-tab-button")) {
+    return true;
+  }
+  const tabId = button.getAttribute("data-sidebar-tab-id")
+    || button.getAttribute("data-tab-id")
+    || button.getAttribute("data-id")
+    || button.id
+    || "";
+  if (tabId === WORKSPACE2_TAB_ID) {
+    return true;
+  }
+  const labels = [
+    button.textContent || "",
+    button.getAttribute("title") || "",
+    button.getAttribute("aria-label") || "",
+  ].map((label) => label.trim()).filter(Boolean);
+  return labels.some((label) => label === t("workspace.title") || label === t("workspace.tooltip"));
+}
+
+function setupWorkspacePanelOpacityCleanup() {
+  if (workspaceState.opacityCleanupReady) {
+    return;
+  }
+  workspaceState.opacityCleanupReady = true;
+  const scheduleRefresh = (event) => {
+    if (event.target?.closest?.(".workspace2-host,.workspace2-shell,.workspace2-settings-backdrop,.workspace2-context-menu,.workspace2-menu")) {
+      return;
+    }
+    const sidebarButton = findClosestSidebarTabButton(event.target);
+    if (sidebarButton && !isWorkspace2SidebarTabButton(sidebarButton)) {
+      hideWorkspace2SidebarSurfaces();
+      window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 0);
+      return;
+    }
+    window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 0);
+    window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 160);
+  };
+  document.addEventListener("pointerdown", scheduleRefresh, true);
+  document.addEventListener("click", scheduleRefresh, true);
+}
+
+function markWorkspacePanelAncestors(host) {
+  cleanupWorkspacePanelAncestors();
+  let node = host?.parentElement;
+  let depth = 0;
+  while (node && node !== document.body && depth < 12 && node.contains(host)) {
+    node.classList.add("workspace2-sidebar-transparent-root");
+    node.setAttribute("data-workspace2-transparent-root", "1");
+    node = node.parentElement;
+    depth += 1;
+  }
+}
+
+function applyWorkspaceBackgroundEffect(panel) {
+  setupWorkspacePanelOpacityCleanup();
+  if (!panel?.classList?.contains("workspace2-host") && !panel?.classList?.contains("workspace2-shell")) {
+    return;
+  }
+  const glass = isPanelGlassEnabled();
+  const glassOpacity = 100 - glassTransparency();
+  const alpha = glass ? `${glassOpacity}%` : `${panelOpacity()}%`;
+  const blur = glass ? "24px" : "0px";
+  const saturate = glass ? "1.35" : "1";
+  const brightness = glass ? "1.08" : "1";
+  const highlightAlpha = glass ? Math.max(0.008, Math.min(0.038, glassOpacity * 0.00075)) : 0;
+  const highlight = glass ? `rgba(230, 235, 255, ${highlightAlpha.toFixed(3)})` : "transparent";
+  const fillAlpha = glass
+    ? Math.max(0.025, Math.min(0.30, glassOpacity * 0.009))
+    : panelOpacity() / 100;
+  const mistAlpha = glass ? Math.max(0.012, Math.min(0.12, glassOpacity * 0.0025)) : 0;
+  const edgeAlpha = glass ? Math.max(0.055, Math.min(0.22, glassOpacity * 0.004)) : 0;
+  const tabAlpha = glass ? Math.max(0.045, Math.min(0.18, glassOpacity * 0.0032)) : 0;
+  const controlAlpha = glass ? Math.max(0.04, Math.min(0.18, glassOpacity * 0.0032)) : 0;
+  const hoverAlpha = glass ? Math.max(0.065, Math.min(0.20, glassOpacity * 0.0038)) : 0;
+  const panelFill = glass
+    ? `rgba(24, 30, 46, ${fillAlpha.toFixed(3)})`
+    : `color-mix(in srgb, var(--workspace2-shell-surface) ${alpha}, transparent)`;
+  const panelMist = glass ? `rgba(245, 248, 255, ${mistAlpha.toFixed(3)})` : "transparent";
+  const panelStroke = glass ? `rgba(255, 255, 255, ${edgeAlpha.toFixed(3)})` : "rgba(255, 255, 255, 0)";
+  const panelCoolSheen = glass ? `rgba(132, 166, 255, ${Math.max(0.012, Math.min(0.075, glassOpacity * 0.0018)).toFixed(3)})` : "transparent";
+  const panelTopSheen = glass ? `rgba(255, 255, 255, ${Math.max(0.008, Math.min(0.035, glassOpacity * 0.0008)).toFixed(3)})` : "transparent";
+  const panelShade = glass ? `rgba(8, 12, 22, ${Math.max(0.012, Math.min(0.085, glassOpacity * 0.0017)).toFixed(3)})` : "transparent";
+  const tabSurface = glass ? `rgba(255, 255, 255, ${tabAlpha.toFixed(3)})` : "";
+  const controlSurface = glass ? `rgba(255, 255, 255, ${controlAlpha.toFixed(3)})` : "";
+  const controlBorder = glass ? `rgba(255, 255, 255, ${Math.max(0.16, Math.min(0.28, edgeAlpha + 0.02)).toFixed(3)})` : "";
+  const controlShadow = glass ? "inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px rgba(9, 14, 24, 0.12)" : "";
+  const hoverSurface = glass ? `rgba(255, 255, 255, ${hoverAlpha.toFixed(3)})` : "";
+  panel?.style?.setProperty("--workspace2-panel-alpha", alpha);
+  panel?.style?.setProperty("--workspace2-panel-blur", blur);
+  panel?.style?.setProperty("--workspace2-panel-saturate", saturate);
+  panel?.style?.setProperty("--workspace2-panel-brightness", brightness);
+  panel?.style?.setProperty("--workspace2-glass-highlight", highlight);
+  panel?.style?.setProperty("--workspace2-panel-fill", panelFill);
+  panel?.style?.setProperty("--workspace2-panel-mist", panelMist);
+  panel?.style?.setProperty("--workspace2-panel-stroke", panelStroke);
+  panel?.style?.setProperty("--workspace2-panel-cool-sheen", panelCoolSheen);
+  panel?.style?.setProperty("--workspace2-panel-top-sheen", panelTopSheen);
+  panel?.style?.setProperty("--workspace2-panel-shade", panelShade);
+  if (tabSurface) {
+    panel?.style?.setProperty("--workspace2-tab-bg-glass", tabSurface);
+  } else {
+    panel?.style?.removeProperty?.("--workspace2-tab-bg-glass");
+  }
+  if (controlSurface) {
+    panel?.style?.setProperty("--workspace2-control-bg-glass", controlSurface);
+    panel?.style?.setProperty("--workspace2-control-border-glass", controlBorder);
+    panel?.style?.setProperty("--workspace2-control-shadow-glass", controlShadow);
+    panel?.style?.setProperty("--workspace2-hover-glass", hoverSurface);
+  } else {
+    panel?.style?.removeProperty?.("--workspace2-control-bg-glass");
+    panel?.style?.removeProperty?.("--workspace2-control-border-glass");
+    panel?.style?.removeProperty?.("--workspace2-control-shadow-glass");
+    panel?.style?.removeProperty?.("--workspace2-hover-glass");
+  }
+  panel?.classList?.toggle("is-glass-background", glass);
+  if (panel?.classList?.contains("workspace2-host")) {
+    markWorkspacePanelAncestors(panel);
+    panel.querySelectorAll?.(".workspace2-shell").forEach((node) => {
+      node.style.setProperty("--workspace2-panel-alpha", alpha);
+      node.style.setProperty("--workspace2-panel-blur", blur);
+      node.style.setProperty("--workspace2-panel-saturate", saturate);
+      node.style.setProperty("--workspace2-panel-brightness", brightness);
+      node.style.setProperty("--workspace2-glass-highlight", highlight);
+      node.style.setProperty("--workspace2-panel-fill", panelFill);
+      node.style.setProperty("--workspace2-panel-mist", panelMist);
+      node.style.setProperty("--workspace2-panel-stroke", panelStroke);
+      node.style.setProperty("--workspace2-panel-cool-sheen", panelCoolSheen);
+      node.style.setProperty("--workspace2-panel-top-sheen", panelTopSheen);
+      node.style.setProperty("--workspace2-panel-shade", panelShade);
+      if (tabSurface) {
+        node.style.setProperty("--workspace2-tab-bg-glass", tabSurface);
+      } else {
+        node.style.removeProperty("--workspace2-tab-bg-glass");
+      }
+      if (controlSurface) {
+        node.style.setProperty("--workspace2-control-bg-glass", controlSurface);
+        node.style.setProperty("--workspace2-control-border-glass", controlBorder);
+        node.style.setProperty("--workspace2-control-shadow-glass", controlShadow);
+        node.style.setProperty("--workspace2-hover-glass", hoverSurface);
+      } else {
+        node.style.removeProperty("--workspace2-control-bg-glass");
+        node.style.removeProperty("--workspace2-control-border-glass");
+        node.style.removeProperty("--workspace2-control-shadow-glass");
+        node.style.removeProperty("--workspace2-hover-glass");
+      }
+      node.classList.toggle("is-glass-background", glass);
+    });
+  }
+}
+
+function syncWorkspaceGlassOverlay() {
+  const host = workspaceState.renderTarget;
+  const shell = workspaceState.glassPortalElement
+    || host?.querySelector?.(".workspace2-shell");
+  if (!host || !shell) {
+    return;
+  }
+  if (isPanelGlassEnabled()) {
+    if (!isElementVisible(host)) {
+      shell.classList.add("is-workspace2-overlay-hidden");
+      return;
+    }
+    const rect = host.getBoundingClientRect();
+    if (shell.parentElement !== document.body) {
+      document.body.append(shell);
+    }
+    shell.classList.add("workspace2-glass-overlay");
+    shell.style.left = `${Math.round(rect.left)}px`;
+    shell.style.top = `${Math.round(rect.top)}px`;
+    shell.style.width = `${Math.round(rect.width)}px`;
+    shell.style.height = `${Math.round(rect.height)}px`;
+    shell.classList.remove("is-workspace2-overlay-hidden");
+    workspaceState.glassPortalElement = shell;
+    return;
+  }
+  shell.classList.remove("workspace2-glass-overlay", "is-workspace2-overlay-hidden");
+  for (const property of ["left", "top", "width", "height"]) {
+    shell.style.removeProperty(property);
+  }
+  if (shell.parentElement !== host) {
+    host.append(shell);
+  }
+  workspaceState.glassPortalElement = null;
+}
+
+function setupWorkspaceGlassOverlayTracking() {
+  if (workspaceState.glassOverlayTrackingReady) {
+    return;
+  }
+  workspaceState.glassOverlayTrackingReady = true;
+  window.addEventListener("resize", () => {
+    window.requestAnimationFrame(syncWorkspaceGlassOverlay);
+  });
+}
+
+function setPanelOpacity(value) {
+  const next = snapPanelOpacity(value);
+  localStorage.setItem(WORKSPACE2_PANEL_OPACITY_KEY, String(next));
+  cleanupWorkspacePanelAncestors();
+  document.querySelectorAll(".workspace2-host, .workspace2-shell").forEach(applyWorkspaceBackgroundEffect);
+  return next;
+}
+
+function setPanelBackgroundMode(mode) {
+  const next = mode === "glass" ? "glass" : "transparent";
+  localStorage.setItem(WORKSPACE2_PANEL_BACKGROUND_MODE_KEY, next);
+  localStorage.setItem(WORKSPACE2_PANEL_GLASS_KEY, next === "glass" ? "1" : "0");
+  document.querySelectorAll(".workspace2-host, .workspace2-shell").forEach(applyWorkspaceBackgroundEffect);
+  syncWorkspaceGlassOverlay();
+}
+
+function setGlassTransparency(value) {
+  const next = snapGlassTransparency(value);
+  localStorage.setItem(WORKSPACE2_PANEL_GLASS_TRANSPARENCY_KEY, String(next));
+  document.querySelectorAll(".workspace2-host, .workspace2-shell").forEach(applyWorkspaceBackgroundEffect);
+  syncWorkspaceGlassOverlay();
+}
+
 function closeWorkspaceSettings() {
   if (workspaceState.settingsCloseHandler) {
     window.removeEventListener("keydown", workspaceState.settingsCloseHandler, true);
@@ -1276,7 +1644,7 @@ function settingsShortcutGrid() {
   return grid;
 }
 
-function settingsRange(label, value, { min, max, step = 1, snap, onChange }) {
+function settingsRange(label, value, { min, max, step = 1, snap, onChange, disabled = false }) {
   const row = document.createElement("div");
   row.className = "workspace2-settings-row";
   const text = document.createElement("span");
@@ -1289,6 +1657,8 @@ function settingsRange(label, value, { min, max, step = 1, snap, onChange }) {
   slider.max = String(max);
   slider.step = String(step);
   slider.value = String(value);
+  slider.disabled = disabled;
+  row.classList.toggle("is-disabled", disabled);
   isolateComfyKeys(slider);
   const output = document.createElement("span");
   output.textContent = String(value);
@@ -1301,6 +1671,64 @@ function settingsRange(label, value, { min, max, step = 1, snap, onChange }) {
   control.append(slider, output);
   row.append(text, control);
   return row;
+}
+
+function settingsModeRange(label, mode, selected, value, { min, max, snap, onChange, onSelect }) {
+  const row = document.createElement("div");
+  row.className = "workspace2-settings-row workspace2-settings-mode-row";
+  row.dataset.mode = mode;
+
+  const choice = document.createElement("label");
+  choice.className = "workspace2-settings-mode-choice";
+  const radio = document.createElement("input");
+  radio.type = "radio";
+  radio.name = "workspace2-background-mode";
+  radio.value = mode;
+  radio.checked = selected;
+  const text = document.createElement("span");
+  text.textContent = label;
+  choice.append(radio, text);
+
+  const control = document.createElement("label");
+  control.className = "workspace2-settings-range";
+  const slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = String(min);
+  slider.max = String(max);
+  slider.step = "1";
+  slider.value = String(value);
+  slider.disabled = !selected;
+  isolateComfyKeys(slider);
+  const output = document.createElement("span");
+  output.textContent = String(value);
+  control.append(slider, output);
+
+  row.classList.toggle("is-disabled", !selected);
+  radio.addEventListener("change", () => {
+    if (radio.checked) {
+      onSelect?.(mode);
+    }
+  });
+  slider.addEventListener("input", () => {
+    const next = typeof snap === "function" ? snap(slider.value) : Number(slider.value);
+    slider.value = String(next);
+    output.textContent = String(next);
+    onChange?.(next);
+  });
+
+  row.append(choice, control);
+  return row;
+}
+
+function updateSettingsModeRange(row, selected) {
+  const radio = row?.querySelector?.('input[type="radio"]');
+  const slider = row?.querySelector?.('input[type="range"]');
+  if (!radio || !slider) {
+    return;
+  }
+  radio.checked = selected;
+  slider.disabled = !selected;
+  row.classList.toggle("is-disabled", !selected);
 }
 
 function openWorkspaceSettings() {
@@ -1349,6 +1777,44 @@ function openWorkspaceSettings() {
     }),
   ]);
 
+  let transparentModeRow;
+  let glassModeRow;
+  const selectBackgroundMode = (mode) => {
+    setPanelBackgroundMode(mode);
+    updateSettingsModeRange(transparentModeRow, mode === "transparent");
+    updateSettingsModeRange(glassModeRow, mode === "glass");
+  };
+  transparentModeRow = settingsModeRange(
+    t("settings.transparentBackground"),
+    "transparent",
+    panelBackgroundMode() === "transparent",
+    panelOpacity(),
+    {
+      min: 5,
+      max: 100,
+      snap: snapPanelOpacity,
+      onChange: setPanelOpacity,
+      onSelect: selectBackgroundMode,
+    },
+  );
+  glassModeRow = settingsModeRange(
+    t("settings.glassBackground"),
+    "glass",
+    panelBackgroundMode() === "glass",
+    glassTransparency(),
+    {
+      min: 5,
+      max: 95,
+      snap: snapGlassTransparency,
+      onChange: setGlassTransparency,
+      onSelect: selectBackgroundMode,
+    },
+  );
+  const backgroundEffect = settingsSection(t("settings.backgroundEffect"), [
+    transparentModeRow,
+    glassModeRow,
+  ]);
+
   const cacheCount = nodesState.objectInfo ? Object.keys(nodesState.objectInfo).length : 0;
   const cacheInfo = settingsHelp(cacheCount
     ? `${t("settings.cacheCount", { count: cacheCount })}\n${t("settings.cacheUpdated", { time: formatTimestamp(nodesState.objectInfoCachedAt) })}`
@@ -1371,7 +1837,7 @@ function openWorkspaceSettings() {
     settingsHelp(t("settings.github")),
   ]);
 
-  dialog.append(header, shortcuts, behavior, nodeCache, about);
+  dialog.append(header, shortcuts, behavior, backgroundEffect, nodeCache, about);
   backdrop.append(dialog);
   document.body.append(backdrop);
   workspaceState.settingsElement = backdrop;
@@ -1713,12 +2179,26 @@ function styles() {
   style.id = "workspace2-styles";
   style.textContent = `
     .workspace2-host {
+      --workspace2-panel-alpha: 100%;
+      --workspace2-panel-blur: 0px;
+      --workspace2-panel-saturate: 1;
+      --workspace2-panel-brightness: 1;
+      --workspace2-shell-surface: var(--comfy-menu-bg, var(--bg-color, var(--p-content-background, #202124)));
+      background: transparent !important;
       height: 100%;
       max-height: 100%;
       overflow: hidden;
       display: flex;
       flex-direction: column;
       min-height: 0;
+    }
+    .workspace2-host.is-workspace2-surface-hidden {
+      display: none !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
+    .workspace2-sidebar-transparent-root {
+      background: transparent !important;
     }
     .workspace2-panel {
       --workspace2-tree-font: 12px;
@@ -1731,12 +2211,15 @@ function styles() {
       --workspace2-node-list-gap: 2px;
       --workspace2-radius: var(--p-border-radius, 6px);
       --workspace2-radius-sm: calc(var(--workspace2-radius) - 1px);
-      --workspace2-surface: var(--p-content-background, var(--comfy-menu-bg, #202124));
-      --workspace2-control-bg: var(--p-form-field-background, var(--comfy-input-bg, #111));
-      --workspace2-border: var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14)));
-      --workspace2-muted: var(--p-text-muted-color, rgba(255, 255, 255, 0.55));
-      --workspace2-hover: var(--p-list-option-hover-background, rgba(255, 255, 255, 0.075));
+      --workspace2-surface: var(--comfy-menu-bg, var(--bg-color, var(--p-content-background, #202124)));
+      --workspace2-control-bg: var(--comfy-input-bg, var(--p-form-field-background, #111));
+      --workspace2-border: var(--border-color, var(--p-content-border-color, rgba(255, 255, 255, 0.14)));
+      --workspace2-muted: var(--descrip-text, var(--p-text-muted-color, rgba(255, 255, 255, 0.55)));
+      --workspace2-hover: var(--comfy-menu-hover-bg, var(--content-hover-bg, var(--p-list-option-hover-background, rgba(255, 255, 255, 0.075))));
       --workspace2-accent: var(--p-primary-color, var(--accent-color, #0A84FF));
+      --workspace2-accent-muted: color-mix(in srgb, var(--workspace2-accent) 58%, var(--workspace2-tab-bg, var(--workspace2-surface)));
+      --workspace2-section-disclosure-color: color-mix(in srgb, var(--workspace2-accent) 46%, var(--workspace2-muted));
+      --workspace2-section-disclosure-hover-color: color-mix(in srgb, var(--workspace2-accent) 66%, var(--workspace2-muted));
       --workspace2-accent-soft: color-mix(in srgb, var(--workspace2-accent) 10%, transparent);
       --workspace2-accent-mid: color-mix(in srgb, var(--workspace2-accent) 18%, transparent);
       --workspace2-accent-strong: color-mix(in srgb, var(--workspace2-accent) 30%, transparent);
@@ -1745,13 +2228,19 @@ function styles() {
       --workspace2-danger-soft: rgba(255, 69, 58, 0.10);
       --workspace2-danger-mid: rgba(255, 69, 58, 0.22);
       --workspace2-danger-border: rgba(255, 69, 58, 0.58);
+      --workspace2-tab-bg: var(--comfy-menu-secondary-bg, var(--comfy-menu-bg, var(--content-bg, var(--p-tabs-tab-background, #202124))));
+      --workspace2-tab-hover-bg: var(--comfy-menu-hover-bg, var(--content-hover-bg, color-mix(in srgb, var(--workspace2-accent) 10%, var(--workspace2-tab-bg))));
+      --workspace2-tab-active-bg: color-mix(in srgb, var(--contrast-mix-color, var(--workspace2-accent)) 24%, var(--workspace2-tab-bg));
+      --workspace2-panel-alpha: 100%;
+      --workspace2-panel-blur: 0px;
+      --workspace2-panel-saturate: 1;
       box-sizing: border-box;
       height: 100%;
       max-height: 100%;
       min-height: 320px;
       padding: 10px;
       color: var(--p-text-color, var(--fg-color, #ddd));
-      background: var(--workspace2-surface);
+      background: transparent;
       font: 12px/1.35 var(--font-family, Arial, sans-serif);
       overflow: hidden;
       display: flex;
@@ -1786,40 +2275,112 @@ function styles() {
     }
     .workspace2-panel * { box-sizing: border-box; }
     .workspace2-shell {
+      --workspace2-border: var(--border-color, var(--p-content-border-color, rgba(255, 255, 255, 0.14)));
+      --workspace2-accent: var(--p-primary-color, var(--accent-color, #0A84FF));
+      --workspace2-accent-muted: color-mix(in srgb, var(--workspace2-accent) 58%, var(--workspace2-tab-bg));
+      --workspace2-tab-bg: var(--workspace2-tab-bg-glass, var(--comfy-menu-secondary-bg, var(--comfy-menu-bg, var(--content-bg, var(--p-tabs-tab-background, #202124)))));
+      --workspace2-tab-hover-bg: var(--comfy-menu-hover-bg, var(--content-hover-bg, color-mix(in srgb, var(--workspace2-accent) 10%, var(--workspace2-tab-bg))));
+      --workspace2-tab-active-bg: color-mix(in srgb, var(--workspace2-accent) 12%, var(--workspace2-tab-bg));
+      --workspace2-panel-fill: transparent;
+      --workspace2-panel-mist: transparent;
+      --workspace2-panel-stroke: rgba(255, 255, 255, 0);
+      --workspace2-panel-cool-sheen: transparent;
+      --workspace2-panel-top-sheen: transparent;
+      --workspace2-panel-shade: transparent;
+      position: relative;
       height: 100%;
       max-height: 100%;
       min-height: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: var(--p-content-background, var(--comfy-menu-bg, #202124));
+      background: transparent;
+      border-radius: 12px;
+    }
+    .workspace2-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(115% 70% at 12% -12%, var(--workspace2-panel-top-sheen), transparent 72%),
+        radial-gradient(92% 64% at 100% 100%, var(--workspace2-panel-cool-sheen), transparent 62%),
+        linear-gradient(145deg, var(--workspace2-glass-highlight, transparent), transparent 58%),
+        linear-gradient(180deg, var(--workspace2-panel-mist), transparent 68%),
+        linear-gradient(180deg, transparent 50%, var(--workspace2-panel-shade) 100%),
+        var(--workspace2-panel-fill);
+      border: 1px solid var(--workspace2-panel-stroke);
+      border-radius: inherit;
+      backdrop-filter:
+        blur(var(--workspace2-panel-blur))
+        saturate(var(--workspace2-panel-saturate))
+        brightness(var(--workspace2-panel-brightness));
+      -webkit-backdrop-filter:
+        blur(var(--workspace2-panel-blur))
+        saturate(var(--workspace2-panel-saturate))
+        brightness(var(--workspace2-panel-brightness));
+    }
+    .workspace2-shell.is-glass-background::before {
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        inset 1px 0 0 rgba(255, 255, 255, 0.08),
+        inset -1px 0 0 rgba(255, 255, 255, 0.06),
+        0 12px 36px rgba(0, 0, 0, 0.14);
+    }
+    .workspace2-shell.workspace2-glass-overlay {
+      position: fixed;
+      z-index: 1100;
+      max-height: none;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .workspace2-shell.workspace2-glass-overlay.is-workspace2-overlay-hidden {
+      visibility: hidden;
+      pointer-events: none;
     }
     .workspace2-module-tabs {
+      position: relative;
+      z-index: 1;
       flex: 0 0 auto;
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr)) 30px;
-      gap: 6px;
-      padding: 8px 10px 6px;
+      gap: 7px;
+      padding: 9px 10px 7px;
       border-bottom: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 62%, transparent);
-      background: var(--p-content-background, var(--comfy-menu-bg, #202124));
+      background: transparent;
     }
     .workspace2-module-tab {
-      min-height: 28px;
-      border: 1px solid var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14)));
-      border-radius: var(--p-border-radius, 6px);
-      color: var(--p-text-muted-color, rgba(255, 255, 255, 0.62));
-      background: transparent;
-      font: 12px/1.2 var(--font-family, Arial, sans-serif);
+      position: relative;
+      min-height: 30px;
+      border: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 78%, transparent);
+      border-radius: 8px;
+      color: var(--p-text-muted-color, rgba(255, 255, 255, 0.68));
+      background: var(--workspace2-tab-bg);
+      font: 500 12px/1.2 var(--font-family, Arial, sans-serif);
       cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
     }
     .workspace2-module-tab:hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
-      background: var(--p-list-option-hover-background, rgba(255, 255, 255, 0.075));
+      background: var(--workspace2-tab-hover-bg);
+      border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 32%, var(--workspace2-border, rgba(255,255,255,.14)));
     }
     .workspace2-module-tab.is-active {
-      color: var(--p-primary-color, var(--accent-color, #0A84FF));
-      border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 42%, transparent);
-      background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 12%, transparent);
+      color: var(--p-text-color, var(--fg-color, #f5f8ff));
+      border-color: color-mix(in srgb, var(--workspace2-accent) 28%, var(--workspace2-border));
+      background: var(--workspace2-tab-active-bg);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 8%, transparent), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    }
+    .workspace2-module-tab.is-active::after {
+      content: "";
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 4px;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--workspace2-accent-muted);
     }
     .workspace2-module-settings {
       min-width: 30px;
@@ -1844,15 +2405,23 @@ function styles() {
       fill: none;
     }
     .workspace2-module-body {
+      position: relative;
+      z-index: 1;
       flex: 1 1 auto;
       min-height: 0;
       overflow: hidden;
     }
     .workspace2-settings-backdrop {
+      --workspace2-surface: var(--comfy-menu-bg, var(--p-content-background, var(--bg-color, #202124)));
+      --workspace2-control-bg: var(--comfy-input-bg, var(--p-form-field-background, var(--workspace2-surface)));
+      --workspace2-border: var(--border-color, var(--p-content-border-color, color-mix(in srgb, currentColor 18%, transparent)));
+      --workspace2-muted: var(--descrip-text, var(--p-text-muted-color, color-mix(in srgb, currentColor 62%, transparent)));
+      --workspace2-hover: var(--comfy-menu-hover-bg, var(--content-hover-bg, var(--p-list-option-hover-background, color-mix(in srgb, currentColor 7%, transparent))));
+      --workspace2-accent: var(--p-primary-color, var(--accent-color, #0A84FF));
       position: fixed;
       inset: 0;
       z-index: 100002;
-      background: rgba(0, 0, 0, 0.35);
+      background: rgba(0, 0, 0, 0.10);
       display: flex;
       align-items: flex-start;
       justify-content: center;
@@ -1865,7 +2434,7 @@ function styles() {
       border: 1px solid var(--workspace2-border, rgba(255, 255, 255, 0.14));
       border-radius: 10px;
       color: var(--p-text-color, var(--fg-color, #ddd));
-      background: var(--p-content-background, var(--comfy-menu-bg, #202124));
+      background: var(--workspace2-surface);
       box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42);
       padding: 12px;
     }
@@ -1896,6 +2465,23 @@ function styles() {
       gap: 10px;
       padding: 4px 0;
       font-size: 12px;
+    }
+    .workspace2-settings-row.is-disabled {
+      opacity: 0.52;
+    }
+    .workspace2-settings-mode-row.is-disabled {
+      opacity: 1;
+    }
+    .workspace2-settings-mode-row.is-disabled .workspace2-settings-range {
+      opacity: 0.42;
+    }
+    .workspace2-settings-mode-choice {
+      min-width: 0;
+      flex: 1 1 auto;
+      font-weight: 500;
+    }
+    .workspace2-settings-mode-choice input {
+      accent-color: var(--workspace2-accent);
     }
     .workspace2-settings-row label {
       display: flex;
@@ -2048,7 +2634,7 @@ function styles() {
       gap: 8px;
       padding-bottom: 8px;
       border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent);
-      background: var(--workspace2-surface);
+      background: transparent;
       z-index: 20;
     }
     .workspace2-node-top {
@@ -2058,10 +2644,11 @@ function styles() {
     .workspace2-input,
     .workspace2-button {
       min-height: 28px;
-      border: 1px solid var(--workspace2-border);
+      border: 1px solid var(--workspace2-control-border-glass, var(--workspace2-border));
       border-radius: var(--workspace2-radius);
       color: inherit;
-      background: var(--workspace2-control-bg);
+      background: var(--workspace2-control-bg-glass, var(--workspace2-control-bg));
+      box-shadow: var(--workspace2-control-shadow-glass, none);
     }
     .workspace2-input {
       width: 100%;
@@ -2104,7 +2691,7 @@ function styles() {
     .workspace2-button:hover,
     .workspace2-icon-button:hover,
     .workspace2-menu-item:hover {
-      background: var(--workspace2-hover);
+      background: var(--workspace2-hover-glass, var(--workspace2-hover));
     }
     .workspace2-button.is-trash-toggle {
       border-color: var(--workspace2-accent-border);
@@ -2202,7 +2789,7 @@ function styles() {
       display: none;
     }
     .workspace2-row:hover {
-      background: var(--workspace2-hover);
+      background: var(--workspace2-hover-glass, var(--workspace2-hover));
     }
     .workspace2-row.is-selected {
       background: var(--workspace2-accent-mid);
@@ -2261,14 +2848,89 @@ function styles() {
       color: var(--workspace2-muted);
       font-size: var(--workspace2-meta-font);
     }
+    .workspace2-workflow-section {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .workspace2-workflow-section + .workspace2-workflow-section {
+      margin-top: 18px;
+    }
+    .workspace2-workflow-section.is-browse {
+      flex: 1 1 auto;
+    }
+    .workspace2-section-header {
+      min-height: 24px;
+      width: 100%;
+      padding: 4px 5px 3px;
+      border: 0;
+      border-radius: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, auto) minmax(12px, 1fr) auto;
+      align-items: center;
+      gap: 7px;
+      color: var(--workspace2-muted);
+      background: transparent;
+      font: 500 12px/1.2 var(--font-family, Arial, sans-serif);
+      text-align: left;
+    }
+    .workspace2-section-header.is-interactive {
+      cursor: pointer;
+      appearance: none;
+    }
+    .workspace2-section-header.is-interactive:hover {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: color-mix(in srgb, var(--workspace2-hover) 30%, transparent);
+    }
+    .workspace2-section-title {
+      min-width: 0;
+      white-space: nowrap;
+    }
+    .workspace2-section-line {
+      height: 1px;
+      min-width: 12px;
+      background: color-mix(in srgb, var(--workspace2-border) 56%, transparent);
+    }
+    .workspace2-section-header.is-interactive:hover .workspace2-section-line {
+      background: color-mix(in srgb, var(--workspace2-border) 78%, transparent);
+    }
+    .workspace2-section-header.is-interactive:hover .workspace2-section-disclosure {
+      color: var(--workspace2-section-disclosure-hover-color);
+    }
+    .workspace2-section-disclosure {
+      width: 16px;
+      height: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--workspace2-section-disclosure-color);
+      opacity: 1;
+      font-family: var(--font-family, Arial, sans-serif);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1;
+      transition: color 120ms ease;
+    }
+    .workspace2-section-disclosure.is-hidden {
+      display: none;
+    }
+    .workspace2-workflow-section-content {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .workspace2-workflow-section.is-browse .workspace2-workflow-section-content {
+      flex: 1 1 auto;
+    }
+    .workspace2-workflow-section.is-collapsed .workspace2-workflow-section-content {
+      display: none;
+    }
     .workspace2-recent-workflows {
       display: flex;
       flex-direction: column;
       gap: 3px;
-      margin: 3px 0 4px;
-      padding: 7px 0 8px;
-      border-top: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent);
-      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 42%, transparent);
+      margin: 0;
+      padding: 2px 0 0;
     }
     .workspace2-current-workflow {
       display: grid;
@@ -2284,6 +2946,7 @@ function styles() {
       background: var(--workspace2-hover);
     }
     .workspace2-current-workflow-label {
+      display: none;
       color: var(--workspace2-muted);
       font-size: var(--workspace2-meta-font);
       line-height: 1.2;
@@ -2548,24 +3211,10 @@ function styles() {
     .workspace2-node-section {
       margin: 8px 0 10px;
     }
-    .workspace2-node-section-header {
-      min-height: 18px;
-      display: grid;
-      grid-template-columns: minmax(0, auto) 1fr auto;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 5px 3px;
-      color: var(--workspace2-muted);
-      font-size: var(--workspace2-meta-font);
-      font-weight: 400;
-      letter-spacing: 0;
+    .workspace2-node-tree > .workspace2-node-section + .workspace2-node-section {
+      margin-top: 18px;
     }
-    .workspace2-node-section-line {
-      height: 1px;
-      background: color-mix(in srgb, var(--workspace2-border) 52%, transparent);
-      min-width: 12px;
-    }
-    .workspace2-node-section-header .workspace2-meta {
+    .workspace2-section-header .workspace2-meta {
       font-size: var(--workspace2-meta-font);
       margin-left: 0;
     }
@@ -3431,26 +4080,6 @@ function styles() {
   document.head.append(style);
 }
 
-async function fetchJson(path, options) {
-  const response = await api.fetchApi(path, options);
-  const text = await response.text();
-  if (!text.trim()) {
-    throw new Error(response.ok
-      ? `Empty response from ${path}`
-      : `Request failed: ${response.status} ${response.statusText || path}`);
-  }
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch (error) {
-    throw new Error(`Invalid JSON from ${path}: ${error.message}`);
-  }
-  if (!response.ok || data.ok === false) {
-    throw new Error(data.error || response.statusText);
-  }
-  return data;
-}
-
 async function fetchJsonWithTimeout(path, timeoutMs = NODE_OBJECT_INFO_FETCH_TIMEOUT) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -3474,32 +4103,46 @@ async function fetchStaticJson(path) {
   return response.json();
 }
 
-async function postJson(path, body) {
-  return fetchJson(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-}
-
 async function refreshOfficialWorkflows() {
+  const finish = startPerformanceSpan("workflows.official-sync");
   try {
     await app.extensionManager?.workflow?.syncWorkflows?.();
+    finish();
   } catch (error) {
+    finish({ error: error?.message || String(error) }, "error");
     console.debug("[Workspace2] Official workflow refresh failed", error);
   }
 }
 
+let officialWorkflowRefreshTimer = null;
+
+function refreshOfficialWorkflowsDeferred(delayMs = 500) {
+  if (officialWorkflowRefreshTimer) {
+    window.clearTimeout(officialWorkflowRefreshTimer);
+  }
+  officialWorkflowRefreshTimer = window.setTimeout(async () => {
+    officialWorkflowRefreshTimer = null;
+    await refreshOfficialWorkflows();
+  }, Math.max(0, Number(delayMs) || 0));
+}
+
 async function loadWorkflows() {
+  const finish = startPerformanceSpan("workflows.load");
   state.status = t("status.loading");
-  const data = await fetchJson("/workspace2/workflows");
-  state.items = data.items || [];
-  state.root = data.root || "";
-  state.officialRoot = data.official_root || "";
-  state.folderMeta = data.folder_meta || {};
-  state.isOfficialRoot = data.is_official_root !== false;
-  state.signature = workflowSignature(state.items);
-  state.status = t("status.items", { count: state.items.length });
+  try {
+    const data = await fetchJson("/workspace2/workflows");
+    state.items = data.items || [];
+    state.root = data.root || "";
+    state.officialRoot = data.official_root || "";
+    state.folderMeta = data.folder_meta || {};
+    state.isOfficialRoot = data.is_official_root !== false;
+    state.signature = workflowSignature(state.items);
+    state.status = t("status.items", { count: state.items.length });
+    finish({ itemCount: state.items.length });
+  } catch (error) {
+    finish({ error: error?.message || String(error) }, "error");
+    throw error;
+  }
 }
 
 function workflowSignature(items) {
@@ -3832,7 +4475,7 @@ async function readCachedObjectInfo() {
   }
 }
 
-async function writeCachedObjectInfo(objectInfo) {
+async function writeCachedObjectInfo(objectInfo, signature = "") {
   if (!objectInfo || typeof objectInfo !== "object" || Array.isArray(objectInfo)) {
     return;
   }
@@ -3846,6 +4489,7 @@ async function writeCachedObjectInfo(objectInfo) {
         key: NODE_OBJECT_INFO_CACHE_KEY,
         updatedAt: Date.now(),
         count: Object.keys(objectInfo).length,
+        signature: String(signature || ""),
         objectInfo,
       });
       tx.oncomplete = () => resolve();
@@ -3870,6 +4514,11 @@ async function clearCachedObjectInfo() {
     });
     nodesState.objectInfoCachedAt = 0;
     nodesState.objectInfoFromCache = false;
+    nodesState.objectInfo = null;
+    nodesState.library = null;
+    nodesState.nodeDefinitionsCache = null;
+    nodesState.nodeDefinitionMapCache = null;
+    nodesState.nodeDefinitionsSource = null;
   } finally {
     db?.close?.();
   }
@@ -3886,6 +4535,110 @@ function readWorkflowCustomOrder() {
 
 function saveWorkflowCustomOrder() {
   localStorage.setItem(WORKFLOW_ORDER_KEY, JSON.stringify(state.customOrder || {}));
+}
+
+function replaceWorkflowPathPrefix(value, oldPath, newPath) {
+  const text = String(value || "");
+  if (!text || !oldPath || text === newPath) {
+    return text;
+  }
+  if (text === oldPath) {
+    return newPath;
+  }
+  return text.startsWith(`${oldPath}/`) ? `${newPath}${text.slice(oldPath.length)}` : text;
+}
+
+function workflowPathIsWithin(path, parent) {
+  const value = String(path || "");
+  const prefix = String(parent || "");
+  return Boolean(prefix) && (value === prefix || value.startsWith(`${prefix}/`));
+}
+
+function commitLocalWorkflowItems(items) {
+  state.items = items;
+  state.signature = workflowSignature(items);
+}
+
+function addLocalWorkflowItem(item) {
+  commitLocalWorkflowItems([
+    ...state.items.filter((entry) => entry.path !== item.path),
+    item,
+  ]);
+}
+
+function remapLocalWorkflowItems(oldPath, newPath) {
+  const nextName = String(newPath || "").split("/").pop() || newPath;
+  commitLocalWorkflowItems(state.items.map((entry) => {
+    if (!workflowPathIsWithin(entry.path, oldPath)) {
+      return entry;
+    }
+    const path = replaceWorkflowPathPrefix(entry.path, oldPath, newPath);
+    return {
+      ...entry,
+      path,
+      name: entry.path === oldPath ? nextName : entry.name,
+      updated_at: Date.now(),
+    };
+  }));
+}
+
+function removeLocalWorkflowItems(path) {
+  commitLocalWorkflowItems(
+    state.items.filter((entry) => !workflowPathIsWithin(entry.path, path)),
+  );
+}
+
+function remapWorkflowPathState(oldPath, newPath) {
+  if (!oldPath || !newPath || oldPath === newPath) {
+    return;
+  }
+
+  if (state.selectedPath) {
+    state.selectedPath = replaceWorkflowPathPrefix(state.selectedPath, oldPath, newPath);
+  }
+  if (state.editingPath) {
+    state.editingPath = replaceWorkflowPathPrefix(state.editingPath, oldPath, newPath);
+  }
+
+  state.expanded = new Set([...state.expanded].map((path) => replaceWorkflowPathPrefix(path, oldPath, newPath)));
+
+  const nextOrder = {};
+  for (const [parent, order] of Object.entries(state.customOrder || {})) {
+    const nextParent = replaceWorkflowPathPrefix(parent, oldPath, newPath);
+    nextOrder[nextParent] = Array.isArray(order)
+      ? order.map((path) => replaceWorkflowPathPrefix(path, oldPath, newPath))
+      : order;
+  }
+  state.customOrder = nextOrder;
+  saveWorkflowCustomOrder();
+  updateRecentWorkflowPath(oldPath, newPath);
+}
+
+function removeWorkflowPathState(path) {
+  if (!path) {
+    return;
+  }
+  if (workflowPathIsWithin(state.selectedPath, path)) {
+    state.selectedPath = "";
+  }
+  if (workflowPathIsWithin(state.editingPath, path)) {
+    state.editingPath = "";
+  }
+  state.expanded = new Set(
+    [...state.expanded].filter((entry) => !workflowPathIsWithin(entry, path)),
+  );
+  const nextOrder = {};
+  for (const [parent, order] of Object.entries(state.customOrder || {})) {
+    if (workflowPathIsWithin(parent, path)) {
+      continue;
+    }
+    nextOrder[parent] = Array.isArray(order)
+      ? order.filter((entry) => !workflowPathIsWithin(entry, path))
+      : order;
+  }
+  state.customOrder = nextOrder;
+  saveWorkflowCustomOrder();
+  removeRecentWorkflowTree(path);
 }
 
 function buildTree() {
@@ -4100,12 +4853,16 @@ async function openWorkflowFromOfficialStore(path) {
   }
 
   const workflowStore = app.extensionManager?.workflow;
-  if (!workflowStore?.syncWorkflows || !workflowStore?.getWorkflowByPath) {
+  if (!workflowStore?.getWorkflowByPath) {
     return false;
   }
 
-  await workflowStore.syncWorkflows();
-  const workflow = workflowStore.getWorkflowByPath(officialWorkflowPath(path));
+  const storePath = officialWorkflowPath(path);
+  let workflow = workflowStore.getWorkflowByPath(storePath);
+  if (!workflow && typeof workflowStore.syncWorkflows === "function") {
+    await workflowStore.syncWorkflows();
+    workflow = workflowStore.getWorkflowByPath(storePath);
+  }
   if (!workflow) {
     return false;
   }
@@ -4144,6 +4901,54 @@ async function openWorkflow(path) {
   recordRecentWorkflow(path);
 }
 
+async function openWorkflowFileFromPicker(el) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".json,application/json";
+  input.style.display = "none";
+  document.body.append(input);
+  try {
+    const file = await new Promise((resolve) => {
+      input.addEventListener("change", () => resolve(input.files?.[0] || null), { once: true });
+      input.click();
+    });
+    if (!file) {
+      return;
+    }
+    const text = await file.text();
+    const workflow = JSON.parse(text);
+    await app.loadGraphData(workflow);
+    state.selectedPath = "";
+    state.status = t("status.openedWorkflowFile");
+    renderPanel(el);
+  } finally {
+    input.remove();
+  }
+}
+
+function serializeCurrentWorkflow() {
+  const graph = app.graph || app.canvas?.graph;
+  if (typeof graph?.serialize === "function") {
+    return graph.serialize();
+  }
+  return null;
+}
+
+async function saveCurrentWorkflowToPath(el, path) {
+  if (!path || path !== state.selectedPath) {
+    throw new Error(t("status.workflowSaveMismatch"));
+  }
+  const workflow = serializeCurrentWorkflow();
+  if (!workflow) {
+    throw new Error(t("status.workflowSerializeUnavailable"));
+  }
+  await postJson("/workspace2/workflow/save", { path, workflow });
+  state.status = t("status.workflowSaved");
+  recordRecentWorkflow(path);
+  refreshOfficialWorkflowsDeferred(0);
+  renderPanel(el);
+}
+
 async function openWorkflowLocation(path) {
   await postJson("/workspace2/open_item_location", { path });
 }
@@ -4164,22 +4969,29 @@ async function setRootPath(el) {
   state.expanded = new Set([""]);
   state.status = state.isOfficialRoot ? t("status.rootOfficial") : t("status.rootChanged");
   await refreshPanel(el);
-  await refreshOfficialWorkflows();
+  refreshOfficialWorkflowsDeferred(0);
 }
 
 async function createFolder(el, parent = "") {
   const name = uniqueWorkflowFolderName(parent);
   const path = joinPath(parent, name);
-  await postJson("/workspace2/folder/create", {
+  const data = await postJson("/workspace2/folder/create", {
     parent_path: parent,
     name,
   });
+  const createdPath = data?.path || path;
+  addLocalWorkflowItem({
+    type: "folder",
+    name: createdPath.split("/").pop() || name,
+    path: createdPath,
+    updated_at: Date.now(),
+  });
   state.expanded.add(parent);
-  state.selectedPath = path;
-  state.editingPath = path;
+  state.selectedPath = createdPath;
+  state.editingPath = createdPath;
   state.status = t("status.folderCreated");
-  await refreshPanel(el);
-  await refreshOfficialWorkflows();
+  renderPanel(el);
+  refreshOfficialWorkflowsDeferred(250);
 }
 
 function selectedFolderPath() {
@@ -4189,6 +5001,19 @@ function selectedFolderPath() {
 
 function joinPath(parent, name) {
   return parent ? `${parent}/${name}` : name;
+}
+
+function workflowRenameTargetPath(item, newName) {
+  const parent = parentPath(item.path);
+  let name = String(newName || "").trim();
+  if (item.type === "file" && !name.toLowerCase().endsWith(".json")) {
+    name = `${name}.json`;
+  }
+  return joinPath(parent, name);
+}
+
+function relativeWorkflowPathFromOfficial(path) {
+  return String(path || "").replace(/^workflows\/+/, "");
 }
 
 function uniqueWorkflowFolderName(parent, baseName = t("folder.defaultName")) {
@@ -4221,16 +5046,24 @@ function uniqueWorkflowPath(parent, baseName = "New Workflow") {
 
 async function createWorkflow(el, parent = selectedFolderPath()) {
   const path = uniqueWorkflowPath(parent);
-  await postJson("/workspace2/workflow/save", {
+  const data = await postJson("/workspace2/workflow/save", {
     path,
     workflow: JSON.parse(JSON.stringify(DEFAULT_GRAPH)),
   });
+  const createdPath = data?.path || path;
+  addLocalWorkflowItem({
+    type: "file",
+    name: createdPath.split("/").pop() || "New Workflow.json",
+    path: createdPath,
+    size_bytes: 0,
+    updated_at: Date.now(),
+  });
   state.expanded.add(parent);
-  state.selectedPath = path;
-  state.status = t("status.workflowCreated");
-  await refreshPanel(el);
+  state.selectedPath = createdPath;
   await refreshOfficialWorkflows();
-  await openWorkflow(path);
+  await openWorkflow(createdPath);
+  state.status = t("status.workflowCreated");
+  renderPanel(el);
 }
 
 async function renameItem(el, item, newName) {
@@ -4239,34 +5072,71 @@ async function renameItem(el, item, newName) {
     renderPanel(el);
     return;
   }
-  await postJson("/workspace2/rename", {
-    path: item.path,
-    new_name: newName,
-  });
+  const oldPath = item.path;
+  const wasSelected = state.selectedPath === oldPath;
+  let nextPath = workflowRenameTargetPath(item, newName);
+  const conflict = state.items.some((entry) =>
+    entry.path !== oldPath && entry.path.toLowerCase() === nextPath.toLowerCase()
+  );
+  if (conflict) {
+    throw new Error("Target already exists");
+  }
+
+  const workflowStore = app.extensionManager?.workflow;
+  const officialWorkflow = state.isOfficialRoot && item.type === "file"
+    ? workflowStore?.getWorkflowByPath?.(officialWorkflowPath(oldPath))
+    : null;
+  if (officialWorkflow && typeof workflowStore?.renameWorkflow === "function") {
+    await workflowStore.renameWorkflow(officialWorkflow, officialWorkflowPath(nextPath));
+    nextPath = relativeWorkflowPathFromOfficial(officialWorkflow.path || officialWorkflowPath(nextPath));
+  } else {
+    const data = await postJson("/workspace2/rename", {
+      path: item.path,
+      new_name: newName,
+    });
+    nextPath = data?.path || nextPath;
+  }
+  remapLocalWorkflowItems(oldPath, nextPath);
+  remapWorkflowPathState(oldPath, nextPath);
   state.editingPath = "";
   state.status = t("status.renamed");
-  await refreshPanel(el);
-  await refreshOfficialWorkflows();
+  if (wasSelected) {
+    state.selectedPath = nextPath;
+    recordRecentWorkflow(nextPath);
+  }
+  if (!officialWorkflow) {
+    refreshOfficialWorkflowsDeferred(500);
+  }
+  renderPanel(el);
 }
 
 async function moveItem(el, sourcePath, targetFolder) {
-  await postJson("/workspace2/move", {
+  const source = state.items.find((entry) => entry.path === sourcePath);
+  const data = await postJson("/workspace2/move", {
     source_path: sourcePath,
     target_folder: targetFolder,
   });
+  const nextPath = data?.path || joinPath(
+    targetFolder,
+    source?.name || sourcePath.split("/").pop(),
+  );
+  remapLocalWorkflowItems(sourcePath, nextPath);
+  remapWorkflowPathState(sourcePath, nextPath);
   state.expanded.add(targetFolder);
   state.status = targetFolder ? t("status.movedTo", { target: targetFolder }) : t("status.movedToRoot");
-  await refreshPanel(el);
-  await refreshOfficialWorkflows();
+  renderPanel(el);
+  refreshOfficialWorkflowsDeferred(250);
 }
 
 async function moveToTrash(el, item) {
   const scrollTop = getTreeScrollTop(el);
   await postJson("/workspace2/trash/move", { path: item.path });
-  state.selectedPath = "";
+  removeLocalWorkflowItems(item.path);
+  removeWorkflowPathState(item.path);
   state.status = t("status.movedToTrash");
-  await refreshPanel(el, { scrollTop });
-  await refreshOfficialWorkflows();
+  renderPanel(el);
+  restoreTreeScrollTop(el, scrollTop);
+  refreshOfficialWorkflowsDeferred(250);
 }
 
 async function loadTrash() {
@@ -4277,6 +5147,9 @@ async function loadTrash() {
 }
 
 async function pollForExternalChanges(el) {
+  if (state.editingPath || state.pointerDrag || state.reorderDrag) {
+    return;
+  }
   try {
     if (state.showTrash) {
       const data = await fetchJson("/workspace2/trash/list");
@@ -4328,13 +5201,33 @@ function startAutoRefresh(el) {
 }
 
 async function restoreTrashItem(el, trashId, restoreMode = "original") {
-  await postJson("/workspace2/trash/restore", {
+  const data = await postJson("/workspace2/trash/restore", {
     trash_id: trashId,
     restore_mode: restoreMode,
   });
-  await loadTrash();
-  await loadWorkflows();
-  await refreshOfficialWorkflows();
+  const item = data?.item || {};
+  const restoredPath = String(item.restored_path || item.original_path || "");
+  if (!restoredPath) {
+    throw new Error("Restore response did not include a workflow path");
+  }
+  const restoredItems = Array.isArray(data?.items) && data.items.length
+    ? data.items
+    : [{
+        type: item.type === "folder" ? "folder" : "file",
+        name: restoredPath.split("/").pop() || item.name || restoredPath,
+        path: restoredPath,
+        size_bytes: Number(item.size_bytes || 0),
+        updated_at: Date.now(),
+      }];
+  commitLocalWorkflowItems([
+    ...state.items.filter((entry) => !workflowPathIsWithin(entry.path, restoredPath)),
+    ...restoredItems,
+  ]);
+  state.trashItems = state.trashItems.filter((entry) => entry.id !== trashId);
+  state.trashSignature = trashSignature(state.trashItems);
+  state.expanded.add(parentPath(restoredPath));
+  state.status = t("status.trashedItems", { count: state.trashItems.length });
+  refreshOfficialWorkflowsDeferred(250);
   renderPanel(el);
 }
 
@@ -4352,8 +5245,9 @@ async function restoreTrashItemSmart(el, item) {
 
 async function moveTrashItemToSystemTrash(el, item) {
   await postJson("/workspace2/trash/system_delete", { trash_id: item.id });
+  state.trashItems = state.trashItems.filter((entry) => entry.id !== item.id);
+  state.trashSignature = trashSignature(state.trashItems);
   state.status = t("status.systemDeleted");
-  await loadTrash();
   renderPanel(el);
 }
 
@@ -4362,7 +5256,13 @@ async function emptyTrash(el) {
     return;
   }
   const result = await postJson("/workspace2/trash/empty", {});
-  await loadTrash();
+  const removedIds = new Set(
+    (result.removed || []).map((item) => String(item?.id || "")).filter(Boolean),
+  );
+  state.trashItems = state.trashItems.filter(
+    (item) => !removedIds.has(String(item.id || "")),
+  );
+  state.trashSignature = trashSignature(state.trashItems);
   const details = (result.errors || [])
     .slice(0, 3)
     .map((item) => `${item.name || item.id || ""}: ${item.error || ""}`.trim())
@@ -4380,6 +5280,7 @@ function iconSvg(name) {
     filePlus: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6"/><path d="M12 12v6"/>',
     refresh: '<path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 16h6v6"/><path d="M3 12A9 9 0 0 1 18.4 5.6L21 8"/><path d="M21 8h-6V2"/>',
     folderOpen: '<path d="M3 7h5l2 2h11"/><path d="M3 7v13h16l3-9H6l-3 9"/>',
+    save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
     trash: '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 16h10l1-16"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     trashPage: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>',
     archiveTray: '<path d="M4 4h16v5H4z"/><path d="M4 9l2 11h12l2-11"/><path d="M9 14h6"/><path d="M8 4l1.5-2h5L16 4"/>',
@@ -4404,6 +5305,7 @@ function iconSvg(name) {
     star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/>',
     starFilled: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z" fill="currentColor"/>',
     settings: '<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4l.1.1a1.7 1.7 0 0 0 1.9.3h.1A1.7 1.7 0 0 0 10 2.9V3a2 2 0 1 1 4 0v-.1a1.7 1.7 0 0 0 1 1.6h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.9 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    chevronDown: '<path d="M6 9l6 6 6-6"/>',
     x: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>',
   };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -4538,18 +5440,32 @@ async function loadNodeLibrary() {
 }
 
 async function loadNodeLibraryInternal() {
+  const finish = startPerformanceSpan("nodes.initial-load");
   nodesState.loading = true;
   nodesState.objectInfoLoading = true;
   nodesState.error = "";
   nodesState.objectInfoError = "";
   try {
-    const [libraryData, nodeFrequencyData, cachedObjectInfo] = await Promise.all([
-      fetchJson("/workspace2/nodes/library"),
-      fetchStaticJson("/assets/sorted-custom-node-map.json").catch(() => ({})),
-      readCachedObjectInfo().catch((error) => {
-        console.debug("[Workspace2] Node cache read failed", error);
-        return null;
-      }),
+    const [libraryData, nodeFrequencyData, cachedObjectInfo, signatureData] = await Promise.all([
+      measurePromise("nodes.library-request", () => fetchJson("/workspace2/nodes/library")),
+      measurePromise(
+        "nodes.frequency-map-request",
+        () => fetchStaticJson("/assets/sorted-custom-node-map.json").catch(() => ({})),
+      ),
+      measurePromise(
+        "nodes.indexeddb-read",
+        () => readCachedObjectInfo().catch((error) => {
+          console.debug("[Workspace2] Node cache read failed", error);
+          return null;
+        }),
+      ),
+      measurePromise(
+        "nodes.signature-request",
+        () => fetchJson("/workspace2/nodes/index-signature").catch((error) => {
+          console.debug("[Workspace2] Node signature request failed", error);
+          return null;
+        }),
+      ),
     ]);
     nodesState.library = normalizeNodeLibrary(libraryData.library);
     nodesState.nodeFrequencyLookup = nodeFrequencyData && typeof nodeFrequencyData === "object" ? nodeFrequencyData : {};
@@ -4558,17 +5474,31 @@ async function loadNodeLibraryInternal() {
       nodesState.objectInfoCachedAt = Number(cachedObjectInfo.updatedAt || 0);
       nodesState.objectInfoFromCache = true;
     }
+    const nodeIndexSignature = String(signatureData?.signature || "");
+    const cacheIsCurrent = Boolean(
+      nodeIndexSignature
+      && cachedObjectInfo?.signature === nodeIndexSignature
+      && cachedObjectInfo?.objectInfo,
+    );
     nodesState.nodeDefinitionsCache = null;
     nodesState.nodeDefinitionMapCache = null;
     nodesState.nodeDefinitionsSource = null;
     nodesState.loading = false;
+    nodesState.objectInfoLoading = !cacheIsCurrent;
     if (nodesState.renderTarget?.isConnected) {
       renderNodesPanel(nodesState.renderTarget);
     }
-    loadFullObjectInfo().catch((error) => {
-      nodesState.objectInfoError = error.message || String(error);
-      nodesState.objectInfoLoading = false;
+    finish({
+      cachedNodeCount: Object.keys(nodesState.objectInfo || {}).length,
+      cacheHit: Boolean(cachedObjectInfo?.objectInfo),
+      cacheCurrent: cacheIsCurrent,
     });
+    if (!cacheIsCurrent) {
+      refreshFullObjectInfoCoordinated(nodeIndexSignature).catch((error) => {
+        nodesState.objectInfoError = error.message || String(error);
+        nodesState.objectInfoLoading = false;
+      });
+    }
   } catch (error) {
     nodesState.error = error.message;
     nodesState.library = emptyNodeLibrary();
@@ -4579,12 +5509,44 @@ async function loadNodeLibraryInternal() {
     nodesState.nodeDefinitionsSource = null;
     nodesState.loading = false;
     nodesState.objectInfoLoading = false;
+    finish({ error: error?.message || String(error) }, "error");
   }
 }
 
-async function loadFullObjectInfo() {
+function applyCachedObjectInfo(cachedObjectInfo) {
+  if (!cachedObjectInfo?.objectInfo || typeof cachedObjectInfo.objectInfo !== "object") {
+    return false;
+  }
+  nodesState.objectInfo = cachedObjectInfo.objectInfo;
+  nodesState.objectInfoCachedAt = Number(cachedObjectInfo.updatedAt || 0);
+  nodesState.objectInfoFromCache = true;
+  nodesState.nodeDefinitionsCache = null;
+  nodesState.nodeDefinitionMapCache = null;
+  nodesState.nodeDefinitionsSource = null;
+  return true;
+}
+
+async function refreshFullObjectInfoCoordinated(signature) {
+  return withNodeIndexRefreshLock(async () => {
+    const latestCache = await readCachedObjectInfo().catch(() => null);
+    if (signature && latestCache?.signature === signature && applyCachedObjectInfo(latestCache)) {
+      nodesState.objectInfoLoading = false;
+      if (nodesState.renderTarget?.isConnected) {
+        renderNodesPanel(nodesState.renderTarget);
+      }
+      return;
+    }
+    await loadFullObjectInfo(signature);
+  });
+}
+
+async function loadFullObjectInfo(signature = "") {
+  const finish = startPerformanceSpan("nodes.object-info-refresh");
   try {
-    const objectInfoData = await fetchJsonWithTimeout("/object_info");
+    const objectInfoData = await measurePromise(
+      "nodes.object-info-request",
+      () => fetchJsonWithTimeout("/object_info"),
+    );
     nodesState.objectInfo = objectInfoData || {};
     nodesState.objectInfoCachedAt = Date.now();
     nodesState.objectInfoFromCache = false;
@@ -4592,11 +5554,14 @@ async function loadFullObjectInfo() {
     nodesState.nodeDefinitionMapCache = null;
     nodesState.nodeDefinitionsSource = null;
     nodesState.objectInfoError = "";
-    writeCachedObjectInfo(nodesState.objectInfo).catch((error) => {
-      console.debug("[Workspace2] Node cache write failed", error);
-    });
+    await measurePromise(
+      "nodes.indexeddb-write",
+      () => writeCachedObjectInfo(nodesState.objectInfo, signature),
+    );
+    finish({ nodeCount: Object.keys(nodesState.objectInfo).length });
   } catch (error) {
     nodesState.objectInfoError = error.message || String(error);
+    finish({ error: nodesState.objectInfoError }, "error");
   } finally {
     nodesState.objectInfoLoading = false;
     if (nodesState.renderTarget?.isConnected) {
@@ -4672,14 +5637,17 @@ function normalizeTemplateLibrary(library) {
 }
 
 async function loadTemplateLibrary() {
+  const finish = startPerformanceSpan("templates.load");
   templatesState.loading = true;
   templatesState.error = "";
   try {
     const data = await fetchJson("/workspace2/templates/library");
     templatesState.library = normalizeTemplateLibrary(data.library);
+    finish({ templateCount: templatesState.library.templates.length });
   } catch (error) {
     templatesState.error = error.message;
     templatesState.library = emptyTemplateLibrary();
+    finish({ error: templatesState.error }, "error");
   } finally {
     templatesState.loading = false;
   }
@@ -6823,19 +7791,66 @@ function renderOfficialNodeFolder(el, section, folder, favoriteTypes, depth) {
   }
 }
 
-function renderTopSectionHeader(el, section, sectionId, titleText, countText) {
-  const header = document.createElement("div");
-  header.className = "workspace2-node-section-header";
-  const title = document.createElement("div");
-  title.className = "workspace2-name";
+function setSectionHeaderExpanded(header, expanded) {
+  header.classList.toggle("is-collapsed", !expanded);
+  header.classList.toggle("is-expanded", expanded);
+  header.setAttribute("aria-expanded", expanded ? "true" : "false");
+  const disclosure = header.querySelector(".workspace2-section-disclosure");
+  if (disclosure) {
+    disclosure.textContent = expanded ? "∨" : ">";
+  }
+}
+
+function createSectionHeader({ titleText, countText = "", collapsible = false, expanded = true, onToggle = null }) {
+  const header = document.createElement(collapsible ? "button" : "div");
+  header.className = `workspace2-section-header${collapsible ? " is-interactive" : ""}${collapsible ? (expanded ? " is-expanded" : " is-collapsed") : ""}`;
+  if (collapsible) {
+    header.type = "button";
+    header.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
+
+  const disclosure = document.createElement("span");
+  disclosure.className = `workspace2-section-disclosure${collapsible ? "" : " is-hidden"}`;
+  disclosure.setAttribute("aria-hidden", "true");
+  if (collapsible) {
+    disclosure.textContent = expanded ? "∨" : ">";
+  }
+
+  const title = document.createElement("span");
+  title.className = "workspace2-section-title workspace2-name";
   title.textContent = titleText;
-  const line = document.createElement("div");
-  line.className = "workspace2-node-section-line";
-  const count = document.createElement("div");
+
+  const line = document.createElement("span");
+  line.className = "workspace2-section-line";
+
+  const count = document.createElement("span");
   count.className = "workspace2-meta";
   count.textContent = countText;
-  header.append(title, line, count);
+  count.hidden = !countText;
+
+  header.append(disclosure, title, line, count);
+  if (collapsible && typeof onToggle === "function") {
+    header.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      onToggle();
+    });
+  }
+  return { header, disclosure };
+}
+
+function renderTopSectionHeader(el, section, sectionId, titleText, countText) {
+  const hasQuery = Boolean(nodesState.query.trim());
+  const expanded = hasQuery || nodesState.expanded.has(sectionId);
+  const { header } = createSectionHeader({
+    titleText,
+    countText,
+    collapsible: !hasQuery,
+    expanded,
+    onToggle: () => toggleNodeGroup(el, sectionId),
+  });
   section.append(header);
+  return expanded;
 }
 
 function parseLocalJson(key, fallback) {
@@ -7991,13 +9006,66 @@ function recordRecentWorkflow(path) {
     return;
   }
   const item = state.items.find((entry) => entry.path === normalizedPath);
-  const next = {
+  const name = item ? workflowDisplayName(item) : normalizedPath.split(/[\\/]/).pop() || normalizedPath;
+  const recent = readRecentWorkflows();
+  const existingIndex = recent.findIndex((entry) => entry.path === normalizedPath);
+  if (existingIndex >= 0) {
+    recent[existingIndex] = {
+      ...recent[existingIndex],
+      name,
+      openedAt: Date.now(),
+    };
+    writeRecentWorkflows(recent);
+    return;
+  }
+  writeRecentWorkflows([{
     path: normalizedPath,
-    name: item ? workflowDisplayName(item) : normalizedPath.split(/[\\/]/).pop() || normalizedPath,
+    name,
     openedAt: Date.now(),
-  };
-  const remaining = readRecentWorkflows().filter((entry) => entry.path !== normalizedPath);
-  writeRecentWorkflows([next, ...remaining]);
+  }, ...recent]);
+}
+
+function updateRecentWorkflowPath(oldPath, newPath) {
+  const normalizedOld = String(oldPath || "");
+  const normalizedNew = String(newPath || "");
+  if (!normalizedOld || !normalizedNew || normalizedOld === normalizedNew) {
+    return;
+  }
+  const existing = state.items.find((entry) => entry.path === normalizedNew);
+  const fallbackName = normalizedNew.split(/[\\/]/).pop() || normalizedNew;
+  const next = [];
+  const seen = new Set();
+  for (const entry of readRecentWorkflows()) {
+    const path = replaceWorkflowPathPrefix(entry.path, normalizedOld, normalizedNew);
+    if (!path || seen.has(path)) {
+      continue;
+    }
+    seen.add(path);
+    next.push({
+      ...entry,
+      path,
+      name: path === normalizedNew ? (existing ? workflowDisplayName(existing) : fallbackName) : entry.name,
+    });
+  }
+  writeRecentWorkflows(next);
+}
+
+function removeRecentWorkflow(path) {
+  const normalizedPath = String(path || "");
+  if (!normalizedPath) {
+    return;
+  }
+  writeRecentWorkflows(readRecentWorkflows().filter((entry) => entry.path !== normalizedPath));
+}
+
+function removeRecentWorkflowTree(path) {
+  const normalizedPath = String(path || "");
+  if (!normalizedPath) {
+    return;
+  }
+  writeRecentWorkflows(
+    readRecentWorkflows().filter((entry) => !workflowPathIsWithin(entry.path, normalizedPath)),
+  );
 }
 
 function createSliderValueLabel(text) {
@@ -8442,6 +9510,24 @@ function openWorkflowSortMenu(el, anchor) {
   });
   menu.append(custom);
 
+  const refreshDivider = document.createElement("div");
+  refreshDivider.className = "workspace2-menu-divider";
+  menu.append(refreshDivider);
+
+  const refresh = document.createElement("button");
+  refresh.className = "workspace2-menu-item";
+  refresh.type = "button";
+  refresh.textContent = t("workflows.refresh");
+  refresh.addEventListener("click", async () => {
+    closeWorkflowSortMenu();
+    try {
+      await refreshPanel(el);
+    } catch (error) {
+      handleError(el, error);
+    }
+  });
+  menu.append(refresh);
+
   panel.append(menu);
   state.sortMenuElement = menu;
   state.sortMenuCloseHandler = (event) => {
@@ -8462,9 +9548,24 @@ function openWorkflowSortMenu(el, anchor) {
   }, 0);
 }
 
-function prepareWorkspaceHost(el) {
+function prepareWorkspaceSidebarHost(el) {
   el.innerHTML = "";
   el.classList.add("workspace2-host");
+  el.classList.remove("is-workspace2-surface-hidden");
+  applyWorkspaceBackgroundEffect(el);
+  el.style.height = "100%";
+  el.style.maxHeight = "100%";
+  el.style.overflow = "hidden";
+  el.style.minHeight = "0";
+}
+
+function prepareWorkspaceModuleMount(el) {
+  if (!el?.classList?.contains("workspace2-module-body")) {
+    prepareWorkspaceSidebarHost(el);
+    return;
+  }
+  el.innerHTML = "";
+  el.classList.remove("workspace2-host", "is-glass-background");
   el.style.height = "100%";
   el.style.maxHeight = "100%";
   el.style.overflow = "hidden";
@@ -8633,14 +9734,21 @@ function renderWorkspace2Panel(el) {
   workspaceState.renderTarget = el;
   styles();
   setupWorkspaceKeyIsolation();
-  prepareWorkspaceHost(el);
+  setupWorkspaceGlassOverlayTracking();
+  if (workspaceState.glassPortalElement?.isConnected) {
+    workspaceState.glassPortalElement.remove();
+  }
+  workspaceState.glassPortalElement = null;
+  prepareWorkspaceSidebarHost(el);
 
   const shell = document.createElement("div");
   shell.className = "workspace2-shell";
+  applyWorkspaceBackgroundEffect(shell);
   const body = document.createElement("div");
   body.className = "workspace2-module-body";
   shell.append(renderWorkspaceModuleTabs(el), body);
   el.append(shell);
+  syncWorkspaceGlassOverlay();
 
   if (workspaceState.activeModule === "nodes") {
     renderNodesPanel(body);
@@ -8649,6 +9757,8 @@ function renderWorkspace2Panel(el) {
   } else {
     renderPanel(body);
   }
+  window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 0);
+  window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 180);
 }
 
 function readDragItem(event) {
@@ -9232,23 +10342,34 @@ function renderNode(el, list, node, depth) {
     input.className = "workspace2-rename-input";
     input.value = workflowDisplayName(node);
     isolateComfyKeys(input);
+    let renameSubmitted = false;
+    const commitRename = async () => {
+      if (renameSubmitted) {
+        return;
+      }
+      renameSubmitted = true;
+      await renameItem(el, node, input.value.trim());
+    };
     input.addEventListener("click", (event) => event.stopPropagation());
     input.addEventListener("keydown", async (event) => {
       if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
         try {
-          await renameItem(el, node, input.value.trim());
+          await commitRename();
         } catch (error) {
           handleError(el, error);
         }
       }
       if (event.key === "Escape") {
+        renameSubmitted = true;
         state.editingPath = "";
         renderPanel(el);
       }
     });
     input.addEventListener("blur", async () => {
       try {
-        await renameItem(el, node, input.value.trim());
+        await commitRename();
       } catch (error) {
         handleError(el, error);
       }
@@ -9368,6 +10489,43 @@ function scheduleWorkflowResultsRefresh(el) {
   }, WORKFLOW_SEARCH_RENDER_DELAY);
 }
 
+function isWorkflowSectionCollapsed(key) {
+  return localStorage.getItem(key) === "1";
+}
+
+function setWorkflowSectionCollapsed(key, collapsed) {
+  localStorage.setItem(key, collapsed ? "1" : "0");
+}
+
+function createWorkflowSection({ title, collapsedKey, className = "", content }) {
+  const section = document.createElement("section");
+  section.className = `workspace2-workflow-section ${className}`.trim();
+  const collapsed = isWorkflowSectionCollapsed(collapsedKey);
+  section.classList.toggle("is-collapsed", collapsed);
+
+  const { header } = createSectionHeader({
+    titleText: title,
+    collapsible: true,
+    expanded: !collapsed,
+  });
+
+  const body = document.createElement("div");
+  body.className = "workspace2-workflow-section-content";
+  body.append(content);
+
+  header.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const next = !section.classList.contains("is-collapsed");
+    section.classList.toggle("is-collapsed", next);
+    setSectionHeaderExpanded(header, !next);
+    setWorkflowSectionCollapsed(collapsedKey, next);
+  });
+
+  section.append(header, body);
+  return section;
+}
+
 function recentWorkflowRows(el) {
   const existing = new Map(state.items.filter((item) => item.type === "file").map((item) => [item.path, item]));
   const recent = readRecentWorkflows()
@@ -9417,15 +10575,25 @@ function recentWorkflowRows(el) {
 
     const actions = document.createElement("div");
     actions.className = "workspace2-actions";
+    if (entry.path === state.selectedPath) {
+      actions.append(
+        iconButton("save", t("workflows.saveCurrent"), async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          try {
+            await saveCurrentWorkflowToPath(el, entry.path);
+          } catch (error) {
+            handleError(el, error);
+          }
+        }),
+      );
+    }
     actions.append(
-      iconButton("folderOpen", t("row.openLocation"), async (event) => {
+      iconButton("x", t("workflows.removeRecent"), (event) => {
         event.preventDefault();
         event.stopPropagation();
-        try {
-          await openWorkflowLocation(entry.path);
-        } catch (error) {
-          handleError(el, error);
-        }
+        removeRecentWorkflow(entry.path);
+        renderPanel(el);
       }),
     );
     row.append(info, actions);
@@ -9435,6 +10603,10 @@ function recentWorkflowRows(el) {
 }
 
 function renderPanel(el) {
+  const finish = startPerformanceSpan("workflows.render", {
+    itemCount: state.items.length,
+    trash: state.showTrash,
+  });
   const snapshot = scrollSnapshot(el);
   state.workflowsTarget = el;
   startAutoRefresh(el);
@@ -9442,7 +10614,7 @@ function renderPanel(el) {
   setupWorkspaceKeyIsolation();
   closeContextMenu();
   closeWorkflowSortMenu();
-  prepareWorkspaceHost(el);
+  prepareWorkspaceModuleMount(el);
 
   const panel = document.createElement("div");
   panel.className = "workspace2-panel";
@@ -9471,9 +10643,9 @@ function renderPanel(el) {
     }
   });
 
-  const refresh = toolbarButton("refresh", t("workflows.refresh"), async () => {
+  const open = toolbarButton("folderOpen", t("toolbar.openWorkflow"), async () => {
     try {
-      await refreshPanel(el);
+      await openWorkflowFileFromPicker(el);
     } catch (error) {
       handleError(el, error);
     }
@@ -9502,7 +10674,7 @@ function renderPanel(el) {
     focusKey: "workflow-search",
     placeholder: t("search.placeholder"),
     value: state.query,
-    buttons: [newFolder, newWorkflow, refresh, workflowSortButton(el), trash],
+    buttons: [newFolder, newWorkflow, open, workflowSortButton(el), trash],
     onInput: (value) => {
       state.query = value;
       scheduleWorkflowResultsRefresh(el);
@@ -9538,6 +10710,7 @@ function renderPanel(el) {
     panel.append(top);
     renderTrashPanel(el, panel);
     el.append(panel);
+    finish({ renderedTrashCount: state.trashItems.length });
     return;
   }
 
@@ -9552,10 +10725,22 @@ function renderPanel(el) {
     setupDrop: (row) => makeDropTarget(el, row, ""),
   });
 
-  top.append(moveRootRow, recentWorkflowRows(el));
   renderWorkflowTreeBody(el, tree);
 
-  panel.append(top, tree);
+  const openSection = createWorkflowSection({
+    title: t("workflows.recent"),
+    collapsedKey: WORKFLOW_OPEN_SECTION_COLLAPSED_KEY,
+    content: recentWorkflowRows(el),
+  });
+  const browseSection = createWorkflowSection({
+    title: t("workflows.browse"),
+    collapsedKey: WORKFLOW_BROWSE_SECTION_COLLAPSED_KEY,
+    className: "is-browse",
+    content: tree,
+  });
+
+  top.append(moveRootRow, openSection);
+  panel.append(top, browseSection);
   renderContextMenu(el, panel);
   el.append(panel);
   restoreScrollSnapshot(el, snapshot);
@@ -9674,7 +10859,7 @@ function renderCanvasGroupsPanel(el) {
   workspace2CanvasGroups.init();
   styles();
   setupWorkspaceKeyIsolation();
-  prepareWorkspaceHost(el);
+  prepareWorkspaceModuleMount(el);
 
   const panel = document.createElement("div");
   panel.className = "workspace2-panel";
@@ -10114,6 +11299,9 @@ function openTemplateSortMenu(el, anchor) {
 }
 
 function renderTemplatesPanel(el) {
+  const finish = startPerformanceSpan("templates.render", {
+    templateCount: templatesState.library?.templates?.length || 0,
+  });
   const snapshot = scrollSnapshot(el);
   templatesState.renderTarget = el;
   setupNodeCanvasDrop();
@@ -10121,7 +11309,7 @@ function renderTemplatesPanel(el) {
   setupWorkspaceKeyIsolation();
   closeTemplateContextMenu();
   closeTemplateSortMenu();
-  prepareWorkspaceHost(el);
+  prepareWorkspaceModuleMount(el);
 
   const panel = document.createElement("div");
   panel.className = "workspace2-panel";
@@ -10167,6 +11355,7 @@ function renderTemplatesPanel(el) {
   panel.append(top, body);
   el.append(panel);
   restoreScrollSnapshot(el, snapshot);
+  finish();
 }
 
 function renderNodesBody(el, body) {
@@ -10222,6 +11411,7 @@ function scheduleNodesResultsRefresh(el) {
 }
 
 function renderNodesPanel(el) {
+  const finish = startPerformanceSpan("nodes.render");
   const snapshot = scrollSnapshot(el);
   nodesState.renderTarget = el;
   setupNodeCanvasDrop();
@@ -10231,7 +11421,7 @@ function renderNodesPanel(el) {
   closeNodeContextMenu();
   closeNodeSortMenu();
   closeOfficialFavoritesMenu();
-  prepareWorkspaceHost(el);
+  prepareWorkspaceModuleMount(el);
 
   const panel = document.createElement("div");
   panel.className = "workspace2-panel";
@@ -10286,12 +11476,13 @@ function renderNodesPanel(el) {
   top.append(header, toolbar, nodesFavoriteRootRow(el), nodesViewTabs(el));
 
   const body = document.createElement("div");
-  body.className = "workspace2-tree";
+  body.className = "workspace2-tree workspace2-node-tree";
   renderNodesBody(el, body);
 
   panel.append(top, body);
   el.append(panel);
   restoreScrollSnapshot(el, snapshot);
+  finish({ nodeCount: nodeTypes.length });
 }
 
 function ensureNodePreviewPopover() {
@@ -11023,8 +12214,12 @@ function renderFavoriteNodeSections(el, body) {
   const section = document.createElement("div");
   section.className = "workspace2-node-section";
 
-  renderTopSectionHeader(el, section, sectionId, t("nodes.categoryBookmarked"), query ? `${favoriteMatches.length}/${allFavoriteMatches.length}` : String(nodesState.library.favorites.length));
+  const sectionExpanded = renderTopSectionHeader(el, section, sectionId, t("nodes.categoryBookmarked"), query ? `${favoriteMatches.length}/${allFavoriteMatches.length}` : String(nodesState.library.favorites.length));
   body.append(section);
+
+  if (!sectionExpanded && !query) {
+    return;
+  }
 
   if (query) {
     const list = document.createElement("div");
@@ -11341,10 +12536,10 @@ function renderEssentialsNodeSection(el, body, nodes, favoriteTypes) {
 
   const section = document.createElement("div");
   section.className = "workspace2-node-section";
-  renderTopSectionHeader(el, section, sectionId, t("nodes.categoryEssentials"), String(essentialsTotal));
+  const sectionExpanded = renderTopSectionHeader(el, section, sectionId, t("nodes.categoryEssentials"), String(essentialsTotal));
   body.append(section);
 
-  if (!nodesState.expanded.has(sectionId) && !query) {
+  if (!sectionExpanded && !query) {
     return;
   }
 
@@ -11464,8 +12659,12 @@ function renderNodeCategorySections(el, body) {
 function renderNodeTopSection(el, body, sectionId, titleText, nodes, totalCount, favoriteTypes) {
   const section = document.createElement("div");
   section.className = "workspace2-node-section";
-  renderTopSectionHeader(el, section, sectionId, titleText, `${nodes.length}/${totalCount}`);
+  const sectionExpanded = renderTopSectionHeader(el, section, sectionId, titleText, `${nodes.length}/${totalCount}`);
   body.append(section);
+
+  if (!sectionExpanded && !nodesState.query.trim()) {
+    return;
+  }
 
   if (!nodes.length) {
     const empty = document.createElement("div");
@@ -11640,6 +12839,8 @@ app.registerExtension({
     ];
   },
   async setup() {
+    installPerformanceDebugApi();
+    const finish = startPerformanceSpan("workspace.setup");
     await loadLocale();
     startLocaleWatcher();
     setupWorkspaceShortcuts();
@@ -11655,11 +12856,13 @@ app.registerExtension({
       state.status = t("status.error", { message: error.message });
     }
     if (registerWorkspace2SidebarTab()) {
+      finish({ sidebar: "registered" });
       return;
     }
 
     console.warn("[Workspace2] registerSidebarTab is not available; using fallback panel.");
     showFallbackPanel();
+    finish({ sidebar: "fallback" });
   },
 });
 

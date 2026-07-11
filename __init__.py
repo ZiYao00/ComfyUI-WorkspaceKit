@@ -15,6 +15,7 @@ from .service.n_sidebar_migration import (
     candidate_n_sidebar_settings_paths,
     read_n_sidebar_settings,
 )
+from .service.node_index_signature import build_node_index_signature
 from .service.node_library_service import read_node_library, write_node_library
 from .service.official_favorites_probe import probe_official_favorites
 from .service.official_favorites_sync import write_workspace2_favorites_to_official
@@ -190,6 +191,29 @@ def scan_workflows():
         current_path = Path(current_root)
         for dir_name in dir_names:
             items.append(_item_info(root, current_path / dir_name))
+        for file_name in file_names:
+            if file_name.lower().endswith(".json"):
+                items.append(_item_info(root, current_path / file_name))
+    return items
+
+
+def scan_workflow_subtree(relative_path):
+    root = get_workflows_root().resolve()
+    target = safe_join(root, relative_path)
+    if not target.exists():
+        return []
+    items = [_item_info(root, target)]
+    if not target.is_dir():
+        return items
+    for current_root, dir_names, file_names in os.walk(target):
+        dir_names[:] = [name for name in dir_names if not name.startswith(".")]
+        dir_names.sort(key=str.casefold)
+        file_names.sort(key=str.casefold)
+        current_path = Path(current_root)
+        for dir_name in dir_names:
+            child = current_path / dir_name
+            if child != target:
+                items.append(_item_info(root, child))
         for file_name in file_names:
             if file_name.lower().endswith(".json"):
                 items.append(_item_info(root, current_path / file_name))
@@ -488,6 +512,21 @@ async def workspace2_nodes_library(_request):
         return _json_error(str(exc), status=500)
 
 
+@server.PromptServer.instance.routes.get("/workspace2/nodes/index-signature")
+async def workspace2_nodes_index_signature(_request):
+    try:
+        import nodes
+
+        result = await asyncio.to_thread(
+            build_node_index_signature,
+            comfy_path,
+            nodes.NODE_CLASS_MAPPINGS.keys(),
+        )
+        return _json_response({"ok": True, **result})
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
 @server.PromptServer.instance.routes.get("/workspace2/nodes/n-sidebar/preview")
 async def workspace2_nodes_n_sidebar_preview(_request):
     try:
@@ -568,7 +607,11 @@ async def workspace2_trash_restore(request):
             trash_id,
             restore_mode,
         )
-        return _json_response({"ok": True, "item": item})
+        restored_items = await asyncio.to_thread(
+            scan_workflow_subtree,
+            item.get("restored_path", ""),
+        )
+        return _json_response({"ok": True, "item": item, "items": restored_items})
     except FileExistsError as exc:
         return _json_error(str(exc), status=409)
     except Exception as exc:

@@ -2315,7 +2315,7 @@ const Workspace2CanvasGroups = {
                     self._needRestore = true;
                     console.log('[Workspace2 Canvas Groups] loadGraphData检测到编组数据:', Object.keys(groups).length, '个');
                 }
-                const result = await origLoad.apply(this, [data, ...args]);
+                const result = await origLoad.apply(this, arguments);
                 return result;
             };
             console.log('[Workspace2 Canvas Groups] loadGraphData 钩子已安装');

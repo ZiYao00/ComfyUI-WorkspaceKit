@@ -26,6 +26,7 @@ dist-ssr/
 # Local plugin data and backups
 db/
 backup/
+.codex-backups/
 *.backup
 *.bak
 

@@ -9,6 +9,17 @@ import {
 } from "./core/performance.js";
 import { withNodeIndexRefreshLock } from "./nodes/cache-coordinator.js";
 import {
+  closeOfficialWorkflow,
+  getActiveOfficialWorkflow,
+  getOfficialWorkflowByPath,
+  getOfficialWorkflowStore,
+  getOpenOfficialWorkflows,
+  isOfficialWorkflowModified,
+  openOfficialWorkflow,
+  saveOfficialWorkflow,
+  subscribeOfficialWorkflowStore,
+} from "./workflows/official-adapter.js";
+import {
   CANVAS_GROUP_CTRL_G_KEY,
   CANVAS_GROUPS_TAB_ID,
   COMFY_NODE_DRAG_TYPE,
@@ -123,7 +134,9 @@ const FALLBACK_STRINGS = {
     "workflows.browse": "浏览",
     "workflows.currentEmpty": "未从 Workflows2 打开工作流",
     "workflows.removeRecent": "从打开记录移除",
+    "workflows.close": "关闭工作流",
     "workflows.saveCurrent": "保存当前工作流",
+    "workflows.unsavedChanges": "未保存的更改",
     "toolbar.openWorkflow": "打开工作流",
     "nodes.title": "节点2",
     "nodes.status": "{count} 个节点",
@@ -299,7 +312,9 @@ const FALLBACK_STRINGS = {
     "workflows.browse": "Browse",
     "workflows.currentEmpty": "No workflow opened from Workflows2",
     "workflows.removeRecent": "Remove from open history",
+    "workflows.close": "Close workflow",
     "workflows.saveCurrent": "Save current workflow",
+    "workflows.unsavedChanges": "Unsaved changes",
     "toolbar.openWorkflow": "Open workflow",
     "nodes.title": "Nodes 2",
     "nodes.status": "{count} nodes",
@@ -529,6 +544,11 @@ const state = {
   localeTimer: null,
   workflowsTarget: null,
   resultsRefreshTimer: null,
+  workflowDirty: false,
+  workflowSnapshot: "",
+  workflowLoadInProgress: false,
+  workflowDirtyCheckTimer: null,
+  officialWorkflowRenderTimer: null,
 };
 
 const canvasGroupsState = {
@@ -546,6 +566,7 @@ const workspaceState = {
 const templatesState = {
   query: "",
   library: null,
+  loadPromise: null,
   loading: false,
   error: "",
   renderTarget: null,
@@ -570,6 +591,7 @@ const nodesState = {
   objectInfo: null,
   loading: false,
   objectInfoLoading: false,
+  objectInfoRefreshTimer: null,
   objectInfoError: "",
   objectInfoCachedAt: 0,
   objectInfoFromCache: false,
@@ -1164,7 +1186,12 @@ function isWorkspace2CtrlGCreateEnabled() {
 }
 
 function isWorkspace2PanelOpen() {
-  return Boolean(workspaceState.renderTarget?.isConnected && workspaceState.renderTarget.querySelector?.(".workspace2-shell"));
+  const target = workspaceState.renderTarget;
+  return Boolean(
+    target?.isConnected
+    && isElementVisible(target)
+    && target.querySelector?.(".workspace2-shell"),
+  );
 }
 
 function closeWorkspace2Sidebar() {
@@ -1882,12 +1909,6 @@ function registerWorkspace2CanvasGroupCommands() {
 }
 
 function activateWorkspace2Tab(tabId) {
-  const element = findWorkspace2SidebarTabElement(tabId);
-  if (element) {
-    element.click();
-    return true;
-  }
-
   const manager = app.extensionManager;
   const methodNames = [
     "setActiveSidebarTab",
@@ -1906,6 +1927,12 @@ function activateWorkspace2Tab(tabId) {
     } catch (error) {
       console.debug(`[Workspace2] ${methodName} failed`, error);
     }
+  }
+
+  const element = findWorkspace2SidebarTabElement(tabId);
+  if (element) {
+    element.click();
+    return true;
   }
 
   console.debug(`[Workspace2] Sidebar tab not found for shortcut: ${tabId}`);
@@ -2853,8 +2880,22 @@ function styles() {
       flex-direction: column;
       min-height: 0;
     }
-    .workspace2-workflow-section + .workspace2-workflow-section {
-      margin-top: 18px;
+    .workspace2-workflow-section:not(.is-browse) {
+      flex: 0 0 auto;
+    }
+    .workspace2-workflow-top {
+      padding-bottom: 0;
+      border-bottom: 0;
+    }
+    .workspace2-workflow-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .workspace2-workflow-section-header .workspace2-section-line {
+      display: none;
     }
     .workspace2-workflow-section.is-browse {
       flex: 1 1 auto;
@@ -2928,7 +2969,7 @@ function styles() {
     .workspace2-recent-workflows {
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: var(--workspace2-node-list-gap);
       margin: 0;
       padding: 2px 0 0;
     }
@@ -2937,8 +2978,8 @@ function styles() {
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       gap: 8px;
-      min-height: 25px;
-      padding: 2px 4px 2px 6px;
+      min-height: var(--workspace2-row-height);
+      padding: 2px 5px 2px 6px;
       border-radius: var(--workspace2-radius-sm);
     }
     .workspace2-current-workflow:hover,
@@ -2954,6 +2995,9 @@ function styles() {
     }
     .workspace2-current-workflow-info {
       min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
       padding: 0;
       border: 0;
       color: inherit;
@@ -2968,6 +3012,14 @@ function styles() {
       white-space: nowrap;
       font-size: var(--workspace2-tree-font);
       font-weight: 500;
+    }
+    .workspace2-current-workflow-dirty-dot {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--workspace2-accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--workspace2-accent) 18%, transparent);
     }
     .workspace2-current-workflow-name.is-empty {
       padding: 1px 6px;
@@ -4620,6 +4672,7 @@ function removeWorkflowPathState(path) {
   }
   if (workflowPathIsWithin(state.selectedPath, path)) {
     state.selectedPath = "";
+    clearCurrentWorkflowDirtyState();
   }
   if (workflowPathIsWithin(state.editingPath, path)) {
     state.editingPath = "";
@@ -4852,53 +4905,58 @@ async function openWorkflowFromOfficialStore(path) {
     return false;
   }
 
-  const workflowStore = app.extensionManager?.workflow;
-  if (!workflowStore?.getWorkflowByPath) {
+  const workflowStore = getOfficialWorkflowStore(app);
+  if (!workflowStore) {
     return false;
   }
 
   const storePath = officialWorkflowPath(path);
-  let workflow = workflowStore.getWorkflowByPath(storePath);
+  let workflow = getOfficialWorkflowByPath(app, storePath);
   if (!workflow && typeof workflowStore.syncWorkflows === "function") {
     await workflowStore.syncWorkflows();
-    workflow = workflowStore.getWorkflowByPath(storePath);
+    workflow = getOfficialWorkflowByPath(app, storePath);
   }
   if (!workflow) {
     return false;
   }
-
-  const loadFromRemote = !workflow.isLoaded;
-  if (loadFromRemote && typeof workflow.load === "function") {
-    await workflow.load();
-  }
-
-  const workflowData = workflow.activeState || (workflow.content ? JSON.parse(workflow.content) : null);
-  if (!workflowData) {
+  if (!await openOfficialWorkflow(app, workflow)) {
     return false;
   }
 
-  await app.loadGraphData(workflowData, true, true, workflow, {
+  const activeWorkflow = getActiveOfficialWorkflow(app) || workflow;
+  const workflowData = activeWorkflow.activeState || (activeWorkflow.content ? JSON.parse(activeWorkflow.content) : null);
+  if (!workflowData) {
+    return false;
+  }
+  await app.loadGraphData(workflowData, true, true, activeWorkflow, {
     checkForRerouteMigration: false,
     deferWarnings: true,
-    skipAssetScans: !loadFromRemote,
+    skipAssetScans: false,
   });
   return true;
 }
 
 async function openWorkflow(path) {
+  state.workflowLoadInProgress = true;
+  clearCurrentWorkflowDirtyState();
   let opened = false;
   try {
-    opened = await openWorkflowFromOfficialStore(path);
-  } catch (error) {
-    console.debug("[Workspace2] Official workflow open failed; using fallback", error);
-  }
+    try {
+      opened = await openWorkflowFromOfficialStore(path);
+    } catch (error) {
+      console.debug("[Workspace2] Official workflow open failed; using fallback", error);
+    }
 
-  if (!opened) {
-    const data = await fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`);
-    await app.loadGraphData(data.workflow);
+    if (!opened) {
+      const data = await fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`);
+      await app.loadGraphData(data.workflow);
+    }
+    state.selectedPath = path;
+    setCurrentWorkflowCleanState();
+    recordRecentWorkflow(path);
+  } finally {
+    state.workflowLoadInProgress = false;
   }
-  state.selectedPath = path;
-  recordRecentWorkflow(path);
 }
 
 async function openWorkflowFileFromPicker(el) {
@@ -4919,6 +4977,7 @@ async function openWorkflowFileFromPicker(el) {
     const workflow = JSON.parse(text);
     await app.loadGraphData(workflow);
     state.selectedPath = "";
+    clearCurrentWorkflowDirtyState();
     state.status = t("status.openedWorkflowFile");
     renderPanel(el);
   } finally {
@@ -4934,8 +4993,117 @@ function serializeCurrentWorkflow() {
   return null;
 }
 
+function workflowSnapshot(workflow = serializeCurrentWorkflow()) {
+  if (!workflow) {
+    return "";
+  }
+  try {
+    return JSON.stringify(workflow);
+  } catch (error) {
+    console.debug("[Workspace2] Workflow snapshot failed", error);
+    return "";
+  }
+}
+
+function clearCurrentWorkflowDirtyState() {
+  state.workflowDirty = false;
+  state.workflowSnapshot = "";
+}
+
+function setCurrentWorkflowCleanState(workflow = serializeCurrentWorkflow()) {
+  state.workflowDirty = false;
+  state.workflowSnapshot = workflowSnapshot(workflow);
+}
+
+function setupWorkflowDirtyTracking() {
+  if (setupWorkflowDirtyTracking.ready) {
+    return;
+  }
+  const api = app.api;
+  if (typeof api?.addEventListener !== "function") {
+    console.debug("[Workspace2] graphChanged event is unavailable; unsaved workflow indicator is disabled.");
+    return;
+  }
+  setupWorkflowDirtyTracking.ready = true;
+  api.addEventListener("graphChanged", () => {
+    if (state.workflowDirtyCheckTimer) {
+      window.clearTimeout(state.workflowDirtyCheckTimer);
+    }
+    state.workflowDirtyCheckTimer = window.setTimeout(() => {
+      state.workflowDirtyCheckTimer = null;
+      if (
+        state.isOfficialRoot
+        || !state.selectedPath
+        || state.workflowDirty
+        || state.workflowLoadInProgress
+        || !state.workflowSnapshot
+      ) {
+        return;
+      }
+      if (workflowSnapshot() === state.workflowSnapshot) {
+        return;
+      }
+      state.workflowDirty = true;
+      if (workspaceState.activeModule === "workflows" && state.workflowsTarget?.isConnected) {
+        renderPanel(state.workflowsTarget);
+      }
+    }, 0);
+  });
+}
+
+function syncOfficialWorkflowSelection() {
+  if (!state.isOfficialRoot) {
+    return;
+  }
+  const activeWorkflow = getActiveOfficialWorkflow(app);
+  const path = relativeWorkflowPathFromOfficial(activeWorkflow?.path || "");
+  if (path) {
+    state.selectedPath = path;
+  }
+}
+
+function scheduleOfficialWorkflowPanelRender() {
+  if (state.officialWorkflowRenderTimer) {
+    window.clearTimeout(state.officialWorkflowRenderTimer);
+  }
+  state.officialWorkflowRenderTimer = window.setTimeout(() => {
+    state.officialWorkflowRenderTimer = null;
+    syncOfficialWorkflowSelection();
+    if (workspaceState.activeModule === "workflows" && state.workflowsTarget?.isConnected) {
+      renderPanel(state.workflowsTarget);
+    }
+  }, 0);
+}
+
+function setupOfficialWorkflowStateSync() {
+  if (setupOfficialWorkflowStateSync.ready) {
+    return;
+  }
+  const workflowStore = getOfficialWorkflowStore(app);
+  if (!workflowStore) {
+    console.debug("[Workspace2] Official workflow state is unavailable; using local workflow state.");
+    return;
+  }
+  setupOfficialWorkflowStateSync.ready = true;
+  subscribeOfficialWorkflowStore(app, scheduleOfficialWorkflowPanelRender);
+  syncOfficialWorkflowSelection();
+}
+
 async function saveCurrentWorkflowToPath(el, path) {
-  if (!path || path !== state.selectedPath) {
+  if (!path) {
+    throw new Error(t("status.workflowSaveMismatch"));
+  }
+  if (state.isOfficialRoot) {
+    const officialWorkflow = getOfficialWorkflowByPath(app, officialWorkflowPath(path));
+    if (officialWorkflow && await saveOfficialWorkflow(officialWorkflow)) {
+      state.status = t("status.workflowSaved");
+      recordRecentWorkflow(path);
+      refreshOfficialWorkflowsDeferred(0);
+      renderPanel(el);
+      return;
+    }
+  }
+  if (path !== state.selectedPath) {
     throw new Error(t("status.workflowSaveMismatch"));
   }
   const workflow = serializeCurrentWorkflow();
@@ -4943,6 +5111,7 @@ async function saveCurrentWorkflowToPath(el, path) {
     throw new Error(t("status.workflowSerializeUnavailable"));
   }
   await postJson("/workspace2/workflow/save", { path, workflow });
+  setCurrentWorkflowCleanState(workflow);
   state.status = t("status.workflowSaved");
   recordRecentWorkflow(path);
   refreshOfficialWorkflowsDeferred(0);
@@ -4966,6 +5135,7 @@ async function setRootPath(el) {
   state.root = data.root || state.root;
   state.isOfficialRoot = data.is_official_root !== false;
   state.selectedPath = "";
+  clearCurrentWorkflowDirtyState();
   state.expanded = new Set([""]);
   state.status = state.isOfficialRoot ? t("status.rootOfficial") : t("status.rootChanged");
   await refreshPanel(el);
@@ -5494,10 +5664,14 @@ async function loadNodeLibraryInternal() {
       cacheCurrent: cacheIsCurrent,
     });
     if (!cacheIsCurrent) {
-      refreshFullObjectInfoCoordinated(nodeIndexSignature).catch((error) => {
-        nodesState.objectInfoError = error.message || String(error);
-        nodesState.objectInfoLoading = false;
-      });
+      if (cachedObjectInfo?.objectInfo) {
+        scheduleFullObjectInfoRefresh(nodeIndexSignature);
+      } else {
+        refreshFullObjectInfoCoordinated(nodeIndexSignature).catch((error) => {
+          nodesState.objectInfoError = error.message || String(error);
+          nodesState.objectInfoLoading = false;
+        });
+      }
     }
   } catch (error) {
     nodesState.error = error.message;
@@ -5538,6 +5712,23 @@ async function refreshFullObjectInfoCoordinated(signature) {
     }
     await loadFullObjectInfo(signature);
   });
+}
+
+function scheduleFullObjectInfoRefresh(signature) {
+  if (nodesState.objectInfoRefreshTimer) {
+    window.clearTimeout(nodesState.objectInfoRefreshTimer);
+  }
+  nodesState.objectInfoRefreshTimer = window.setTimeout(() => {
+    nodesState.objectInfoRefreshTimer = null;
+    if (workspaceState.activeModule === "templates") {
+      scheduleFullObjectInfoRefresh(signature);
+      return;
+    }
+    refreshFullObjectInfoCoordinated(signature).catch((error) => {
+      nodesState.objectInfoError = error.message || String(error);
+      nodesState.objectInfoLoading = false;
+    });
+  }, 1500);
 }
 
 async function loadFullObjectInfo(signature = "") {
@@ -5636,13 +5827,19 @@ function normalizeTemplateLibrary(library) {
   };
 }
 
-async function loadTemplateLibrary() {
+async function loadTemplateLibraryInternal() {
   const finish = startPerformanceSpan("templates.load");
   templatesState.loading = true;
   templatesState.error = "";
   try {
-    const data = await fetchJson("/workspace2/templates/library");
-    templatesState.library = normalizeTemplateLibrary(data.library);
+    const data = await measurePromise(
+      "templates.library-request",
+      () => fetchJson("/workspace2/templates/library"),
+    );
+    templatesState.library = await measurePromise(
+      "templates.library-normalize",
+      () => Promise.resolve(normalizeTemplateLibrary(data.library)),
+    );
     finish({ templateCount: templatesState.library.templates.length });
   } catch (error) {
     templatesState.error = error.message;
@@ -5650,6 +5847,32 @@ async function loadTemplateLibrary() {
     finish({ error: templatesState.error }, "error");
   } finally {
     templatesState.loading = false;
+  }
+}
+
+function loadTemplateLibrary() {
+  if (templatesState.library) {
+    return Promise.resolve(templatesState.library);
+  }
+  if (!templatesState.loadPromise) {
+    templatesState.loadPromise = loadTemplateLibraryInternal().finally(() => {
+      templatesState.loadPromise = null;
+    });
+  }
+  return templatesState.loadPromise;
+}
+
+function prefetchTemplateLibrary() {
+  if (templatesState.library || templatesState.loadPromise) {
+    return;
+  }
+  const load = () => loadTemplateLibrary().catch((error) => {
+    console.debug("[Workspace2] Template prefetch failed", error);
+  });
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(load, { timeout: 1200 });
+  } else {
+    window.setTimeout(load, 0);
   }
 }
 
@@ -10508,6 +10731,7 @@ function createWorkflowSection({ title, collapsedKey, className = "", content })
     collapsible: true,
     expanded: !collapsed,
   });
+  header.classList.add("workspace2-workflow-section-header");
 
   const body = document.createElement("div");
   body.className = "workspace2-workflow-section-content";
@@ -10528,10 +10752,24 @@ function createWorkflowSection({ title, collapsedKey, className = "", content })
 
 function recentWorkflowRows(el) {
   const existing = new Map(state.items.filter((item) => item.type === "file").map((item) => [item.path, item]));
-  const recent = readRecentWorkflows()
-    .map((entry) => ({ ...entry, item: existing.get(entry.path) }))
-    .filter((entry) => entry.item)
-    .slice(0, workflowRecentLimit());
+  const officialMode = state.isOfficialRoot && Boolean(getOfficialWorkflowStore(app));
+  const activeOfficialWorkflow = officialMode ? getActiveOfficialWorkflow(app) : null;
+  const recent = officialMode
+    ? getOpenOfficialWorkflows(app)
+      .map((workflow) => {
+        const path = relativeWorkflowPathFromOfficial(workflow.path || "");
+        return {
+          path,
+          name: workflow.filename || path,
+          item: existing.get(path),
+          officialWorkflow: workflow,
+        };
+      })
+      .filter((entry) => entry.path && entry.item)
+    : readRecentWorkflows()
+      .map((entry) => ({ ...entry, item: existing.get(entry.path) }))
+      .filter((entry) => entry.item)
+      .slice(0, workflowRecentLimit());
   const section = document.createElement("div");
   section.className = "workspace2-recent-workflows";
   const label = document.createElement("div");
@@ -10548,9 +10786,16 @@ function recentWorkflowRows(el) {
   }
 
   for (const entry of recent) {
+    const isOfficialWorkflow = Boolean(entry.officialWorkflow);
+    const isActive = isOfficialWorkflow
+      ? entry.officialWorkflow === activeOfficialWorkflow
+      : entry.path === state.selectedPath;
+    const isDirty = isOfficialWorkflow
+      ? isOfficialWorkflowModified(entry.officialWorkflow)
+      : isActive && state.workflowDirty;
     const row = document.createElement("div");
     row.className = "workspace2-current-workflow";
-    if (entry.path === state.selectedPath) {
+    if (isActive) {
       row.classList.add("is-selected");
     }
     const info = document.createElement("button");
@@ -10560,6 +10805,13 @@ function recentWorkflowRows(el) {
     const name = document.createElement("div");
     name.className = "workspace2-current-workflow-name";
     name.textContent = workflowDisplayName(entry.item) || entry.name || entry.path;
+    if (isDirty) {
+      const dirtyDot = document.createElement("span");
+      dirtyDot.className = "workspace2-current-workflow-dirty-dot";
+      dirtyDot.title = t("workflows.unsavedChanges");
+      dirtyDot.setAttribute("aria-label", t("workflows.unsavedChanges"));
+      info.append(dirtyDot);
+    }
     info.append(name);
     info.addEventListener("click", async (event) => {
       event.preventDefault();
@@ -10575,7 +10827,7 @@ function recentWorkflowRows(el) {
 
     const actions = document.createElement("div");
     actions.className = "workspace2-actions";
-    if (entry.path === state.selectedPath) {
+    if (isDirty) {
       actions.append(
         iconButton("save", t("workflows.saveCurrent"), async (event) => {
           event.preventDefault();
@@ -10588,14 +10840,29 @@ function recentWorkflowRows(el) {
         }),
       );
     }
-    actions.append(
-      iconButton("x", t("workflows.removeRecent"), (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        removeRecentWorkflow(entry.path);
-        renderPanel(el);
-      }),
-    );
+    if (isOfficialWorkflow) {
+      actions.append(
+        iconButton("x", t("workflows.close"), async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          try {
+            await closeOfficialWorkflow(app, entry.officialWorkflow);
+            renderPanel(el);
+          } catch (error) {
+            handleError(el, error);
+          }
+        }),
+      );
+    } else {
+      actions.append(
+        iconButton("x", t("workflows.removeRecent"), (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          removeRecentWorkflow(entry.path);
+          renderPanel(el);
+        }),
+      );
+    }
     row.append(info, actions);
     section.append(row);
   }
@@ -10625,7 +10892,7 @@ function renderPanel(el) {
   });
 
   const top = document.createElement("div");
-  top.className = "workspace2-top";
+  top.className = "workspace2-top workspace2-workflow-top";
 
   const newFolder = toolbarButton("folderPlus", t("toolbar.newFolder"), async () => {
     try {
@@ -10732,6 +10999,7 @@ function renderPanel(el) {
     collapsedKey: WORKFLOW_OPEN_SECTION_COLLAPSED_KEY,
     content: recentWorkflowRows(el),
   });
+
   const browseSection = createWorkflowSection({
     title: t("workflows.browse"),
     collapsedKey: WORKFLOW_BROWSE_SECTION_COLLAPSED_KEY,
@@ -10739,8 +11007,12 @@ function renderPanel(el) {
     content: tree,
   });
 
-  top.append(moveRootRow, openSection);
-  panel.append(top, browseSection);
+  const workflowContent = document.createElement("div");
+  workflowContent.className = "workspace2-workflow-content";
+  workflowContent.append(openSection, browseSection);
+
+  top.append(moveRootRow);
+  panel.append(top, workflowContent);
   renderContextMenu(el, panel);
   el.append(panel);
   restoreScrollSnapshot(el, snapshot);
@@ -10994,9 +11266,7 @@ function renderTemplateRow(el, template) {
   row.addEventListener("dragend", () => {
     templatesState.draggingTemplate = null;
   });
-  row.addEventListener("contextmenu", (event) => {
-    openTemplateContextMenu(el, event, template);
-  });
+  row.addEventListener("contextmenu", (event) => openTemplateContextMenu(el, event, template));
   row.addEventListener("click", (event) => {
     if (isEditing || event.target?.closest?.("button,input,.workspace2-actions")) {
       return;
@@ -11152,7 +11422,6 @@ function renderTemplateGroupFolder(el, section, group, query, depth = 0) {
 
   header.append(disclosure, icon, name, actions);
   section.append(header);
-
   if (!groupOpen) {
     return;
   }
@@ -11173,7 +11442,6 @@ function renderTemplatesBody(el, body) {
   if (!templatesState.library && !templatesState.loading) {
     loadTemplateLibrary().then(() => renderTemplatesPanel(el));
   }
-
   if (templatesState.loading) {
     const loading = document.createElement("div");
     loading.className = "workspace2-empty";
@@ -11196,8 +11464,7 @@ function renderTemplatesBody(el, body) {
     .sort((a, b) => compareTemplatesBySort(a, b, query));
   const rootGroups = childTemplateGroups("")
     .filter((group) => !query || templateMatchesGroup(group, query));
-  const hasMatches = rootTemplates.length || rootGroups.length;
-  if (!hasMatches) {
+  if (!rootTemplates.length && !rootGroups.length) {
     const empty = document.createElement("div");
     empty.className = "workspace2-empty";
     empty.textContent = query ? t("templates.noMatches") : t("templates.empty");
@@ -11245,14 +11512,14 @@ function templatesSortButton(el) {
       closeTemplateSortMenu();
       return;
     }
-    openTemplateSortMenu(el, event.currentTarget);
+    openSortMenu(el, event.currentTarget);
   });
   button.classList.add("workspace2-template-sort-button");
   button.dataset.sort = templatesState.sort;
   return button;
 }
 
-function openTemplateSortMenu(el, anchor) {
+function openSortMenu(el, anchor) {
   closeTemplateSortMenu();
   const panel = anchor?.closest?.(".workspace2-panel") || el.querySelector(".workspace2-panel");
   const menu = document.createElement("div");
@@ -11314,11 +11581,14 @@ function renderTemplatesPanel(el) {
   const panel = document.createElement("div");
   panel.className = "workspace2-panel";
   applyTemplateUiScale(panel);
-
   const top = document.createElement("div");
   top.className = "workspace2-top";
   const templates = templatesState.library?.templates || [];
-  const header = createPanelHeader(t("templates.title"), t("templates.status", { count: templates.length }), { statusDataset: "workspace2TemplatesStatus" });
+  const header = createPanelHeader(
+    t("templates.title"),
+    t("templates.status", { count: templates.length }),
+    { statusDataset: "workspace2TemplatesStatus" },
+  );
   const newGroup = toolbarButton("folderPlus", t("templates.newGroup"), async () => {
     try {
       await createTemplateGroup(el);
@@ -11345,19 +11615,16 @@ function renderTemplatesPanel(el) {
       renderTemplatesPanel(el);
     },
   });
-  const rootRow = templatesRootRow(el);
-  top.append(header, toolbar, rootRow);
+  top.append(header, toolbar, templatesRootRow(el));
 
   const body = document.createElement("div");
   body.className = "workspace2-tree";
   renderTemplatesBody(el, body);
-
   panel.append(top, body);
   el.append(panel);
   restoreScrollSnapshot(el, snapshot);
   finish();
 }
-
 function renderNodesBody(el, body) {
   if (!nodesState.library && !nodesState.loading) {
     loadNodeLibrary().then(() => renderNodesPanel(el));
@@ -12844,6 +13111,8 @@ app.registerExtension({
     await loadLocale();
     startLocaleWatcher();
     setupWorkspaceShortcuts();
+    setupWorkflowDirtyTracking();
+    setupOfficialWorkflowStateSync();
     workspace2CanvasGroups.init();
     registerWorkspace2CanvasGroupCommands();
     detectOfficialNodeAdapter();
@@ -12856,6 +13125,7 @@ app.registerExtension({
       state.status = t("status.error", { message: error.message });
     }
     if (registerWorkspace2SidebarTab()) {
+      prefetchTemplateLibrary();
       finish({ sidebar: "registered" });
       return;
     }

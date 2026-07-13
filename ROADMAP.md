@@ -10,6 +10,7 @@ This roadmap is for public GitHub readers. It tracks broad product direction, no
 - Nodes2 node browsing, search, favorites, favorite groups, official favorite import/export, and large-library cache support.
 - Templates for saving selected connected nodes as reusable node templates.
 - Template groups, subgroups, search, sorting, drag-and-drop organization, preview, and inline delete confirmation.
+- Templates first-open path: idle prefetch, per-session request sharing, phase timing, and deferral of stale node-definition refresh while Templates is active.
 - Canvas Groups enhancements, including Workspace2 group shortcuts and title-bar style settings.
 - Title2 visual title / annotation node.
 - Workspace2 settings panel first version.
@@ -25,7 +26,6 @@ This roadmap is for public GitHub readers. It tracks broad product direction, no
 - Large node-library validation for setups with many custom nodes.
 - Node preview polish for complex nodes.
 - Template preview polish.
-- Segmented diagnosis and decoupling for Templates first-open latency of roughly five seconds.
 - Final visual acceptance for section headers across dark, light, transparent, and frosted-glass backgrounds.
 - Safer template deletion with undo or a template trash mechanism.
 - Data backup and restore entry for Workspace2 settings, Nodes2 favorites, Templates, and folder metadata.
@@ -48,17 +48,17 @@ These batches are ordered from large-install and main-package feedback. Each bat
 3. **Templates delay retest and isolation**
    - Separate endpoint, JSON parsing, preview, and browser main-thread timing.
    - Node background updates must not block the Templates first paint; large previews are generated on demand.
-   - Current: the template library is read once per page session as JSON; the root cause of slow opening with a small library has not yet been measured by phase and must not be attributed to row rendering without evidence.
+   - Current: verified in the test package with two templates: idle prefetch request 128.1ms, normalization 0.2ms, first render 2.6ms. The template page performed no `/object_info` refresh while it remained active. Retest on the main package remains a release gate.
 4. **Incremental Workflows2 updates**
    - Update local state first for create, rename, move, delete, and restore, then coalesce background refreshes.
    - Remove repeated full-directory scans and blocking official synchronization after operations.
    - Add regression coverage for rename, move, delete, restore, save, and official-list synchronization.
-   - Current: official-list refreshes are coalesced; folder/workflow creation, rename, move, move-to-trash, restore, and trash cleanup use local incremental updates. Root switching keeps one necessary full load because the entire data source changes.
+   - Current: the P0 regression checklist is documented in `docs/TESTING.md` and awaits a complete run. Official-list refreshes are coalesced; folder/workflow creation, rename, move, move-to-trash, restore, and trash cleanup use local incremental updates. Root switching keeps one necessary full load because the entire data source changes.
 5. **Panel information architecture and glass effect**
    - Rename “Recent workflows” to “Open”, add a “Browse” section, and persist collapse state for both.
    - Separate sections with hierarchy, whitespace, and heading extension lines rather than opaque color blocks or repeated dividers.
    - Fix glass-background layering and opacity/blur control interaction.
-   - Current: Open/Browse collapse state is implemented and node top-level sections also collapse through a shared section-header structure. Background settings use mutually exclusive Transparent/Frosted Glass modes with fixed blur, a frosted material layer, and 5–95 transparency control. Final visual acceptance of heading icons, theme color, and whitespace remains pending.
+   - Current: Open/Browse collapse state is implemented and node top-level sections also collapse through a shared section-header structure. Workflow sections now share one content container, so the top-container border no longer sits between Open and Browse; Node sections remain unchanged. Background settings use mutually exclusive Transparent/Frosted Glass modes with fixed blur, a frosted material layer, and 5–95 transparency control. Final visual acceptance of heading icons, theme color, and whitespace remains pending.
 6. **Engineering and release readiness**
    - Continue splitting `entry.js` into workflows, nodes, templates, and settings modules.
    - Add minimal CI for Python, JavaScript, JSON, and service-level tests.

@@ -220,10 +220,42 @@ Verification result:
 - Workspace2 registered normally and the restored canvas displayed its saved group visuals.
 - The workflow reported two missing models; this is workflow environment data and is unrelated to the `loadGraphData` forwarding fix.
 
+## Recent passed verification
+
+- **Templates performance:** user acceptance passed after idle prefetch, shared in-page loading, and deferral of stale node-definition refresh.
+- **Alt+C save-template flow:** user acceptance passed; saving selected nodes opens Templates and focuses the new template name regardless of prior sidebar state.
+
+## 2026-07-12 - Official workflow-state adapter
+
+Confirmed in the test package with `comfyui_frontend_package 1.45.20`:
+
+- The official workflow store exposes `activeWorkflow`, `openWorkflows`, `modifiedWorkflows`, `openWorkflow()`, `getWorkflowByPath()`, and a store subscription API.
+- Individual workflow objects expose `isModified`, `save()`, and a change tracker; official `save()` resets modification state and removes the corresponding official draft.
+- Workspace2 now isolates these calls in `entry/workflows/official-adapter.js`.
+- In this frontend version, the official `openWorkflow()` updates the active workflow but does not by itself replace the LiteGraph canvas in the extension call path. Workspace2 therefore activates the official workflow first, then explicitly loads that workflow's active state into the canvas.
+- Official-root opens use that two-step bridge. The Open section reads official open workflows and their individual `isModified` states; save and close use the official workflow object/store.
+- A fresh local page loaded the adapter with no Workspace2 console error. The page had only the default temporary workflow, so a two-persisted-workflow dirty-state test remains pending.
+
+## Workflows2 P0 regression checklist
+
+Run this checklist in the test package before accepting a main-package release. Record any failure with the workflow path, ComfyUI frontend version, and browser-console error.
+
+- [ ] **Open:** open the same workflow from Browse and Open; each loads the intended graph without a second click.
+- [ ] **Unsaved state:** after opening, no dot or Save is shown. Change a node value, link, title, or position; the dot and Save appear only on that current Open row.
+- [ ] **Save:** a successful save clears the dot and Save. A failed or cancelled save leaves both visible.
+- [ ] **Workflow switch:** opening a second workflow starts clean and does not inherit the first workflow's indicator.
+- [ ] **Create:** a new workflow appears locally, opens once, and does not cause repeated full scans or duplicate official-list synchronization.
+- [ ] **Rename and move:** selected path, Open history, and the current-save target follow the renamed/moved workflow.
+- [ ] **Delete and restore:** list and official workflow synchronization have no stale duplicate after trashing and restoring a workflow or folder.
+- [ ] **External-change poll:** inline rename and drag ordering survive longer than one background-poll interval.
+- [ ] **Restart and refresh:** previous-workflow restore has no `graphData.extra` error and the current Open row starts clean.
+
 ## Current unresolved work
 
-- **Templates first-open latency:** a small template library can still take about five seconds to appear. The next measurement must separately record endpoint wait time, JSON normalization, and first render before selecting a fix.
-- **Workflow synchronization regression coverage:** normal open, create, rename, move, delete, restore, save, and official-list synchronization still need a single repeatable regression checklist.
+- **Workflow unsaved-state indicator (P0):** official-root implementation now reads each official workflow's `isModified` state and saves through the official workflow object; custom roots keep the local snapshot fallback. Verify two persisted workflows: edit the first, switch to the second, confirm the first retains its dot, then save and confirm it clears.
+- **Workflow section visual regression:** Open and Browse now share a workflow-content container and the workflow-only top border has been removed. Verify visible spacing and the absence of the residual line in the real UI.
+- **Workflow Open/Browse density mismatch:** row metrics now use the shared list gap and row height. Verify visually with the shared-container layout.
+- **Workflow synchronization regression coverage:** the P0 checklist above is ready; it still needs a complete test-package run, then a main-package release run.
 - **Large-install node-cache validation:** the current measured environment has 32 top-level custom-node directories and roughly 2,542 nodes. Main-package validation for hundreds of plugins or tens of thousands of nodes remains pending; shared server-side node-data caching is not implemented.
 - **Section-header visual acceptance:** the shared Open/Browse/Favorites/Comfy/Extensions header is implemented, but its `>` / `∨` glyph color, dark/light-theme contrast, and whitespace-only section separation require final visible acceptance.
 - **Frosted-glass visual acceptance:** control behavior is implemented, but the final material appearance and sidebar interaction still require user acceptance in the real package.

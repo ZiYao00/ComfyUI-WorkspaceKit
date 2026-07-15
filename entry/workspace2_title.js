@@ -1,7 +1,13 @@
 import { app } from "../../scripts/app.js";
+import { t } from "./core/i18n.js";
+import { ensureWorkspaceKitDialogStyles } from "./core/dialog_styles.js";
 
 const NODE_TYPE = "Workspace2Title";
-const DEFAULT_TEXT = "双击编辑";
+const DEFAULT_TEXT = "Double-click to edit";
+// Canvas `middle` text baselines look about 12px low with this node's font
+// stack.  This is an internal visual calibration, not the user-facing value.
+const VISUAL_CENTER_Y_CORRECTION = -12;
+const VERTICAL_OFFSET_CALIBRATION_VERSION = 1;
 const DEFAULT_PROPS = {
   text: DEFAULT_TEXT,
   fontSize: 24,
@@ -14,6 +20,8 @@ const DEFAULT_PROPS = {
   textAlign: "center",
   letterSpacing: 0,
   lineHeight: 1.25,
+  verticalOffset: 0,
+  verticalOffsetCalibrationVersion: VERTICAL_OFFSET_CALIBRATION_VERSION,
   glowEnabled: false,
   glowSize: 10,
   glowColor: "#0a84ff",
@@ -41,13 +49,35 @@ function alphaColor(hex, opacity) {
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${clamp(opacity, 0, 1)})`;
 }
 
+function defaultTitleText() {
+  const translated = t("titleEditor.defaultText");
+  return translated === "titleEditor.defaultText" ? DEFAULT_TEXT : translated;
+}
+
 function ensureProps(node) {
   node.properties ||= {};
+  const legacyVerticalOffset = node.properties.verticalOffset;
+  const hasLegacyVerticalOffset = legacyVerticalOffset !== undefined && legacyVerticalOffset !== null;
+  const calibrationVersion = Number(node.properties.verticalOffsetCalibrationVersion) || 0;
   for (const [key, value] of Object.entries(DEFAULT_PROPS)) {
     if (node.properties[key] === undefined || node.properties[key] === null) {
-      node.properties[key] = value;
+      // Existing title text is preserved.  Only new/legacy-empty nodes pick
+      // their initial prompt from the active WorkspaceKit language.
+      node.properties[key] = key === "text"
+        ? defaultTitleText()
+        : value;
     }
   }
+  if (hasLegacyVerticalOffset && calibrationVersion < VERTICAL_OFFSET_CALIBRATION_VERSION) {
+    // Preserve the on-canvas appearance of values saved before visual-center
+    // calibration.  Example: the old visual center -12 becomes the new 0.
+    node.properties.verticalOffset = clamp(
+      Number(legacyVerticalOffset) - VISUAL_CENTER_Y_CORRECTION,
+      -80,
+      80,
+    );
+  }
+  node.properties.verticalOffsetCalibrationVersion = VERTICAL_OFFSET_CALIBRATION_VERSION;
   return node.properties;
 }
 
@@ -117,7 +147,14 @@ function drawTitleNode(node, ctx) {
   const lineHeight = fontSize * (Number(props.lineHeight) || DEFAULT_PROPS.lineHeight);
   const bgOpacity = clamp(props.bgOpacity, 0, 1);
   const borderOpacity = clamp(props.borderOpacity, 0, 1);
+  // `0` is a valid square-corner value.  Do not use `||` here: it would
+  // incorrectly substitute the 15px default whenever the user chose zero.
+  const parsedBorderRadius = Number(props.borderRadius);
+  const borderRadius = Number.isFinite(parsedBorderRadius)
+    ? Math.max(0, parsedBorderRadius)
+    : DEFAULT_PROPS.borderRadius;
   const letterSpacing = Number(props.letterSpacing) || 0;
+  const verticalOffset = clamp(props.verticalOffset, -80, 80);
 
   node.bgcolor = "transparent";
   node.color = "transparent";
@@ -125,7 +162,7 @@ function drawTitleNode(node, ctx) {
 
   ctx.save();
   if (bgOpacity > 0 || borderOpacity > 0) {
-    roundRect(ctx, 0, 0, width, height, Number(props.borderRadius) || DEFAULT_PROPS.borderRadius);
+    roundRect(ctx, 0, 0, width, height, borderRadius);
     if (bgOpacity > 0) {
       ctx.fillStyle = alphaColor(props.bgColor, bgOpacity);
       ctx.fill();
@@ -149,7 +186,7 @@ function drawTitleNode(node, ctx) {
   const maxTextWidth = Math.max(20, width - padding * 2);
   const lines = wrapLines(ctx, props.text, maxTextWidth, letterSpacing);
   const blockHeight = Math.max(lineHeight, lines.length * lineHeight);
-  let y = height / 2 - blockHeight / 2 + lineHeight / 2;
+  let y = height / 2 - blockHeight / 2 + lineHeight / 2 + VISUAL_CENTER_Y_CORRECTION + verticalOffset;
   const align = props.textAlign || DEFAULT_PROPS.textAlign;
   const x = align === "left" ? padding : align === "right" ? width - padding : width / 2;
   for (const line of lines) {
@@ -185,33 +222,49 @@ function markDirty() {
 function makeButton(text, title) {
   const button = document.createElement("button");
   button.type = "button";
+  button.className = "workspacekit-dialog-button";
   button.textContent = text;
   button.title = title || text;
-  button.style.cssText = "height:28px;min-width:32px;border:1px solid rgba(255,255,255,.16);border-radius:7px;background:#2c2c2e;color:#f5f5f7;cursor:pointer;font-size:12px;";
   return button;
 }
 
-function makeSlider(label, min, max, step, value, onInput) {
-  const wrap = document.createElement("label");
-  wrap.style.cssText = "display:grid;grid-template-columns:1fr auto;grid-template-areas:'name value' 'slider slider';align-items:center;row-gap:4px;column-gap:8px;color:#a1a1a6;font-size:12px;min-width:0;";
+function makeSlider(label, min, max, step, value, onInput, { defaultValue = null, snapTolerance = 0, trailingControl = null } = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "workspacekit-dialog-row";
   const name = document.createElement("span");
   name.textContent = label;
-  name.style.cssText = "grid-area:name;line-height:16px;white-space:nowrap;";
   const input = document.createElement("input");
   input.type = "range";
   input.min = String(min);
   input.max = String(max);
   input.step = String(step);
   input.value = String(value);
-  input.style.cssText = "grid-area:slider;width:100%;min-width:0;margin:0;";
+  if (defaultValue !== null) {
+    input.title = `Default: ${defaultValue}`;
+  }
   const out = document.createElement("span");
+  out.className = "workspacekit-dialog-value";
   out.textContent = String(value);
-  out.style.cssText = "grid-area:value;text-align:right;line-height:16px;min-width:34px;color:#d1d1d6;font-variant-numeric:tabular-nums;";
   input.addEventListener("input", () => {
-    out.textContent = input.value;
-    onInput(Number(input.value));
+    let next = Number(input.value);
+    if (defaultValue !== null && Math.abs(next - defaultValue) <= snapTolerance) {
+      next = defaultValue;
+      input.value = String(defaultValue);
+    }
+    out.textContent = String(next);
+    onInput(next);
   });
-  wrap.append(name, input, out);
+  if (trailingControl) {
+    // Color-backed controls share the same compact right slot as Glow:
+    // numeric value first, then the color swatch.
+    wrap.style.gridTemplateColumns = "var(--workspacekit-dialog-label-width) minmax(0,1fr) 72px";
+    const trailing = document.createElement("div");
+    trailing.style.cssText = "display:flex;align-items:center;justify-content:flex-end;gap:5px;min-width:0;";
+    trailing.append(out, trailingControl);
+    wrap.append(name, input, trailing);
+  } else {
+    wrap.append(name, input, out);
+  }
   return wrap;
 }
 
@@ -229,7 +282,18 @@ function startEditor(node, mode = "text") {
   if (node.__workspace2TitleEditing) {
     return true;
   }
+  // Keep a draft separate from the workflow state.  The editor still applies
+  // the draft to the canvas for live preview, but only Finish marks the graph
+  // as changed.  Escape/Cancel can therefore restore the exact opening state.
+  const originalProperties = { ...(node.properties || {}) };
+  const originalSize = Array.isArray(node.size) ? [...node.size] : null;
   const props = ensureProps(node);
+  const draft = { ...props };
+  const refreshPreview = () => app.graph?.setDirtyCanvas?.(true, true);
+  const applyDraftPreview = () => {
+    Object.assign(props, draft);
+    refreshPreview();
+  };
   const viewport = getNodeViewportRect(node);
   if (!viewport) {
     return true;
@@ -237,126 +301,183 @@ function startEditor(node, mode = "text") {
 
   node.__workspace2TitleEditing = true;
   const showStylePanel = mode === "style";
-  const panelWidth = showStylePanel ? 460 : Math.max(180, viewport.width);
+  // Style labels are substantially longer in English.  Do not compress the
+  // shared row layout until labels overlap: allow a useful editing width.
+  const panelWidth = showStylePanel ? 360 : Math.max(180, viewport.width);
   const panelPosition = showStylePanel
     ? clampPanelPosition(viewport.left + viewport.width + 12, viewport.top, panelWidth)
     : { left: viewport.left, top: viewport.top };
   const container = document.createElement("div");
-  container.className = "workspace2-title-editor";
-  container.style.cssText = `position:fixed;left:${panelPosition.left}px;top:${panelPosition.top}px;width:${panelWidth}px;z-index:100000;display:flex;flex-direction:column;gap:6px;box-sizing:border-box;`;
+  ensureWorkspaceKitDialogStyles();
+  container.className = "workspace2-title-editor workspacekit-dialog";
+  container.style.cssText = `--workspacekit-dialog-label-width:112px;position:fixed;left:${panelPosition.left}px;top:${panelPosition.top}px;width:min(${panelWidth}px,calc(100vw - 24px));max-height:calc(100vh - 24px);overflow-y:auto;z-index:100000;display:flex;flex-direction:column;gap:8px;box-sizing:border-box;visibility:hidden;`;
 
   const toolbar = document.createElement("div");
-  toolbar.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;padding:10px;box-sizing:border-box;border:1px solid rgba(255,255,255,.14);border-radius:9px;background:rgba(28,28,30,.96);box-shadow:0 12px 30px rgba(0,0,0,.35);overflow:hidden;";
+  toolbar.style.cssText = "display:flex;flex-direction:column;gap:8px;padding:12px;box-sizing:border-box;border:1px solid var(--workspacekit-dialog-border);border-radius:9px;background:var(--workspacekit-dialog-bg);box-shadow:0 12px 30px rgba(0,0,0,.35);overflow:hidden;";
+  const heading = document.createElement("div");
+  heading.className = "workspacekit-dialog-header";
+  heading.textContent = t("titleEditor.styleTitle");
+  const section = document.createElement("div");
+  section.className = "workspacekit-dialog-section";
+  section.textContent = t("titleEditor.appearance");
+  const controls = document.createElement("div");
+  controls.style.cssText = "display:flex;flex-direction:column;gap:6px;";
 
-  const left = document.createElement("div");
-  left.style.cssText = "display:flex;flex-direction:column;gap:7px;min-width:0;";
-  const right = document.createElement("div");
-  right.style.cssText = "display:flex;flex-direction:column;gap:7px;min-width:0;";
-
-  const colorRow = document.createElement("div");
-  colorRow.style.cssText = "display:grid;grid-template-columns:36px minmax(0,1fr) 36px minmax(0,1fr);align-items:center;gap:6px;color:#a1a1a6;font-size:12px;min-width:0;";
   const fontColor = document.createElement("input");
   fontColor.type = "color";
-  fontColor.value = props.fontColor || DEFAULT_PROPS.fontColor;
-  fontColor.style.width = "100%";
+  fontColor.value = draft.fontColor || DEFAULT_PROPS.fontColor;
+  fontColor.className = "workspacekit-dialog-color";
   const bgColor = document.createElement("input");
   bgColor.type = "color";
-  bgColor.value = props.bgColor || DEFAULT_PROPS.bgColor;
-  bgColor.style.width = "100%";
-  colorRow.append("文字", fontColor, "背景", bgColor);
+  bgColor.value = draft.bgColor || DEFAULT_PROPS.bgColor;
+  bgColor.className = "workspacekit-dialog-color";
 
-  left.append(
-    makeSlider("字号", 8, 96, 1, props.fontSize, (value) => {
-      props.fontSize = value;
-      syncTextarea();
-      markDirty();
-    }),
-    makeSlider("行距", 0.8, 2.5, 0.05, props.lineHeight, (value) => {
-      props.lineHeight = value;
-      syncTextarea();
-      markDirty();
-    }),
-    makeSlider("字距", -4, 12, 0.5, props.letterSpacing || 0, (value) => {
-      props.letterSpacing = value;
-      syncTextarea();
-      markDirty();
-    }),
-    colorRow,
-  );
+  // Mirrors the Canvas Groups "Unified" control: the feature is enabled by
+  // its checkbox, and its magnitude is adjusted by the aligned slider.
+  const makeGlowControl = () => {
+    const row = document.createElement("div");
+    row.className = "workspacekit-dialog-row";
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer;";
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.checked = Boolean(draft.glowEnabled);
+    toggle.style.margin = "0";
+    const text = document.createElement("span");
+    text.textContent = t("titleEditor.glow");
+    label.append(toggle, text);
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = "0";
+    input.max = "40";
+    input.step = "1";
+    input.value = String(draft.glowSize);
+    const out = document.createElement("span");
+    out.className = "workspacekit-dialog-value";
+    out.textContent = String(draft.glowSize);
+    const color = document.createElement("input");
+    color.type = "color";
+    color.value = draft.glowColor || DEFAULT_PROPS.glowColor;
+    color.className = "workspacekit-dialog-color";
+    const end = document.createElement("div");
+    end.style.cssText = "display:flex;align-items:center;justify-content:flex-end;gap:5px;min-width:0;";
+    end.append(out, color);
+    row.style.gridTemplateColumns = "var(--workspacekit-dialog-label-width) minmax(0,1fr) 72px";
+    const sync = () => {
+      const enabled = Boolean(draft.glowEnabled);
+      input.disabled = !enabled;
+      input.style.opacity = enabled ? "1" : ".35";
+      end.style.opacity = enabled ? "1" : ".35";
+    };
+    toggle.addEventListener("change", () => {
+      draft.glowEnabled = toggle.checked;
+      applyDraftPreview();
+      sync();
+    });
+    input.addEventListener("input", () => {
+      draft.glowSize = Number(input.value);
+      out.textContent = input.value;
+      applyDraftPreview();
+    });
+    color.addEventListener("input", () => {
+      draft.glowColor = color.value;
+      applyDraftPreview();
+    });
+    row.append(label, input, end);
+    sync();
+    return { row, sync };
+  };
+  const glowControl = makeGlowControl();
 
-  right.append(
-    makeSlider("透明", 0, 1, 0.05, props.bgOpacity, (value) => {
-      props.bgOpacity = value;
+  controls.append(
+    makeSlider(t("titleEditor.fontSize"), 8, 96, 1, draft.fontSize, (value) => {
+      draft.fontSize = value;
+      applyDraftPreview();
       syncTextarea();
-      markDirty();
-    }),
-    makeSlider("边框", 0, 1, 0.05, props.borderOpacity, (value) => {
-      props.borderOpacity = value;
-      markDirty();
-    }),
-    makeSlider("圆角", 0, 32, 1, props.borderRadius, (value) => {
-      props.borderRadius = value;
+    }, { defaultValue: DEFAULT_PROPS.fontSize, snapTolerance: 1, trailingControl: fontColor }),
+    makeSlider(t("titleEditor.lineHeight"), 0.8, 2.5, 0.05, draft.lineHeight, (value) => {
+      draft.lineHeight = value;
+      applyDraftPreview();
       syncTextarea();
-      markDirty();
+    }, { defaultValue: DEFAULT_PROPS.lineHeight, snapTolerance: 0.05 }),
+    makeSlider(t("titleEditor.letterSpacing"), -4, 12, 0.5, draft.letterSpacing || 0, (value) => {
+      draft.letterSpacing = value;
+      applyDraftPreview();
+      syncTextarea();
+    }, { defaultValue: DEFAULT_PROPS.letterSpacing, snapTolerance: 0.5 }),
+    makeSlider(t("titleEditor.verticalOffset"), -80, 80, 1, draft.verticalOffset || 0, (value) => {
+      draft.verticalOffset = value;
+      applyDraftPreview();
+    }, { defaultValue: DEFAULT_PROPS.verticalOffset, snapTolerance: 1 }),
+    makeSlider(t("titleEditor.backgroundOpacity"), 0, 1, 0.05, draft.bgOpacity, (value) => {
+      draft.bgOpacity = value;
+      applyDraftPreview();
+      syncTextarea();
+    }, { trailingControl: bgColor }),
+    makeSlider(t("titleEditor.borderOpacity"), 0, 1, 0.05, draft.borderOpacity, (value) => {
+      draft.borderOpacity = value;
+      applyDraftPreview();
     }),
-    makeSlider("发光", 0, 40, 1, props.glowSize, (value) => {
-      props.glowSize = value;
-      markDirty();
+    makeSlider(t("titleEditor.borderRadius"), 0, 32, 1, draft.borderRadius, (value) => {
+      draft.borderRadius = value;
+      applyDraftPreview();
+      syncTextarea();
     }),
+    glowControl.row,
   );
 
   const actionRow = document.createElement("div");
-  actionRow.style.cssText = "grid-column:1 / -1;display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;";
+  actionRow.className = "workspacekit-dialog-footer";
   const alignRow = document.createElement("div");
   alignRow.style.cssText = "display:flex;gap:5px;";
-  for (const [value, text] of [["left", "左"], ["center", "中"], ["right", "右"]]) {
-    const button = makeButton(text, `文字${text}对齐`);
+  for (const [value, text] of [["left", t("titleEditor.alignLeft")], ["center", t("titleEditor.alignCenter")], ["right", t("titleEditor.alignRight")]]) {
+    const button = makeButton(text, t("titleEditor.alignTooltip", { alignment: text }));
     button.dataset.align = value;
     button.addEventListener("click", () => {
-      props.textAlign = value;
+      draft.textAlign = value;
+      applyDraftPreview();
       syncButtons();
       syncTextarea();
-      markDirty();
     });
     alignRow.append(button);
   }
-  const glow = makeButton("发光", "切换文字发光");
-  glow.addEventListener("click", () => {
-    props.glowEnabled = !props.glowEnabled;
-    syncButtons();
-    markDirty();
-  });
-  const done = makeButton("完成", "保存并关闭");
-  done.style.background = "#0a84ff";
-  done.style.borderColor = "#0a84ff";
+  const cancel = makeButton(t("titleEditor.cancel"), t("titleEditor.cancelTooltip"));
+  // Prevent the focused textarea from blurring (which intentionally saves on
+  // click-away) before the Cancel click is processed.
+  cancel.addEventListener("mousedown", (event) => event.preventDefault());
+  cancel.addEventListener("click", () => finish(false));
+  const done = makeButton(t("titleEditor.done"), t("titleEditor.doneTooltip"));
+  done.classList.add("is-primary");
   done.addEventListener("click", () => finish(true));
-  actionRow.append(alignRow, glow, done);
-  toolbar.append(left, right, actionRow);
+  const editorActions = document.createElement("div");
+  editorActions.style.cssText = "display:flex;align-items:center;gap:5px;flex-shrink:0;";
+  editorActions.append(cancel, done);
+  actionRow.append(alignRow, editorActions);
+  toolbar.append(heading, section, controls, actionRow);
 
   const textarea = document.createElement("textarea");
-  textarea.value = props.text || DEFAULT_TEXT;
+  textarea.value = draft.text || DEFAULT_TEXT;
   textarea.spellcheck = false;
   textarea.style.cssText = "box-sizing:border-box;width:100%;min-height:70px;resize:both;outline:none;border:1px dashed #0a84ff;border-radius:10px;padding:12px;background:transparent;color:#f5f5f7;caret-color:#0a84ff;overflow:hidden;";
 
   function syncButtons() {
     alignRow.querySelectorAll("button").forEach((button) => {
-      const active = button.dataset.align === props.textAlign;
+      const active = button.dataset.align === draft.textAlign;
       button.style.background = active ? "#0a84ff" : "#2c2c2e";
       button.style.borderColor = active ? "#0a84ff" : "rgba(255,255,255,.16)";
     });
-    glow.style.background = props.glowEnabled ? "#0a84ff" : "#2c2c2e";
-    glow.style.borderColor = props.glowEnabled ? "#0a84ff" : "rgba(255,255,255,.16)";
+    glowControl.sync();
   }
 
   function syncTextarea() {
     textarea.style.height = `${Math.max(70, showStylePanel ? Math.min(160, viewport.height) : viewport.height)}px`;
-    textarea.style.color = props.fontColor || DEFAULT_PROPS.fontColor;
-    textarea.style.background = alphaColor(props.bgColor, props.bgOpacity);
-    textarea.style.borderRadius = `${props.borderRadius || 0}px`;
-    textarea.style.font = `600 ${Math.max(8, props.fontSize)}px Arial, "Microsoft YaHei", "微软雅黑", sans-serif`;
-    textarea.style.lineHeight = String(props.lineHeight || DEFAULT_PROPS.lineHeight);
-    textarea.style.letterSpacing = `${props.letterSpacing || 0}px`;
-    textarea.style.textAlign = props.textAlign || DEFAULT_PROPS.textAlign;
+    textarea.style.color = draft.fontColor || DEFAULT_PROPS.fontColor;
+    textarea.style.background = alphaColor(draft.bgColor, draft.bgOpacity);
+    textarea.style.borderRadius = `${draft.borderRadius || 0}px`;
+    textarea.style.font = `600 ${Math.max(8, draft.fontSize)}px Arial, "Microsoft YaHei", "微软雅黑", sans-serif`;
+    textarea.style.lineHeight = String(draft.lineHeight || DEFAULT_PROPS.lineHeight);
+    textarea.style.letterSpacing = `${draft.letterSpacing || 0}px`;
+    textarea.style.textAlign = draft.textAlign || DEFAULT_PROPS.textAlign;
   }
 
   function finish(save) {
@@ -366,7 +487,8 @@ function startEditor(node, mode = "text") {
     node.__workspace2TitleEditing = false;
     document.removeEventListener("keydown", handleEditorKeydown, true);
     if (save) {
-      props.text = textarea.value.trim() || DEFAULT_TEXT;
+      draft.text = textarea.value.trim() || DEFAULT_TEXT;
+      applyDraftPreview();
       if (!showStylePanel) {
         const rect = textarea.getBoundingClientRect();
         node.size = [
@@ -375,6 +497,13 @@ function startEditor(node, mode = "text") {
         ];
       }
       markDirty();
+    } else {
+      Object.keys(props).forEach((key) => delete props[key]);
+      Object.assign(props, originalProperties);
+      if (originalSize) {
+        node.size = [...originalSize];
+      }
+      refreshPreview();
     }
     container.remove();
   }
@@ -394,18 +523,18 @@ function startEditor(node, mode = "text") {
   }
 
   fontColor.addEventListener("input", () => {
-    props.fontColor = fontColor.value;
+    draft.fontColor = fontColor.value;
+    applyDraftPreview();
     syncTextarea();
-    markDirty();
   });
   bgColor.addEventListener("input", () => {
-    props.bgColor = bgColor.value;
+    draft.bgColor = bgColor.value;
+    applyDraftPreview();
     syncTextarea();
-    markDirty();
   });
   textarea.addEventListener("input", () => {
-    props.text = textarea.value || DEFAULT_TEXT;
-    markDirty();
+    draft.text = textarea.value || DEFAULT_TEXT;
+    applyDraftPreview();
   });
   textarea.addEventListener("keydown", (event) => {
     event.stopPropagation();
@@ -422,11 +551,21 @@ function startEditor(node, mode = "text") {
   }, 120));
 
   if (showStylePanel) {
-    container.append(toolbar, textarea);
+    container.append(textarea, toolbar);
   } else {
     container.append(textarea);
   }
   document.body.append(container);
+  // The editor's actual height depends on the active locale and slider rows.
+  // Measure after it exists, then clamp its full rectangle inside the viewport
+  // instead of assuming the old 360px height.
+  if (showStylePanel) {
+    const rect = container.getBoundingClientRect();
+    const actualPosition = clampPanelPosition(viewport.left + viewport.width + 12, viewport.top, rect.width, rect.height);
+    container.style.left = `${actualPosition.left}px`;
+    container.style.top = `${actualPosition.top}px`;
+  }
+  container.style.visibility = "visible";
   syncButtons();
   syncTextarea();
   textarea.focus();

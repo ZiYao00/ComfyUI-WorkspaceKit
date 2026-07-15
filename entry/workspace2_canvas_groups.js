@@ -4,6 +4,8 @@
  */
 
 import { app } from "../../scripts/app.js";
+import { t } from "./core/i18n.js";
+import { ensureWorkspaceKitDialogStyles } from "./core/dialog_styles.js";
 
 const MODE_ALWAYS = 0;
 const MODE_BYPASS = 4;
@@ -33,7 +35,7 @@ const Workspace2CanvasGroups = {
 
     async showNotice(message) {
         if (this.noticeHandler) {
-            await this.noticeHandler({ title: 'WorkspaceKit 编组', message });
+            await this.noticeHandler({ title: t('groups.title'), message });
             return;
         }
         console.warn(`[Workspace2 Canvas Groups] ${message}`);
@@ -532,7 +534,8 @@ const Workspace2CanvasGroups = {
         return this.saveStylePreset(this.readActivePreset(), this.getBuiltInStyle());
     },
 
-    uniqueGroupTitle(base = '组（右键编辑）', excludeId = null) {
+    uniqueGroupTitle(base = null, excludeId = null) {
+        base = String(base || t('groups.defaultTitle'));
         const used = new Set(
             Object.values(this.groups)
                 .filter(group => group?.id !== excludeId)
@@ -685,7 +688,7 @@ const Workspace2CanvasGroups = {
             sel.push(contextNode);
         }
         if (!sel.length) {
-            await this.showNotice('请至少选择一个节点后再创建编组。');
+            await this.showNotice(t('groups.noSelection'));
             return false;
         }
 
@@ -815,12 +818,12 @@ const Workspace2CanvasGroups = {
                 <div style="flex:1 1 auto;min-width:0;overflow:hidden;">
                     <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
                 </div>
-                <button class="xzg-delete-btn" title="删除编组" style="border:none;background:none;cursor:pointer;padding:0;flex-shrink:0;font-size:18px;color:hsla(48,100%,55%,0.5);line-height:1;margin-left:4px;">×</button>
+                <button class="xzg-delete-btn" title="${t('groups.delete')}" style="border:none;background:none;cursor:pointer;padding:0;flex-shrink:0;font-size:18px;color:hsla(48,100%,55%,0.5);line-height:1;margin-left:4px;">×</button>
             </div>
             <div class="xzg-border-left" style="position:absolute;left:-3px;top:${headerHeight}px;width:10px;bottom:-3px;pointer-events:auto;cursor:move;z-index:2;"></div>
             <div class="xzg-border-right" style="position:absolute;right:-3px;top:${headerHeight}px;width:10px;bottom:-3px;pointer-events:auto;cursor:move;z-index:2;"></div>
             <div class="xzg-border-bottom" style="position:absolute;left:7px;right:7px;bottom:-3px;height:10px;pointer-events:auto;cursor:move;z-index:2;"></div>
-            <div class="xzg-resize-handle" title="拖动调整大小" style="position:absolute;right:2px;bottom:2px;width:14px;height:14px;cursor:nwse-resize;pointer-events:auto;opacity:0.6;z-index:3;">
+            <div class="xzg-resize-handle" title="${t('groups.resize')}" style="position:absolute;right:2px;bottom:2px;width:14px;height:14px;cursor:nwse-resize;pointer-events:auto;opacity:0.6;z-index:3;">
                 <svg viewBox="0 0 14 14" width="14" height="14"><path d="M12 2L2 12 M8 12h4v-4" stroke="#FFD700" stroke-width="1.5" fill="none"/></svg>
             </div>
         `;
@@ -1032,9 +1035,13 @@ const Workspace2CanvasGroups = {
         const old = document.querySelector('.xzg-settings-modal');
         if (old) old.remove();
 
+        ensureWorkspaceKitDialogStyles();
         const modal = document.createElement('div');
-        modal.className = 'xzg-settings-modal';
-        modal.style.cssText = `position:fixed;left:0;top:0;background:#1e1e1e;border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:0 10px 12px 10px;z-index:9999;min-width:200px;max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow-y:auto;box-shadow:0 0 20px rgba(0,0,0,0.8);visibility:hidden;`;
+        modal.className = 'xzg-settings-modal workspacekit-dialog';
+        // Keep one label column for both Chinese and English.  The earlier
+        // 52px column was sized only for Chinese and let English labels run
+        // underneath their sliders.
+        modal.style.cssText = `position:fixed;left:0;top:0;background:#1e1e1e;border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:0 12px 12px;z-index:9999;width:min(370px,calc(100vw - 20px));max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow-y:auto;box-sizing:border-box;box-shadow:0 0 20px rgba(0,0,0,0.8);visibility:hidden;`;
         const curH = group.colorHue || 48, curS = group.colorSat ?? 100, curL = group.colorLit ?? 55;
         const activePresetSnapshot = this.readActivePreset();
         let activePresetIndex = activePresetSnapshot;
@@ -1049,27 +1056,27 @@ const Workspace2CanvasGroups = {
         })();
         modal.innerHTML = `
             <div class="xzg-modal-drag-handle" style="display:flex;align-items:center;justify-content:space-between;padding:10px 0 8px 0;margin-bottom:12px;cursor:move;user-select:none;">
-                <span style="color:#fff;font-size:16px;font-weight:600;">编组设置</span>
+                <span class="workspacekit-dialog-header" style="color:#fff;font-size:16px;font-weight:600;">${t('groups.settingsTitle')}</span>
                 <input class="xzg-set-shortcut" value="g" type="hidden">
             </div>
             <div style="margin-bottom:12px;">
-                <label style="color:#ff8c00;font-size:14px;display:block;margin-bottom:8px;font-weight:600;">标题栏设置</label>
+                <label class="workspacekit-dialog-section" style="color:#ff8c00;font-size:14px;display:block;margin-bottom:8px;font-weight:600;">${t('groups.headerSettings')}</label>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">名称</label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.name')}</label>
                     <input class="xzg-set-title" value="${group.title}" style="flex:1;height:28px;padding:0 8px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;">
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">字号</label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.fontSize')}</label>
                     <input class="xzg-set-fontsize" type="range" min="6" max="48" value="${group.fontSize || 14}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-set-fs-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${group.fontSize || 14}</span>
                         <div class="xzg-title-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${group.titleColor || '#FFD700'};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">背景</label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.background')}</label>
                     <input class="xzg-set-headeropacity" type="range" min="0" max="100" value="${Math.round((group.headerBgColor || 'rgba(0,0,0,0.4)').replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1') * 100)}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-header-opacity-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.round((group.headerBgColor || 'rgba(0,0,0,0.4)').replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1') * 100)}%</span>
                         <div class="xzg-header-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${initHex};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                         <input class="xzg-set-headerbgcolor" type="color" value="${initHex}" style="position:absolute;width:0;height:0;opacity:0;padding:0;border:0;">
@@ -1078,77 +1085,79 @@ const Workspace2CanvasGroups = {
             </div>
             <div style="border-top:1px solid rgba(255,255,255,0.1);margin-bottom:12px;padding-top:0;"></div>
             <div style="margin-bottom:12px;">
-                <label style="color:#ff8c00;font-size:14px;display:block;margin-bottom:8px;font-weight:600;">边框设置</label>
+                <label class="workspacekit-dialog-section" style="color:#ff8c00;font-size:14px;display:block;margin-bottom:8px;font-weight:600;">${t('groups.borderSettings')}</label>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;display:flex;align-items:center;gap:4px;"><input class="xzg-set-unified-color" type="checkbox" ${group.useUnifiedColor ? 'checked' : ''} style="margin:0;flex:0 0 auto;"><span>统一</span></label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;display:flex;align-items:center;gap:5px;"><input class="xzg-set-unified-color" type="checkbox" ${group.useUnifiedColor ? 'checked' : ''} style="margin:0;flex:0 0 auto;"><span>${t('groups.unified')}</span></label>
                     <input class="xzg-set-unified-hue" type="range" min="0" max="360" value="${curH}" ${group.useUnifiedColor ? '' : 'disabled'} style="flex:1;height:28px;margin:0;${group.useUnifiedColor ? '' : 'opacity:.35;'}">
-                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;"><div class="xzg-unified-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:${group.useUnifiedColor ? 'pointer' : 'default'};background:${this.hslToHex(curH, curS, curL)};border:1px solid rgba(255,255,255,0.2);opacity:${group.useUnifiedColor ? '1' : '.35'};flex-shrink:0;"></div></div>
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;"><div class="xzg-unified-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:${group.useUnifiedColor ? 'pointer' : 'default'};background:${this.hslToHex(curH, curS, curL)};border:1px solid rgba(255,255,255,0.2);opacity:${group.useUnifiedColor ? '1' : '.35'};flex-shrink:0;"></div></div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">颜色</label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.color')}</label>
                     <input class="xzg-set-borderopacity" type="range" min="5" max="100" value="${Math.round((group.borderOpacity??0.65)*100)}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-set-bo-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.round((group.borderOpacity??0.65)*100)}%</span>
                         <div class="xzg-custom-color-trigger" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${this.hslToHex(curH, curS, curL)};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">粗细</label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.borderWidth')}</label>
                     <input class="xzg-set-borderwidth" type="range" min="0" max="5" value="${finiteNumber(group.borderWidth, 2)}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
                         <span class="xzg-set-bw-val" style="color:#fff;font-size:12px;text-align:left;">${finiteNumber(group.borderWidth, 2)}px</span>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">阴影</label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.shadow')}</label>
                     <input class="xzg-set-shadowsize" type="range" min="0" max="40" value="${Math.max(0, finiteNumber(group.shadowSize, 0))}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-set-shadow-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.max(0, finiteNumber(group.shadowSize, 0))}px</span>
                         <div class="xzg-shadow-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${group.shadowColor || DEFAULT_SHADOW_COLOR};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边距</label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.padding')}</label>
                     <input class="xzg-set-contentpadding" type="range" min="0" max="80" value="${group.contentPadding ?? DEFAULT_CONTENT_PADDING}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
                         <span class="xzg-set-cp-val" style="color:#fff;font-size:12px;text-align:left;">${group.contentPadding ?? DEFAULT_CONTENT_PADDING}px</span>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:30px;">动画</label>
-                    <select class="xzg-set-effect" style="width:90px;min-width:90px;max-width:90px;flex:0 0 90px;height:28px;padding:0 6px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        <option value="none" ${!group.effect||group.effect==='none'?'selected':''}>无</option>
-                        <option value="rainbow" ${group.effect==='rainbow'?'selected':''}>渐变彩虹</option>
-                        <option value="pulse" ${group.effect==='pulse'?'selected':''}>明暗呼吸</option>
-                        <option value="glow" ${group.effect==='glow'?'selected':''}>辉光</option>
-                        <option value="marquee" ${group.effect==='marquee'?'selected':''}>流光溢彩</option>
-                        <option value="marqueebreathe" ${group.effect==='marqueebreathe'?'selected':''}>流光溢彩+明暗呼吸</option>
-                    </select>
-                    <div style="flex:1;min-width:0;position:relative;display:flex;align-items:center;height:28px;">
-                        <input class="xzg-set-speed" type="range" min="1" max="10" value="${group.effectSpeed||3}" style="width:54px;min-width:54px;max-width:54px;height:28px;margin:0;">
-                        <span class="xzg-set-spd-val" style="position:absolute;right:0;color:#fff;font-size:12px;width:48px;text-align:left;">${group.effectSpeed||3}X</span>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.animation')}</label>
+                    <div style="flex:1;min-width:0;display:flex;align-items:center;gap:6px;height:28px;">
+                        <select class="xzg-set-effect" style="width:92px;min-width:92px;max-width:92px;flex:0 0 92px;height:28px;padding:0 6px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            <option value="none" ${!group.effect||group.effect==='none'?'selected':''}>${t('groups.effect.none')}</option>
+                            <option value="rainbow" ${group.effect==='rainbow'?'selected':''}>${t('groups.effect.rainbow')}</option>
+                            <option value="pulse" ${group.effect==='pulse'?'selected':''}>${t('groups.effect.pulse')}</option>
+                            <option value="glow" ${group.effect==='glow'?'selected':''}>${t('groups.effect.glow')}</option>
+                            <option value="marquee" ${group.effect==='marquee'?'selected':''}>${t('groups.effect.marquee')}</option>
+                            <option value="marqueebreathe" ${group.effect==='marqueebreathe'?'selected':''}>${t('groups.effect.marqueeBreathe')}</option>
+                        </select>
+                        <input class="xzg-set-speed" type="range" min="1" max="10" value="${group.effectSpeed||3}" style="flex:1;min-width:64px;height:28px;margin:0;">
+                    </div>
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
+                        <span class="xzg-set-spd-val" style="color:#fff;font-size:12px;text-align:left;">${group.effectSpeed||3}X</span>
                     </div>
                 </div>
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.12);">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;">
                     <div style="display:flex;align-items:center;gap:2px;min-width:0;">
-                        <span style="color:#bbb;font-size:12px;white-space:nowrap;">预设</span>
+                        <span style="color:#bbb;font-size:12px;white-space:nowrap;">${t('groups.preset')}</span>
                         <button class="xzg-preset-btn" data-preset="0" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">1</button>
                         <button class="xzg-preset-btn" data-preset="1" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">2</button>
                         <button class="xzg-preset-btn" data-preset="2" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">3</button>
                         <button class="xzg-preset-btn" data-preset="3" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">4</button>
                     </div>
                     <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
-                        <button class="xzg-save-preset" type="button" style="height:26px;width:60px;padding:0;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:11px;white-space:nowrap;" title="保存当前样式到当前预设">保存预设</button>
-                        <button class="xzg-reset-default" type="button" style="height:26px;width:22px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:14px;line-height:1;padding:0;" title="恢复当前预设">↺</button>
+                        <button class="xzg-save-preset" type="button" style="height:26px;padding:0 8px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:11px;white-space:nowrap;" title="${t('groups.savePresetTooltip')}">${t('groups.savePreset')}</button>
+                        <button class="xzg-reset-default" type="button" style="height:26px;width:22px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:14px;line-height:1;padding:0;" title="${t('groups.restorePreset')}">↺</button>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.12);">
-                    <button class="xzg-set-apply-all" type="button" style="height:28px;width:62px;padding:0;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;" title="将当前样式应用到所有编组">全局应用</button>
+                    <button class="xzg-set-apply-all" type="button" style="height:28px;padding:0 10px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;white-space:nowrap;" title="${t('groups.applyAllTooltip')}">${t('groups.applyAll')}</button>
                     <div style="display:flex;align-items:center;gap:4px;">
-                        <button class="xzg-set-cancel" type="button" style="height:28px;width:44px;padding:0;background:#333;border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">取消</button>
-                        <button class="xzg-set-apply" type="button" style="height:28px;width:44px;padding:0;background:#0a84ff;border:1px solid rgba(90,200,250,0.85);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">应用</button>
+                        <button class="xzg-set-cancel" type="button" style="height:28px;min-width:58px;padding:0 10px;background:#333;border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">${t('groups.cancel')}</button>
+                        <button class="xzg-set-apply" type="button" style="height:28px;min-width:58px;padding:0 10px;background:#0a84ff;border:1px solid rgba(90,200,250,0.85);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">${t('groups.apply')}</button>
                     </div>
                 </div>
             </div>
@@ -1315,11 +1324,19 @@ const Workspace2CanvasGroups = {
         hiddenPicker.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;padding:0;border:0;opacity:0;';
         modal.appendChild(hiddenPicker);
         const colorTrigger = modal.querySelector('.xzg-custom-color-trigger');
+        // Keep the unified swatch derived from the same color source as the
+        // title and border controls.  Previously it was only refreshed while
+        // dragging the hue slider, so a color picked from the native picker
+        // left this visible swatch stale.
+        const unifiedToggle = modal.querySelector('.xzg-set-unified-color');
+        const unifiedHue = modal.querySelector('.xzg-set-unified-hue');
+        const unifiedSwatch = modal.querySelector('.xzg-unified-color-swatch');
 
         const syncColorFromHSL = (h, s, l) => {
             sel = { h, s, l };
             hiddenPicker.value = this.hslToHex(h, s, l);
             if (colorTrigger) colorTrigger.style.background = hiddenPicker.value;
+            if (unifiedSwatch) unifiedSwatch.style.background = hiddenPicker.value;
             // 实时预览到编组框体
             group.colorHue = h;
             group.colorSat = s;
@@ -1346,9 +1363,6 @@ const Workspace2CanvasGroups = {
             }
         });
 
-        const unifiedToggle = modal.querySelector('.xzg-set-unified-color');
-        const unifiedHue = modal.querySelector('.xzg-set-unified-hue');
-        const unifiedSwatch = modal.querySelector('.xzg-unified-color-swatch');
         const setUnifiedUiState = (enabled) => {
             unifiedHue.disabled = !enabled;
             unifiedHue.style.opacity = enabled ? '1' : '.35';

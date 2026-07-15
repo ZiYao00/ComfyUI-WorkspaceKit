@@ -9,6 +9,7 @@ import {
 } from "./core/performance.js";
 import { withNodeIndexRefreshLock } from "./nodes/cache-coordinator.js";
 import { createTemplateLibraryStore } from "./templates/library.js";
+import { configureI18n, t as translate } from "./core/i18n.js";
 import {
   closeOfficialWorkflow,
   getActiveOfficialWorkflow,
@@ -123,6 +124,8 @@ const FALLBACK_STRINGS = {
     "settings.nodeCacheCleared": "节点缓存已清空",
     "settings.close": "关闭",
     "settings.version": "版本：{version}",
+    "settings.versionLoading": "读取中…",
+    "settings.versionUnavailable": "不可用",
     "settings.github": "GitHub：ZiYao00/ComfyUI-WorkspaceKit",
     "confirm.cancel": "取消",
     "confirm.delete": "删除",
@@ -305,6 +308,8 @@ const FALLBACK_STRINGS = {
     "settings.nodeCacheCleared": "Node cache cleared",
     "settings.close": "Close",
     "settings.version": "Version: {version}",
+    "settings.versionLoading": "Loading…",
+    "settings.versionUnavailable": "Unavailable",
     "settings.github": "GitHub: ZiYao00/ComfyUI-WorkspaceKit",
     "confirm.cancel": "Cancel",
     "confirm.delete": "Delete",
@@ -1086,13 +1091,7 @@ function restoreScrollSnapshot(el, snapshot) {
 }
 
 function t(key, values = {}) {
-  const localeFallback = FALLBACK_STRINGS[state.locale]?.[key];
-  const defaultFallback = FALLBACK_STRINGS[DEFAULT_LOCALE]?.[key];
-  const template = localeFallback || state.strings[key] || defaultFallback || key;
-  if (template === key) {
-    warnMissingTranslation(key);
-  }
-  return String(template).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? "");
+  return translate(key, values);
 }
 
 function warnMissingTranslation(key) {
@@ -1877,8 +1876,9 @@ function openWorkspaceSettings() {
   cacheRow.append(cacheInfo, clearCache);
   const nodeCache = settingsSection(t("settings.nodeCache"), [cacheRow]);
 
+  const versionInfo = settingsHelp(t("settings.version", { version: t("settings.versionLoading") }));
   const about = settingsSection(t("settings.about"), [
-    settingsHelp(t("settings.version", { version: "0.2.0-beta" })),
+    versionInfo,
     settingsHelp(t("settings.github")),
   ]);
 
@@ -1886,6 +1886,23 @@ function openWorkspaceSettings() {
   backdrop.append(dialog);
   document.body.append(backdrop);
   workspaceState.settingsElement = backdrop;
+
+  // The backend owns the package version.  Do not duplicate it in the UI:
+  // doing so previously left Settings at 0.2.0-beta after the package had
+  // already moved to 0.2.1b0.
+  fetchJsonWithTimeout("/workspace2/info")
+    .then((info) => {
+      if (workspaceState.settingsElement !== backdrop || !versionInfo.isConnected) {
+        return;
+      }
+      const version = String(info?.version || t("settings.versionUnavailable"));
+      versionInfo.textContent = t("settings.version", { version });
+    })
+    .catch(() => {
+      if (workspaceState.settingsElement === backdrop && versionInfo.isConnected) {
+        versionInfo.textContent = t("settings.version", { version: t("settings.versionUnavailable") });
+      }
+    });
 
   const closeOnEscape = (event) => {
     if (event.key !== "Escape" || workspaceState.settingsElement !== backdrop) {
@@ -2292,20 +2309,8 @@ function workspace2InlineConfirm(anchor, { confirmText = t("confirm.delete"), on
 }
 
 async function loadLocale() {
-  state.locale = detectLocale();
+  state.locale = await configureI18n(app, FALLBACK_STRINGS);
   state.strings = {};
-  try {
-    const response = await fetch(localeAssetUrl(state.locale), { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(response.statusText);
-    }
-    state.strings = await response.json();
-  } catch (error) {
-    if (state.locale !== DEFAULT_LOCALE) {
-      const response = await fetch(localeAssetUrl(DEFAULT_LOCALE), { cache: "no-store" });
-      state.strings = response.ok ? await response.json() : {};
-    }
-  }
 }
 
 function localeAssetUrl(locale) {
@@ -3141,11 +3146,17 @@ function styles() {
       gap: 8px;
       min-height: var(--workspace2-row-height);
       padding: 2px 5px 2px 6px;
+      border: 1px solid transparent;
       border-radius: var(--workspace2-radius-sm);
     }
-    .workspace2-current-workflow:hover,
-    .workspace2-current-workflow.is-selected {
+    .workspace2-current-workflow:hover {
       background: var(--workspace2-hover);
+    }
+    /* Match Browse: the workflow currently displayed on the canvas is
+       selected in both Open and Browse, while hover stays deliberately softer. */
+    .workspace2-current-workflow.is-selected {
+      background: var(--workspace2-accent-mid);
+      border-color: var(--workspace2-accent-border);
     }
     .workspace2-current-workflow-label {
       display: none;
@@ -7978,31 +7989,6 @@ function nodePackageName(node) {
   return "";
 }
 
-function rawNodePackageName(node) {
-  const parts = String(node?.pythonModule || "").split(".");
-  if (parts[0] === "custom_nodes" && parts[1]) {
-    return parts[1].split("@")[0];
-  }
-  return "";
-}
-
-function normalizeExtensionCategoryIdentity(value) {
-  return shortenNodeSourceName(value)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "");
-}
-
-function isDuplicateExtensionCategory(packageName, rawPackageName, categoryPart) {
-  const normalizedCategory = normalizeExtensionCategoryIdentity(categoryPart);
-  if (!normalizedCategory) {
-    return false;
-  }
-  return [packageName, rawPackageName]
-    .map(normalizeExtensionCategoryIdentity)
-    .filter(Boolean)
-    .some((value) => value === normalizedCategory);
-}
-
 function isComfyNode(node) {
   return node?.source === NODE_SOURCE.CORE || node?.source === NODE_SOURCE.ESSENTIALS;
 }
@@ -8034,15 +8020,11 @@ function officialNodeCategoryParts(node) {
       .split("/")
       .map((part) => part.trim())
       .filter(Boolean);
-  if (node?.source === NODE_SOURCE.CUSTOM) {
-    const packageName = nodePackageName(node) || t("nodes.categoryUnknown");
-    const rawPackageName = rawNodePackageName(node);
-    const categoryParts = [...parts];
-    if (categoryParts.length && isDuplicateExtensionCategory(packageName, rawPackageName, categoryParts[0])) {
-      categoryParts.shift();
-    }
-    return [{ key: `pkg:${rawPackageName || packageName}`, label: packageName }, ...categoryParts];
-  }
+  // Keep the extension tree identical to ComfyUI's official Node Library:
+  // category.split('/'), with no synthetic package folder, category merging,
+  // or artificial depth cap.  Package/source grouping belongs to the
+  // official optional "Group by module" mode, not its category view.
+  if (node?.source === NODE_SOURCE.CUSTOM) return parts;
   if (!isComfyCoreNode(node)) {
     return [t("nodes.categoryUnknown"), ...parts];
   }

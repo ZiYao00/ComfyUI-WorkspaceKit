@@ -225,6 +225,44 @@ Verification result:
 - **Templates performance:** user acceptance passed after idle prefetch, shared in-page loading, and deferral of stale node-definition refresh.
 - **Alt+C save-template flow:** user acceptance passed; saving selected nodes opens Templates and focuses the new template name regardless of prior sidebar state.
 
+## 2026-07-15 - Sidebar shortcut and canvas-menu regression
+
+Confirmed shortcut behavior:
+
+- In frosted-glass mode, the visible Workspace2 shell is moved to `document.body` so `backdrop-filter` can sample the canvas.
+- The old open-state check only searched below the sidebar host. It consequently treated an already open glass panel as closed, and the next Shift+1/2/3 or Alt+C action clicked the Workspace2 tab again and closed it.
+- The open-state check now recognizes both the normal sidebar shell and the connected, visible glass portal. Syntax checks passed and user acceptance confirmed the shortcut regression is resolved.
+
+Confirmed canvas-menu behavior in an isolated local ComfyUI page:
+
+- On an empty canvas, `🧩 编组` and `🧩 保存为模板` are the first two menu items, with no legacy yellow duplicate entry.
+- With no selected nodes, each entry opens Workspace2's themed notice dialog rather than the browser native alert.
+- Right-clicking an unselected node then choosing `🧩 编组` creates a one-node group successfully.
+- The unused legacy LiteGraph global-menu patch was removed from `workspace2_canvas_groups.js`; supported ComfyUI extension hooks in `entry.js` remain the only menu integration path.
+
+## 2026-07-15 - Templates data-layer extraction (first stage)
+
+- Backup created before extraction: `.codex-backups/workspace2-before-template-data-extraction-20260715-132706.zip`.
+- Extracted `entry/templates/library.js`: library normalization, shared initial-load request, idle prefetch, persistence, and group/tree query helpers.
+- The module receives network, performance, translation, state, and render dependencies from `entry.js`; it has no direct sidebar or shortcut ownership.
+- The source comment records the two relevant regressions: shared requests protect Templates first-open performance, and the caller—not the data layer—must open/focus the panel after Alt+C saves a template.
+- Static syntax/diff checks passed. In an isolated local ComfyUI page, the Templates tab opened normally, read the existing seven templates, and showed no Workspace2 panel error.
+
+## 2026-07-15 - Workflow delete in frosted-glass mode
+
+Reported symptom: after moving a workflow file to Workspace2 trash, the Workflows panel could show only its three top tabs with the content area blank.
+
+Confirmed causes and fix:
+
+- During an official workflow deletion, ComfyUI can temporarily expose an empty element in `openWorkflows`. The Open-section renderer now filters invalid entries before reading `workflow.path`; this prevents an exception after the module body has been cleared.
+- In frosted-glass mode the visible shell is a body-level portal. After a delete, Workspace2 rebuilds the Workflows shell from its stable sidebar host instead of reusing a potentially stale module body. Transparent mode retains the existing lightweight redraw.
+
+Regression verification:
+
+- In an isolated local ComfyUI page with frosted glass enabled, created a dedicated test workflow and moved it to Workspace2 trash.
+- The frosted-glass shell, Workflows panel, Open section, and Browse section all remained visible.
+- No browser error was recorded. The test workflow was not permanently deleted.
+
 ## 2026-07-12 - Official workflow-state adapter
 
 Confirmed in the test package with `comfyui_frontend_package 1.45.20`:

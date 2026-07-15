@@ -17,6 +17,13 @@ from .service.n_sidebar_migration import (
 )
 from .service.node_index_signature import build_node_index_signature
 from .service.node_library_service import read_node_library, write_node_library
+from .service.node_object_info_cache import (
+    abort_node_object_info_cache_upload,
+    append_node_object_info_cache_upload,
+    begin_node_object_info_cache_upload,
+    finish_node_object_info_cache_upload,
+    read_node_object_info_cache,
+)
 from .service.official_favorites_probe import probe_official_favorites
 from .service.official_favorites_sync import write_workspace2_favorites_to_official
 from .service.safe_path import safe_join, safe_relative_path
@@ -523,6 +530,102 @@ async def workspace2_nodes_index_signature(_request):
             nodes.NODE_CLASS_MAPPINGS.keys(),
         )
         return _json_response({"ok": True, **result})
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.get("/workspace2/nodes/object-info-cache")
+async def workspace2_nodes_object_info_cache(_request):
+    """Return the disk snapshot only when it matches the live node signature."""
+    try:
+        import nodes
+
+        signature_data = await asyncio.to_thread(
+            build_node_index_signature,
+            comfy_path,
+            nodes.NODE_CLASS_MAPPINGS.keys(),
+        )
+        cache = await asyncio.to_thread(
+            read_node_object_info_cache,
+            comfy_path,
+            signature_data["signature"],
+            signature_data["registered_node_count"],
+        )
+        return _json_response({
+            "ok": True,
+            "cache_hit": cache is not None,
+            "signature": signature_data["signature"],
+            "plugin_count": signature_data["plugin_count"],
+            "registered_node_count": signature_data["registered_node_count"],
+            "cache": cache,
+        })
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.post("/workspace2/nodes/object-info-cache/upload")
+async def workspace2_nodes_object_info_cache_upload(request):
+    try:
+        import nodes
+
+        data = await request.json()
+        signature_data = await asyncio.to_thread(
+            build_node_index_signature,
+            comfy_path,
+            nodes.NODE_CLASS_MAPPINGS.keys(),
+        )
+        if str(data.get("signature") or "") != signature_data["signature"]:
+            return _json_error("The node index changed before cache upload started.", status=409)
+        result = await asyncio.to_thread(
+            begin_node_object_info_cache_upload,
+            comfy_path,
+            signature_data["signature"],
+            signature_data["registered_node_count"],
+        )
+        return _json_response({"ok": True, **result})
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.put("/workspace2/nodes/object-info-cache/upload/{upload_id}/{chunk_index}")
+async def workspace2_nodes_object_info_cache_upload_chunk(request):
+    try:
+        # StreamReader.read(n) may legally return fewer than n bytes before EOF.
+        # Each request carries exactly one bounded chunk, so consume its complete
+        # body before appending; the service layer enforces the 512 KB limit.
+        chunk = await request.read()
+        result = await asyncio.to_thread(
+            append_node_object_info_cache_upload,
+            request.match_info["upload_id"],
+            request.match_info["chunk_index"],
+            chunk,
+        )
+        return _json_response({"ok": True, **result})
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.post("/workspace2/nodes/object-info-cache/upload/{upload_id}/finish")
+async def workspace2_nodes_object_info_cache_upload_finish(request):
+    try:
+        result = await asyncio.to_thread(
+            finish_node_object_info_cache_upload,
+            comfy_path,
+            request.match_info["upload_id"],
+        )
+        return _json_response({"ok": True, **result})
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.post("/workspace2/nodes/object-info-cache/upload/{upload_id}/abort")
+async def workspace2_nodes_object_info_cache_upload_abort(request):
+    try:
+        removed = await asyncio.to_thread(
+            abort_node_object_info_cache_upload,
+            request.match_info["upload_id"],
+        )
+        return _json_response({"ok": True, "removed": removed})
     except Exception as exc:
         return _json_error(str(exc), status=500)
 

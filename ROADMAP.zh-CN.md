@@ -64,7 +64,7 @@
    - 加入 Python、JavaScript、JSON 和服务层测试及最小 CI。
    - 增加插件数据导出 / 导入、schema version 和导入前自动备份。
    - 补齐截图、Registry / Manager 元数据、Issue 模板和贡献说明。
-   - 当前：已抽出 API、常量、性能记录和节点缓存协调模块；工作流、节点、模板和设置的完整拆分尚未开始。
+   - 当前：已抽出 API、常量、性能记录和节点缓存协调模块；Templates 的库数据层（规范化、单请求加载、空闲预取、保存和分组查询）已抽到 `entry/templates/library.js`。Templates 的 UI、预览、拖拽和快捷键仍在 `entry.js`，后续按验证后的边界继续拆分；工作流、节点和设置的完整拆分尚未开始。
 
 测试过程、性能数据与尚未确认根因的错误记录在 `docs/TESTING.md`。
 

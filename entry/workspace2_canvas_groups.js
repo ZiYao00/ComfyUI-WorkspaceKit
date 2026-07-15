@@ -25,6 +25,19 @@ const Workspace2CanvasGroups = {
     groups: {},       // groupId → {id, title, nodeIds, bypassed, bounds, fontSize}
     groupEls: {},
     overlay: null,
+    noticeHandler: null,
+
+    setNoticeHandler(handler) {
+        this.noticeHandler = typeof handler === 'function' ? handler : null;
+    },
+
+    async showNotice(message) {
+        if (this.noticeHandler) {
+            await this.noticeHandler({ title: 'Workspace2 编组', message });
+            return;
+        }
+        console.warn(`[Workspace2 Canvas Groups] ${message}`);
+    },
 
     init() {
         if (this.initialized) return;
@@ -35,7 +48,9 @@ const Workspace2CanvasGroups = {
 
         this.createOverlay();
         this.setupKeyboardShortcut();
-        this.setupCanvasMenu();
+        // Canvas and node menus are registered by entry.js through ComfyUI's
+        // extension hooks. Do not patch LiteGraph's global menu prototype:
+        // that shared prototype is also used by other sidebar extensions.
         this.setupSerializationHooks();
         this.setupBodyBypass();
         this.startSyncLoop();
@@ -88,27 +103,6 @@ const Workspace2CanvasGroups = {
         // Ctrl+G is a ComfyUI core keybinding (GroupSelectedNodes). Workspace2
         // registers shortcuts through app.registerExtension instead of stealing
         // document/window key events here.
-    },
-
-    /* ── 右键菜单 ── */
-    setupCanvasMenu() {
-        if (window._workspace2_canvas_group_menu_extended) return;
-        window._workspace2_canvas_group_menu_extended = true;
-        const self = this;
-        try {
-            const LG = window.LiteGraph || (app.canvas?.constructor);
-            if (!LG?.LGraphCanvas?.prototype?.getCanvasMenuOptions) return;
-            const orig = LG.LGraphCanvas.prototype.getCanvasMenuOptions;
-            LG.LGraphCanvas.prototype.getCanvasMenuOptions = function() {
-                const opts = orig.apply(this, arguments);
-                if (!opts?.length) return opts;
-                opts.splice(0, 0, {
-                    content: '<span style="color:#FFD700;">▣ Workspace2 编组</span>',
-                    callback: () => self.createGroupFromSelection()
-                });
-                return opts;
-            };
-        } catch (e) {}
     },
 
     /* ── Shift+单击框体=绕过 ── */
@@ -448,6 +442,7 @@ const Workspace2CanvasGroups = {
             colorHue: 48,
             colorSat: 100,
             colorLit: 55,
+            useUnifiedColor: false,
             effect: 'none',
             effectSpeed: 3,
             borderWidth: 2,
@@ -515,6 +510,7 @@ const Workspace2CanvasGroups = {
             colorHue: group.colorHue ?? 48,
             colorSat: group.colorSat ?? 100,
             colorLit: group.colorLit ?? 55,
+            useUnifiedColor: Boolean(group.useUnifiedColor),
             effect: group.effect || 'none',
             effectSpeed: group.effectSpeed || 3,
             borderWidth: finiteNumber(group.borderWidth, 2),
@@ -536,7 +532,7 @@ const Workspace2CanvasGroups = {
         return this.saveStylePreset(this.readActivePreset(), this.getBuiltInStyle());
     },
 
-    uniqueGroupTitle(base = '组', excludeId = null) {
+    uniqueGroupTitle(base = '组（右键编辑）', excludeId = null) {
         const used = new Set(
             Object.values(this.groups)
                 .filter(group => group?.id !== excludeId)
@@ -679,11 +675,19 @@ const Workspace2CanvasGroups = {
     },
 
     /* ── 创建编组 ── */
-    createGroupFromSelection() {
+    async createGroupFromSelection(contextNode = null) {
         const c = app?.canvas;
-        if (!c?.selected_nodes) { alert('[Workspace2 Canvas Groups] 请框选节点'); return; }
-        const sel = Object.values(c.selected_nodes).filter(n => n?.pos && typeof n.pos[0] === 'number');
-        if (sel.length < 1) { alert('[Workspace2 Canvas Groups] 请至少选1个节点'); return; }
+        const sel = Object.values(c?.selected_nodes || {}).filter(n => n?.pos && typeof n.pos[0] === 'number');
+        // A node context menu is useful even when LiteGraph has not placed the
+        // right-clicked node in selected_nodes. In that case, create a
+        // one-node group rather than showing a false "no selection" error.
+        if (!sel.length && contextNode?.pos && typeof contextNode.pos[0] === 'number') {
+            sel.push(contextNode);
+        }
+        if (!sel.length) {
+            await this.showNotice('请至少选择一个节点后再创建编组。');
+            return false;
+        }
 
         const nids = sel.map(n => n.id);
         const style = this.readDefaultStyle();
@@ -750,7 +754,7 @@ const Workspace2CanvasGroups = {
         const gid = 'g_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
         this.groups[gid] = {
             id: gid,
-            title: this.uniqueGroupTitle('组'),
+            title: this.uniqueGroupTitle(),
             nodeIds: directNodeIds,
             bypassed: false,
             bounds: bounds,
@@ -992,6 +996,7 @@ const Workspace2CanvasGroups = {
             titleColor: group.titleColor,
             headerBgColor: group.headerBgColor,
             colorHue: group.colorHue, colorSat: group.colorSat, colorLit: group.colorLit,
+            useUnifiedColor: Boolean(group.useUnifiedColor),
             effect: group.effect, effectSpeed: group.effectSpeed,
             borderWidth: group.borderWidth, borderOpacity: group.borderOpacity,
             shadowSize: group.shadowSize,
@@ -1006,6 +1011,7 @@ const Workspace2CanvasGroups = {
                 titleColor: _snapshot.titleColor,
                 headerBgColor: _snapshot.headerBgColor,
                 colorHue: _snapshot.colorHue, colorSat: _snapshot.colorSat, colorLit: _snapshot.colorLit,
+                useUnifiedColor: _snapshot.useUnifiedColor,
                 effect: _snapshot.effect, effectSpeed: _snapshot.effectSpeed,
                 borderWidth: _snapshot.borderWidth, borderOpacity: _snapshot.borderOpacity,
                 shadowSize: _snapshot.shadowSize,
@@ -1053,7 +1059,7 @@ const Workspace2CanvasGroups = {
                     <input class="xzg-set-title" value="${group.title}" style="flex:1;height:28px;padding:0 8px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;">
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">文字大小</label>
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">字号</label>
                     <input class="xzg-set-fontsize" type="range" min="6" max="48" value="${group.fontSize || 14}" style="flex:1;height:28px;margin:0;">
                     <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-set-fs-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${group.fontSize || 14}</span>
@@ -1074,7 +1080,12 @@ const Workspace2CanvasGroups = {
             <div style="margin-bottom:12px;">
                 <label style="color:#ff8c00;font-size:14px;display:block;margin-bottom:8px;font-weight:600;">边框设置</label>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边框颜色</label>
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;display:flex;align-items:center;gap:4px;"><input class="xzg-set-unified-color" type="checkbox" ${group.useUnifiedColor ? 'checked' : ''} style="margin:0;flex:0 0 auto;"><span>统一</span></label>
+                    <input class="xzg-set-unified-hue" type="range" min="0" max="360" value="${curH}" ${group.useUnifiedColor ? '' : 'disabled'} style="flex:1;height:28px;margin:0;${group.useUnifiedColor ? '' : 'opacity:.35;'}">
+                    <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;"><div class="xzg-unified-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:${group.useUnifiedColor ? 'pointer' : 'default'};background:${this.hslToHex(curH, curS, curL)};border:1px solid rgba(255,255,255,0.2);opacity:${group.useUnifiedColor ? '1' : '.35'};flex-shrink:0;"></div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">颜色</label>
                     <input class="xzg-set-borderopacity" type="range" min="5" max="100" value="${Math.round((group.borderOpacity??0.65)*100)}" style="flex:1;height:28px;margin:0;">
                     <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-set-bo-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.round((group.borderOpacity??0.65)*100)}%</span>
@@ -1082,14 +1093,14 @@ const Workspace2CanvasGroups = {
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边框粗细</label>
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">粗细</label>
                     <input class="xzg-set-borderwidth" type="range" min="0" max="5" value="${finiteNumber(group.borderWidth, 2)}" style="flex:1;height:28px;margin:0;">
                     <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
                         <span class="xzg-set-bw-val" style="color:#fff;font-size:12px;text-align:left;">${finiteNumber(group.borderWidth, 2)}px</span>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边框阴影</label>
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">阴影</label>
                     <input class="xzg-set-shadowsize" type="range" min="0" max="40" value="${Math.max(0, finiteNumber(group.shadowSize, 0))}" style="flex:1;height:28px;margin:0;">
                     <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-set-shadow-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.max(0, finiteNumber(group.shadowSize, 0))}px</span>
@@ -1097,7 +1108,7 @@ const Workspace2CanvasGroups = {
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边框边距</label>
+                    <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:52px;">边距</label>
                     <input class="xzg-set-contentpadding" type="range" min="0" max="80" value="${group.contentPadding ?? DEFAULT_CONTENT_PADDING}" style="flex:1;height:28px;margin:0;">
                     <div style="width:48px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
                         <span class="xzg-set-cp-val" style="color:#fff;font-size:12px;text-align:left;">${group.contentPadding ?? DEFAULT_CONTENT_PADDING}px</span>
@@ -1105,7 +1116,7 @@ const Workspace2CanvasGroups = {
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
                     <label style="color:#fff;font-size:12px;flex-shrink:0;white-space:nowrap;width:30px;">动画</label>
-                    <select class="xzg-set-effect" style="width:90px;height:28px;padding:0 6px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    <select class="xzg-set-effect" style="width:90px;min-width:90px;max-width:90px;flex:0 0 90px;height:28px;padding:0 6px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         <option value="none" ${!group.effect||group.effect==='none'?'selected':''}>无</option>
                         <option value="rainbow" ${group.effect==='rainbow'?'selected':''}>渐变彩虹</option>
                         <option value="pulse" ${group.effect==='pulse'?'selected':''}>明暗呼吸</option>
@@ -1114,8 +1125,8 @@ const Workspace2CanvasGroups = {
                         <option value="marqueebreathe" ${group.effect==='marqueebreathe'?'selected':''}>流光溢彩+明暗呼吸</option>
                     </select>
                     <div style="flex:1;min-width:0;position:relative;display:flex;align-items:center;height:28px;">
-                        <input class="xzg-set-speed" type="range" min="1" max="10" value="${group.effectSpeed||3}" style="width:34px;min-width:34px;max-width:34px;height:28px;margin:0;">
-                        <span class="xzg-set-spd-val" style="position:absolute;right:0;color:#fff;font-size:12px;width:48px;text-align:left;">${group.effectSpeed||3}</span>
+                        <input class="xzg-set-speed" type="range" min="1" max="10" value="${group.effectSpeed||3}" style="width:54px;min-width:54px;max-width:54px;height:28px;margin:0;">
+                        <span class="xzg-set-spd-val" style="position:absolute;right:0;color:#fff;font-size:12px;width:48px;text-align:left;">${group.effectSpeed||3}X</span>
                     </div>
                 </div>
             </div>
@@ -1205,7 +1216,7 @@ const Workspace2CanvasGroups = {
         const spdR = modal.querySelector('.xzg-set-speed');
         const spdV = modal.querySelector('.xzg-set-spd-val');
         spdR.addEventListener('input', () => {
-            spdV.textContent = spdR.value;
+            spdV.textContent = `${spdR.value}X`;
             group.effectSpeed = parseInt(spdR.value) || 3;
             self.updateGroupStyle(group.id);
         });
@@ -1267,7 +1278,9 @@ const Workspace2CanvasGroups = {
         modal.appendChild(titleColorPicker);
         const titleColorSwatch = modal.querySelector('.xzg-title-color-swatch');
         if (titleColorSwatch) {
-            titleColorSwatch.addEventListener('click', () => titleColorPicker.click());
+            titleColorSwatch.addEventListener('click', () => {
+                if (!group.useUnifiedColor) titleColorPicker.click();
+            });
         }
         titleColorPicker.addEventListener('input', () => {
             const c = titleColorPicker.value;
@@ -1317,14 +1330,63 @@ const Workspace2CanvasGroups = {
 
         // 七彩条点击→弹出系统颜色选择器
         if (colorTrigger) {
-            colorTrigger.addEventListener('click', () => hiddenPicker.click());
+            colorTrigger.addEventListener('click', () => {
+                if (!group.useUnifiedColor) hiddenPicker.click();
+            });
         }
 
         // 选色后更新
         hiddenPicker.addEventListener('input', () => {
             const hsl = this.hexToHsl(hiddenPicker.value);
             syncColorFromHSL(hsl.h, hsl.s, hsl.l);
+            if (group.useUnifiedColor) {
+                titleColorPicker.value = hiddenPicker.value;
+                titleColorSwatch.style.background = hiddenPicker.value;
+                group.titleColor = hiddenPicker.value;
+            }
         });
+
+        const unifiedToggle = modal.querySelector('.xzg-set-unified-color');
+        const unifiedHue = modal.querySelector('.xzg-set-unified-hue');
+        const unifiedSwatch = modal.querySelector('.xzg-unified-color-swatch');
+        const setUnifiedUiState = (enabled) => {
+            unifiedHue.disabled = !enabled;
+            unifiedHue.style.opacity = enabled ? '1' : '.35';
+            unifiedSwatch.style.opacity = enabled ? '1' : '.35';
+            unifiedSwatch.style.cursor = enabled ? 'pointer' : 'default';
+            for (const swatch of [titleColorSwatch, colorTrigger]) {
+                swatch.style.display = 'inline-flex';
+                swatch.style.alignItems = 'center';
+                swatch.style.justifyContent = 'center';
+                swatch.style.cursor = enabled ? 'not-allowed' : 'pointer';
+                swatch.style.border = enabled ? '1.5px solid #ff5d5d' : '1px solid rgba(255,255,255,0.2)';
+                swatch.style.color = enabled ? '#ff5d5d' : '';
+                swatch.style.fontSize = enabled ? '16px' : '';
+                swatch.style.fontWeight = enabled ? '700' : '';
+                swatch.style.lineHeight = '1';
+                swatch.textContent = enabled ? '×' : '';
+                swatch.style.background = enabled ? 'transparent' : (swatch === titleColorSwatch ? titleColorPicker.value : hiddenPicker.value);
+            }
+        };
+        const applyUnifiedColor = () => {
+            const h = parseInt(unifiedHue.value) || 0;
+            syncColorFromHSL(h, sel.s, sel.l);
+            const hex = hiddenPicker.value;
+            titleColorPicker.value = hex;
+            titleColorSwatch.style.background = hex;
+            unifiedSwatch.style.background = hex;
+            group.titleColor = hex;
+        };
+        unifiedToggle.addEventListener('change', () => {
+            group.useUnifiedColor = unifiedToggle.checked;
+            setUnifiedUiState(group.useUnifiedColor);
+            if (group.useUnifiedColor) applyUnifiedColor();
+        });
+        unifiedHue.addEventListener('input', applyUnifiedColor);
+        unifiedSwatch.addEventListener('click', () => {
+            if (group.useUnifiedColor) hiddenPicker.click();
+        });
+        setUnifiedUiState(Boolean(group.useUnifiedColor));
 
         // 标题栏背景色 - 颜色选择器已在 HTML 中
         const headerColorPicker = modal.querySelector('.xzg-set-headerbgcolor');
@@ -1386,6 +1448,7 @@ const Workspace2CanvasGroups = {
             colorHue: sel.h,
             colorSat: sel.s,
             colorLit: sel.l,
+            useUnifiedColor: Boolean(unifiedToggle.checked),
             effect: effectSel.value,
             effectSpeed: parseInt(spdR.value) || 3,
             borderWidth: finiteNumber(bwR.value, 2),
@@ -1430,9 +1493,13 @@ const Workspace2CanvasGroups = {
             titleColorPicker.value = merged.titleColor || '#FFD700';
             if (titleColorSwatch) titleColorSwatch.style.background = titleColorPicker.value;
             syncColorFromHSL(merged.colorHue, merged.colorSat, merged.colorLit);
+            unifiedToggle.checked = Boolean(merged.useUnifiedColor);
+            unifiedHue.value = merged.colorHue;
+            setUnifiedUiState(unifiedToggle.checked);
+            if (unifiedToggle.checked) applyUnifiedColor();
             effectSel.value = merged.effect || 'none';
             spdR.value = merged.effectSpeed || 3;
-            spdV.textContent = spdR.value;
+            spdV.textContent = `${spdR.value}X`;
             bwR.value = finiteNumber(merged.borderWidth, 2);
             bwV.textContent = `${bwR.value}px`;
             boR.value = Math.round((merged.borderOpacity ?? 0.65) * 100);
@@ -1617,7 +1684,7 @@ const Workspace2CanvasGroups = {
             if (finished) return;
             finished = true;
             const rawTitle = cancel ? group.title : input.value.trim();
-            const newTitle = rawTitle || this.uniqueGroupTitle('组', group.id);
+            const newTitle = rawTitle || this.uniqueGroupTitle(undefined, group.id);
             group.title = this.uniqueGroupTitle(newTitle, group.id);
             this.syncGroupsToExtra();
             this.writeGroupDataToNodes();
@@ -2061,6 +2128,7 @@ const Workspace2CanvasGroups = {
             colorHue: g.colorHue,
             colorSat: g.colorSat,
             colorLit: g.colorLit,
+            useUnifiedColor: Boolean(g.useUnifiedColor),
             effect: g.effect,
             effectSpeed: g.effectSpeed,
             borderWidth: g.borderWidth,
@@ -2432,7 +2500,7 @@ const Workspace2CanvasGroups = {
                 const fromExtra = app?.graph?.extra?.xzgGroups?.[gid];
                 const bounds = this.calcBounds(nids) || { x: 0, y: 0, w: 300, h: 200 };
                 this.groups[gid] = fromExtra ? { ...fromExtra } : {
-                    id: gid, title: this.uniqueGroupTitle('组', gid), nodeIds: nids, bypassed: false, bounds,
+                    id: gid, title: this.uniqueGroupTitle(undefined, gid), nodeIds: nids, bypassed: false, bounds,
                     fontSize: 14, colorHue: 48, colorSat: 100, colorLit: 55,
                     effect: 'none', effectSpeed: 3,
                     borderWidth: 2, borderOpacity: 0.65,

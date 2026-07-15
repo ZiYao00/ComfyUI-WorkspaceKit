@@ -251,7 +251,7 @@ const Workspace2CanvasGroups = {
             // 标题文字/栏高度跟随画布缩放（无标题时保留最小操作区域）
             const fs = (g.fontSize || 14) * scale;
             const showTitle = (g.title || '').trim() !== '';
-            const headerHeight = Math.max(18 * scale, fs + 4 * scale);
+            const headerHeight = Math.max(21 * scale, fs + 4 * scale);
             const header = el.querySelector('.xzg-group-header');
             if (header) {
                 const padV = 2 * scale;
@@ -274,6 +274,22 @@ const Workspace2CanvasGroups = {
                 delBtn.style.fontSize = (18 * scale) + 'px';
                 delBtn.style.marginLeft = (4 * scale) + 'px';
             }
+            const modeButtons = el.querySelectorAll('.xzg-group-mode-btn');
+            modeButtons.forEach(btn => {
+                const size = Math.max(14, 19 * scale);
+                const iconSize = Math.max(12, Math.round(size * 0.9));
+                btn.style.width = `${size}px`;
+                btn.style.height = `${size}px`;
+                btn.style.fontSize = `${Math.max(12, 16 * scale)}px`;
+                // SVG 不会像字体图标那样自动继承 font-size，必须与按钮一起缩放。
+                const icon = btn.querySelector('svg');
+                if (icon) {
+                    icon.setAttribute('width', String(iconSize));
+                    icon.setAttribute('height', String(iconSize));
+                }
+                // 图标色与标题色同步；激活状态仅通过背景区分，避免破坏编组配色。
+                btn.style.color = g.titleColor || '#FFD700';
+            });
             ['xzg-border-left', 'xzg-border-right'].forEach(cls => {
                 const be = el.querySelector('.' + cls);
                 if (be) be.style.top = headerHeight + 'px';
@@ -626,7 +642,7 @@ const Workspace2CanvasGroups = {
         const style = { ...this.readDefaultStyle(), ...options };
         const p = Math.max(0, Number(style.contentPadding ?? DEFAULT_CONTENT_PADDING) || 0);
         const fs = style?.fontSize || 14;
-        const headerHeight = Math.max(18, fs + 4);
+        const headerHeight = Math.max(21, fs + 4);
         const topPad = headerHeight + p;
         return { x: minX - p, y: minY - topPad, w: maxX - minX + p * 2, h: maxY - minY + topPad + p };
     },
@@ -812,13 +828,24 @@ const Workspace2CanvasGroups = {
         el.style.cssText = `position:absolute;pointer-events:none;border:${bw}px solid hsla(48,100%,55%,${bo});border-radius:8px;background:transparent;box-sizing:border-box;z-index:5;`;
         const fs = group.fontSize || 14;
         const showTitle = (group.title || '').trim() !== '';
-        const headerHeight = Math.max(18, fs + 4);
+        const headerHeight = Math.max(21, fs + 4);
         el.innerHTML = `
             <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || 'rgba(0,0,0,0.4)') : 'transparent'};border-radius:7px 7px 0 0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
                 <div style="flex:1 1 auto;min-width:0;overflow:hidden;">
                     <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
                 </div>
-                <button class="xzg-delete-btn" title="${t('groups.delete')}" style="border:none;background:none;cursor:pointer;padding:0;flex-shrink:0;font-size:18px;color:hsla(48,100%,55%,0.5);line-height:1;margin-left:4px;">×</button>
+                <div class="xzg-group-header-actions" style="display:flex;align-items:center;gap:3px;flex:0 0 auto;margin-left:4px;">
+                    <button class="xzg-group-mode-btn xzg-group-queue-btn" data-group-action="queue" title="${t('groups.actionQueue')}" aria-label="${t('groups.actionQueue')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;">
+                        <svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><path d="M6 3.8 16 10 6 16.2Z" fill="currentColor"/></svg>
+                    </button>
+                    <button class="xzg-group-mode-btn" data-group-mode="bypass" title="${t('groups.actionBypass')}" aria-label="${t('groups.actionBypass')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;">
+                        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 10h3.2c2.1 0 2.1-5.3 4.8-5.3h2.8c2.1 0 2.1 5.3 4.2 5.3"/><path d="m15.6 7.1 2.4 2.9-2.4 2.9"/></svg>
+                    </button>
+                    <button class="xzg-group-mode-btn" data-group-mode="mute" title="${t('groups.actionMute')}" aria-label="${t('groups.actionMute')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;">
+                        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><path d="m5.3 5.3 9.4 9.4"/></svg>
+                    </button>
+                    <button class="xzg-delete-btn" title="${t('groups.delete')}" style="border:none;background:none;cursor:pointer;padding:0;flex-shrink:0;font-size:18px;color:hsla(48,100%,55%,0.5);line-height:1;">×</button>
+                </div>
             </div>
             <div class="xzg-border-left" style="position:absolute;left:-3px;top:${headerHeight}px;width:10px;bottom:-3px;pointer-events:auto;cursor:move;z-index:2;"></div>
             <div class="xzg-border-right" style="position:absolute;right:-3px;top:${headerHeight}px;width:10px;bottom:-3px;pointer-events:auto;cursor:move;z-index:2;"></div>
@@ -831,6 +858,27 @@ const Workspace2CanvasGroups = {
         // 删除按钮
         el.querySelector('.xzg-delete-btn').addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
         el.querySelector('.xzg-delete-btn').addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); self.removeGroup(group.id); });
+
+        // 这两个按钮不复用旧的旁路逻辑：旧逻辑会在恢复时统一写入 MODE_ALWAYS，
+        // 会丢失用户原先手动设置的节点模式。新逻辑保留逐节点快照后再恢复。
+        el.querySelectorAll('.xzg-group-mode-btn[data-group-mode]').forEach(btn => {
+            btn.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
+            btn.addEventListener('dblclick', e => { e.stopPropagation(); e.preventDefault(); });
+            btn.addEventListener('click', e => {
+                e.stopPropagation();
+                e.preventDefault();
+                self.toggleGroupExecutionMode(group.id, btn.dataset.groupMode);
+            });
+        });
+        const queueBtn = el.querySelector('.xzg-group-queue-btn');
+        queueBtn.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
+        queueBtn.addEventListener('dblclick', e => { e.stopPropagation(); e.preventDefault(); });
+        queueBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            self.queueGroupOutputNodes(group.id);
+        });
+        this.updateGroupModeButtons(group.id);
 
         // 将当前编组框提升到 overlay 最前面
         const bringToFront = () => {
@@ -902,7 +950,7 @@ const Workspace2CanvasGroups = {
         });
 
         headerEl.addEventListener('dblclick', e => {
-            if (e.target.closest('.xzg-delete-btn')) return;
+            if (e.target.closest('button')) return;
             e.preventDefault();
             e.stopPropagation();
             const latest = self.groups[group.id] || group;
@@ -912,7 +960,7 @@ const Workspace2CanvasGroups = {
 
         // 右键标题栏任意位置 → 设置（排除删除按钮）
         headerEl.addEventListener('contextmenu', e => {
-            if (e.target.closest('.xzg-delete-btn')) return;
+            if (e.target.closest('button')) return;
             e.preventDefault(); e.stopPropagation();
             self.openSettings(self.groups[group.id] || group);
         });
@@ -1487,7 +1535,7 @@ const Workspace2CanvasGroups = {
             }
             const header = self.groupEls[group.id]?.querySelector('.xzg-group-header');
             if (header) {
-                header.style.height = Math.max(18, group.fontSize + 4) + 'px';
+                header.style.height = Math.max(21, group.fontSize + 4) + 'px';
                 header.style.background = group.headerBgColor || 'rgba(0,0,0,0.4)';
             }
             self.updateGroupStyle(group.id);
@@ -1572,7 +1620,7 @@ const Workspace2CanvasGroups = {
                     }
                     const header = el.querySelector('.xzg-group-header');
                     if (header) {
-                        header.style.height = Math.max(18, targetGroup.fontSize + 4) + 'px';
+                        header.style.height = Math.max(21, targetGroup.fontSize + 4) + 'px';
                         header.style.background = targetGroup.headerBgColor || 'rgba(0,0,0,0.4)';
                     }
                     this.updateGroupStyle(targetGroup.id);
@@ -1923,6 +1971,126 @@ const Workspace2CanvasGroups = {
         this.renderGroup(group.id);
     },
 
+    /* ── 编组执行模式：保存并恢复每个节点原模式 ──
+     * 不依赖 rgthree，也不改写 LGraphCanvas 原型。WorkspaceKit 的编组是 DOM 覆盖层，
+     * 因此直接按 group.nodeIds 操作即可。快照需要随工作流序列化，避免重开后无法恢复。
+     */
+    _getGroupNodes(group, graph = app?.graph) {
+        if (!graph?._nodes || !group?.nodeIds?.length) return [];
+        const seen = new Set();
+        return graph._nodes.filter(node => {
+            if (!node || seen.has(String(node.id))) return false;
+            if (!this._idInArray(group.nodeIds, node.id)) return false;
+            seen.add(String(node.id));
+            return true;
+        });
+    },
+
+    _getGroupModeValue(modeName) {
+        if (modeName === 'bypass') return MODE_BYPASS;
+        if (modeName === 'mute') return globalThis.LiteGraph?.NEVER ?? 2;
+        return null;
+    },
+
+    updateGroupModeButtons(gid) {
+        const group = this.groups[gid];
+        const el = this.groupEls[gid];
+        if (!group || !el) return;
+        el.querySelectorAll('.xzg-group-mode-btn[data-group-mode]').forEach(btn => {
+            const active = group.executionMode === btn.dataset.groupMode;
+            const muted = btn.dataset.groupMode === 'mute';
+            btn.style.background = active
+                ? (muted ? 'rgba(220,82,94,.7)' : 'rgba(130,82,200,.7)')
+                : 'transparent';
+            btn.style.borderColor = active
+                ? (muted ? 'rgba(255,156,166,.95)' : 'rgba(214,180,255,.95)')
+                : 'rgba(255,215,0,.38)';
+            btn.style.color = group.titleColor || '#FFD700';
+            btn.title = active ? t('groups.actionRestore') : t(btn.dataset.groupMode === 'mute' ? 'groups.actionMute' : 'groups.actionBypass');
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+    },
+
+    _restoreGroupExecutionMode(group, graph = app?.graph) {
+        const snapshot = group?.executionModeSnapshot;
+        if (!snapshot || typeof snapshot !== 'object') return false;
+        for (const node of this._getGroupNodes(group, graph)) {
+            const key = Object.keys(snapshot).find(id => this._idEq(id, node.id));
+            if (key !== undefined) node.mode = snapshot[key];
+        }
+        delete group.executionMode;
+        delete group.executionModeSnapshot;
+        this.updateGroupModeButtons(group.id);
+        return true;
+    },
+
+    toggleGroupExecutionMode(gid, modeName) {
+        const group = this.groups[gid];
+        const graph = app?.graph;
+        const mode = this._getGroupModeValue(modeName);
+        if (!group || !graph || mode === null) return;
+        const nodes = this._getGroupNodes(group, graph);
+        if (!nodes.length) return;
+
+        if (group.executionMode === modeName && group.executionModeSnapshot) {
+            this._restoreGroupExecutionMode(group, graph);
+        } else {
+            // 仅在第一次进入“旁路/禁用”时保存原模式；从旁路切到禁用时继续使用同一份原始快照。
+            if (!group.executionModeSnapshot || typeof group.executionModeSnapshot !== 'object') {
+                group.executionModeSnapshot = Object.fromEntries(nodes.map(node => [String(node.id), node.mode ?? MODE_ALWAYS]));
+            }
+            group.executionMode = modeName;
+            nodes.forEach(node => { node.mode = mode; });
+            this.updateGroupModeButtons(gid);
+        }
+
+        this.syncGroupsToExtra();
+        this.writeGroupDataToNodes();
+        graph.setDirtyCanvas?.(true, true);
+        graph.change?.();
+    },
+
+    _getGroupOutputNodes(group, graph = app?.graph) {
+        const never = globalThis.LiteGraph?.NEVER ?? 2;
+        return this._getGroupNodes(group, graph).filter(node => (
+            node.mode !== never && Boolean(node.constructor?.nodeData?.output_node)
+        ));
+    },
+
+    async queueGroupOutputNodes(gid) {
+        const group = this.groups[gid];
+        const outputNodes = this._getGroupOutputNodes(group);
+        if (!outputNodes.length) {
+            await this.showNotice(t('groups.noOutputNodes'));
+            return;
+        }
+
+        const canvas = app?.canvas;
+        const command = app?.extensionManager?.command;
+        if (!canvas?.selectItems || typeof command?.execute !== 'function') {
+            // 宁可明确拒绝，也不能退化为 app.queuePrompt() 后误执行整个工作流。
+            await this.showNotice(t('groups.queueUnavailable'));
+            return;
+        }
+
+        const previousNodes = Object.values(canvas.selected_nodes || {}).filter(Boolean);
+        const previousGroup = canvas.selected_group;
+        try {
+            // 使用 ComfyUI 官方的“选中输出节点并执行”命令；队列完成后恢复用户的选中状态。
+            canvas.deselectAllNodes?.();
+            canvas.selectItems(outputNodes);
+            await command.execute('Comfy.QueueSelectedOutputNodes');
+        } catch (error) {
+            console.error('[WorkspaceKit Canvas Groups] Queue group output nodes failed:', error);
+            await this.showNotice(t('groups.queueFailed'));
+        } finally {
+            canvas.deselectAllNodes?.();
+            if (previousNodes.length) canvas.selectItems(previousNodes);
+            canvas.selected_group = previousGroup;
+            canvas.setDirty?.(true, true);
+        }
+    },
+
     /* ── 旁路 ── */
     toggleBypass(gid) {
         const g = this.groups[gid];
@@ -2070,7 +2238,9 @@ const Workspace2CanvasGroups = {
         const g = this.groups[gid];
         if (!g) return;
         const graph = app?.graph;
-        if (graph && g.bypassed) g.nodeIds.forEach(nid => { const n = graph._nodes.find(x => x.id === nid || x.id == nid); if (n) n.mode = MODE_ALWAYS; });
+        if (graph && !this._restoreGroupExecutionMode(g, graph) && g.bypassed) {
+            g.nodeIds.forEach(nid => { const n = graph._nodes.find(x => x.id === nid || x.id == nid); if (n) n.mode = MODE_ALWAYS; });
+        }
         this.killGroup(gid);
         graph?.setDirtyCanvas?.(true, true); graph?.change?.();
         this.syncGroupsToExtra();
@@ -2113,7 +2283,10 @@ const Workspace2CanvasGroups = {
             for (const node of graph._nodes) {
                 const inGroup = this._idInArray(group.nodeIds || [], node.id) || this._idEq(node._xzgGroupId, gid);
                 if (!inGroup) continue;
-                if (group.bypassed) {
+                if (group.executionModeSnapshot && typeof group.executionModeSnapshot === 'object') {
+                    const key = Object.keys(group.executionModeSnapshot).find(id => this._idEq(id, node.id));
+                    if (key !== undefined) node.mode = group.executionModeSnapshot[key];
+                } else if (group.bypassed) {
                     node.mode = MODE_ALWAYS;
                 }
                 if (this._idEq(node._xzgGroupId, gid)) {
@@ -2137,6 +2310,9 @@ const Workspace2CanvasGroups = {
             title: g.title,
             nodeIds: [...(g.nodeIds || [])],
             bypassed: Boolean(g.bypassed),
+            // 记录逐节点原模式，保证“旁路/禁用 → 恢复”不把用户的手动模式改成执行。
+            executionMode: g.executionMode || null,
+            executionModeSnapshot: g.executionModeSnapshot ? { ...g.executionModeSnapshot } : null,
             bounds: { ...(g.bounds || {}) },
             fontSize: g.fontSize,
             colorHue: g.colorHue,
@@ -2556,8 +2732,12 @@ const Workspace2CanvasGroups = {
         const g = app?.graph;
         if (!g?._nodes) return;
         for (const grp of Object.values(this.groups)) {
-            const m = grp.bypassed ? MODE_BYPASS : MODE_ALWAYS;
-            grp.nodeIds.forEach(nid => { const n = g._nodes.find(x => x.id === nid || x.id == nid); if (n) n.mode = m; });
+            // 只重放当前由编组控制的模式。普通编组绝不能在工作流恢复时强制写回
+            // MODE_ALWAYS，否则会覆盖用户在 ComfyUI 中独立设置的旁路/禁用状态。
+            const controlledMode = grp.executionMode ? this._getGroupModeValue(grp.executionMode) : (grp.bypassed ? MODE_BYPASS : null);
+            if (controlledMode === null) continue;
+            this._getGroupNodes(grp, g).forEach(node => { node.mode = controlledMode; });
+            this.updateGroupModeButtons(grp.id);
         }
         g.setDirtyCanvas?.(true, true);
     }

@@ -1,19 +1,19 @@
 # Roadmap
 
-这份 Roadmap 面向公开 GitHub 用户，用来说明 Workspace2 的整体方向，不记录本机路径、测试包、主包等内部开发信息。
+这份 Roadmap 面向公开 GitHub 用户，用来说明 WorkspaceKit 的整体方向，不记录本机路径、测试包、主包等内部开发信息。
 
 ## 已完成
 
 - 修复 Canvas Groups 包装 `loadGraphData()` 时改变零参数调用、导致多插件环境恢复上次工作流读取 `extra` 失败的问题。
-- 统一 Workspace2 侧边栏入口，包含工作流、节点、模板三个标签。
+- 统一 WorkspaceKit 侧边栏入口，包含工作流、节点、模板三个标签。
 - Workflows2 工作流文件夹管理、拖拽整理、排序、最近工作流、插件回收站和系统回收站交接。
 - Nodes2 节点浏览、搜索、收藏、收藏分组、官方收藏导入 / 导出和大节点库缓存。
 - Templates 模板功能，可把选中的已连接节点保存为可复用模板。
 - 模板分组、子分组、搜索、排序、拖拽整理、预览和行内删除确认。
 - Templates 首次打开路径：空闲预取、同页面会话请求复用、分段耗时记录，并在 Templates 活跃时延后过期节点定义刷新。
-- Canvas Groups 编组增强，包括 Workspace2 编组快捷键和标题栏样式设置。
+- Canvas Groups 编组增强，包括 WorkspaceKit 编组快捷键和标题栏样式设置。
 - Title2 视觉标题 / 注释节点。
-- Workspace2 设置面板第一版。
+- WorkspaceKit 设置面板第一版。
 - 英文和中文 README 文档。
 
 ## 正在完善
@@ -22,13 +22,13 @@
 - Workflows2 打开记录与 ComfyUI 官方工作流管理器的同步稳定性。
 - Workflows2 当前工作流 / 打开记录中的未保存状态提示、保存入口和关闭行为：官方目录已接入 ComfyUI Frontend 1.45.20 的 `openWorkflows`、`isModified`、`openWorkflow()` 与 `workflow.save()`；“打开”区域可保留多个官方已打开工作流的独立未保存状态。自定义根目录保留本地快照降级方案。待真实界面回归验证两份文件打开、修改、切换、保存与保存失败。
 - Workflows2 重命名、删除、清空回收站后官方工作流列表的刷新稳定性。
-- Workspace2 设置中的面板透明度实时预览和持久化。
+- WorkspaceKit 设置中的面板透明度实时预览和持久化。
 - 大量第三方节点环境下的 Nodes2 性能验证。
 - 复杂节点的预览效果继续打磨。
 - 模板预览继续打磨。
 - 分区标题在暗色、亮色、透明和磨砂背景下的最终视觉验收。
 - 模板删除撤销或模板回收站机制。
-- Workspace2 设置、Nodes2 收藏、Templates、文件夹元数据的数据备份与恢复入口。
+- WorkspaceKit 设置、Nodes2 收藏、Templates、文件夹元数据的数据备份与恢复入口。
 - Comfy Registry / ComfyUI Manager 上架元数据。
 
 ## 稳定性修复批次

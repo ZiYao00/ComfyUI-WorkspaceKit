@@ -1,32 +1,51 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 *.so
 *.dll
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
-hash/
-.env
-.env.*
+# Virtual environments
+.venv/
+venv/
+env/
 
-# Logs
-logs/
+# Build and packaging
+build/
+dist/
+dist-ssr/
+*.egg-info/
+
+# JavaScript
+node_modules/
+ui/node_modules/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-node_modules/
-ui/node_modules/
-dist-ssr/
+ui/yarn.lock
 *.local
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
 
 # Local plugin data and backups
 db/
+hash/
 backup/
 .codex-backups/
+.ai-bridge/
 *.backup
 *.bak
 
@@ -53,17 +72,15 @@ tmp/
 *.tar
 *.gz
 
-# Editor directories and files
+# Editors and operating systems
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 Thumbs.db
+desktop.ini
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-
-# dev
-ui/yarn.lock

@@ -5,15 +5,15 @@ This roadmap is for public GitHub readers. It tracks broad product direction, no
 ## Completed
 
 - Fixed Canvas Groups changing a zero-argument `loadGraphData()` call and triggering an `extra` read failure while restoring the previous workflow in multi-extension setups.
-- Unified Workspace2 sidebar entry with Workflows, Nodes, and Templates tabs.
+- Unified WorkspaceKit sidebar entry with Workflows, Nodes, and Templates tabs.
 - Workflows2 workflow-folder management, drag-and-drop organization, sorting, recent workflow history, plugin trash, and system trash handoff.
 - Nodes2 node browsing, search, favorites, favorite groups, official favorite import/export, and large-library cache support.
 - Templates for saving selected connected nodes as reusable node templates.
 - Template groups, subgroups, search, sorting, drag-and-drop organization, preview, and inline delete confirmation.
 - Templates first-open path: idle prefetch, per-session request sharing, phase timing, and deferral of stale node-definition refresh while Templates is active.
-- Canvas Groups enhancements, including Workspace2 group shortcuts and title-bar style settings.
+- Canvas Groups enhancements, including WorkspaceKit group shortcuts and title-bar style settings.
 - Title2 visual title / annotation node.
-- Workspace2 settings panel first version.
+- WorkspaceKit settings panel first version.
 - English and Chinese README documentation.
 
 ## In Progress
@@ -22,13 +22,13 @@ This roadmap is for public GitHub readers. It tracks broad product direction, no
 - Workflows2 open-history synchronization stability with the official ComfyUI workflow manager.
 - Unsaved-state indicators, save actions, and close behavior for current/open workflow rows.
 - Official workflow-list refresh stability after Workflows2 rename, delete, and trash-empty actions.
-- Live preview and persistence for the Workspace2 panel opacity setting.
+- Live preview and persistence for the WorkspaceKit panel opacity setting.
 - Large node-library validation for setups with many custom nodes.
 - Node preview polish for complex nodes.
 - Template preview polish.
 - Final visual acceptance for section headers across dark, light, transparent, and frosted-glass backgrounds.
 - Safer template deletion with undo or a template trash mechanism.
-- Data backup and restore entry for Workspace2 settings, Nodes2 favorites, Templates, and folder metadata.
+- Data backup and restore entry for WorkspaceKit settings, Nodes2 favorites, Templates, and folder metadata.
 - Comfy Registry / ComfyUI Manager metadata.
 
 ## Stabilization Batches

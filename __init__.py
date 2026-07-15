@@ -48,7 +48,9 @@ class Workspace2Title:
     RETURN_TYPES = ()
     OUTPUT_NODE = False
     FUNCTION = "execute"
-    CATEGORY = "Workspace2"
+    # Public node-menu category. Keep the serialized node mapping below under
+    # its legacy name until an explicit workflow migration is introduced.
+    CATEGORY = "WorkspaceKit"
 
     def execute(self):
         return ()
@@ -58,17 +60,19 @@ NODE_CLASS_MAPPINGS = {
     "Workspace2Title": Workspace2Title,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Workspace2Title": "标题2",
+    # The mapping key remains legacy-compatible; this string is what users see
+    # in the ComfyUI node menu and can follow the new public brand.
+    "Workspace2Title": "WorkspaceKit 标题",
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
 VERSION = "0.2.1b0"
-PLUGIN_NAME = "comfyui-workspace2"
+PLUGIN_NAME = "comfyui-workspacekit"
 
 workspace_path = Path(__file__).resolve().parent
 comfy_path = Path(folder_paths.__file__).resolve().parent
 
-print(f"Loading: Workspace2 ({VERSION})")
+print(f"Loading: WorkspaceKit ({VERSION})")
 
 
 def _json_response(data, status=200):

@@ -33,7 +33,7 @@ const Workspace2CanvasGroups = {
 
     async showNotice(message) {
         if (this.noticeHandler) {
-            await this.noticeHandler({ title: 'Workspace2 编组', message });
+            await this.noticeHandler({ title: 'WorkspaceKit 编组', message });
             return;
         }
         console.warn(`[Workspace2 Canvas Groups] ${message}`);

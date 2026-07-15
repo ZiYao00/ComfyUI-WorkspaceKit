@@ -86,8 +86,8 @@ const WORKSPACE2_MENU_LABELS = new Set([
 
 const FALLBACK_STRINGS = {
   "zh-CN": {
-    "workspace.title": "Workspace2",
-    "workspace.tooltip": "Workspace2",
+    "workspace.title": "WorkspaceKit",
+    "workspace.tooltip": "WorkspaceKit",
     "workspace.tab.workflows": "工作流",
     "workspace.tab.nodes": "节点",
     "workspace.tab.templates": "模板",
@@ -103,7 +103,7 @@ const FALLBACK_STRINGS = {
     "settings.glassBackground": "磨砂玻璃",
     "settings.nodeCache": "节点缓存",
     "settings.about": "关于",
-    "settings.ctrlG": "启用 Workspace2 编组",
+    "settings.ctrlG": "启用 WorkspaceKit 编组",
     "settings.ctrlGHelp": "开启后，Ctrl+G 会替换 ComfyUI 默认编组。",
     "settings.altCOpenTemplates": "Alt+C 保存后自动打开模板",
     "settings.closeSameModule": "重复按当前标签快捷键时关闭面板",
@@ -111,7 +111,7 @@ const FALLBACK_STRINGS = {
     "settings.shortcuts.nodes": "节点面板",
     "settings.shortcuts.templates": "模板面板",
     "settings.shortcuts.saveTemplate": "保存模板",
-    "settings.shortcuts.createGroup": "Workspace2 编组",
+    "settings.shortcuts.createGroup": "WorkspaceKit 编组",
     "settings.shortcuts.ungroup": "取消编组",
     "settings.shortcuts.shiftLeftClickKey": "Shift + 左键",
     "settings.shortcuts.toggleGroupIgnore": "切换是否忽略编组",
@@ -123,13 +123,13 @@ const FALLBACK_STRINGS = {
     "settings.nodeCacheCleared": "节点缓存已清空",
     "settings.close": "关闭",
     "settings.version": "版本：{version}",
-    "settings.github": "GitHub：ZiYao00/ComfyUI-Workspace2",
+    "settings.github": "GitHub：ZiYao00/ComfyUI-WorkspaceKit",
     "confirm.cancel": "取消",
     "confirm.delete": "删除",
     "confirm.moveToSystemTrash": "移到系统回收站",
     "confirm.emptyTrash": "清空回收站",
     "trash.systemDeleteTitle": "移到系统回收站",
-    "trash.emptyTitle": "清空 Workspace2 回收站",
+    "trash.emptyTitle": "清空 WorkspaceKit 回收站",
     "trash.moveToSystem": "清空到系统回收站",
     "trash.moveAllToSystemShort": "清空到系统回收站",
     "status.systemTrashPartial": "部分项目移到系统回收站失败：{count} 个。{details}",
@@ -268,8 +268,8 @@ const FALLBACK_STRINGS = {
     "templates.sortTitle": "模板排序：{sort}。点击打开菜单。",
   },
   "en-US": {
-    "workspace.title": "Workspace2",
-    "workspace.tooltip": "Workspace2",
+    "workspace.title": "WorkspaceKit",
+    "workspace.tooltip": "WorkspaceKit",
     "workspace.tab.workflows": "Workflows",
     "workspace.tab.nodes": "Nodes",
     "workspace.tab.templates": "Templates",
@@ -285,7 +285,7 @@ const FALLBACK_STRINGS = {
     "settings.glassBackground": "Frosted glass",
     "settings.nodeCache": "Node cache",
     "settings.about": "About",
-    "settings.ctrlG": "Enable Workspace2 groups",
+    "settings.ctrlG": "Enable WorkspaceKit groups",
     "settings.ctrlGHelp": "When enabled, Ctrl+G replaces the ComfyUI default group command.",
     "settings.altCOpenTemplates": "Open Templates after Alt+C saves",
     "settings.closeSameModule": "Close the panel when pressing the current tab shortcut again",
@@ -293,7 +293,7 @@ const FALLBACK_STRINGS = {
     "settings.shortcuts.nodes": "Nodes panel",
     "settings.shortcuts.templates": "Templates panel",
     "settings.shortcuts.saveTemplate": "Save template",
-    "settings.shortcuts.createGroup": "Workspace2 group",
+    "settings.shortcuts.createGroup": "WorkspaceKit group",
     "settings.shortcuts.ungroup": "Ungroup",
     "settings.shortcuts.shiftLeftClickKey": "Shift + Left Click",
     "settings.shortcuts.toggleGroupIgnore": "Toggle group ignore",
@@ -305,13 +305,13 @@ const FALLBACK_STRINGS = {
     "settings.nodeCacheCleared": "Node cache cleared",
     "settings.close": "Close",
     "settings.version": "Version: {version}",
-    "settings.github": "GitHub: ZiYao00/ComfyUI-Workspace2",
+    "settings.github": "GitHub: ZiYao00/ComfyUI-WorkspaceKit",
     "confirm.cancel": "Cancel",
     "confirm.delete": "Delete",
     "confirm.moveToSystemTrash": "Move to system trash",
     "confirm.emptyTrash": "Empty trash",
     "trash.systemDeleteTitle": "Move to system trash",
-    "trash.emptyTitle": "Empty Workspace2 trash",
+    "trash.emptyTitle": "Empty WorkspaceKit trash",
     "trash.moveToSystem": "Move All to System Trash",
     "trash.moveAllToSystemShort": "Move All to System Trash",
     "status.systemTrashPartial": "Move to system trash partial: {count} failed. {details}",
@@ -1268,12 +1268,12 @@ function notifyCtrlGConflict() {
     return;
   }
   notifyCtrlGConflict.lastShown = Date.now();
-  const message = "Ctrl+G is still handled by ComfyUI. Remove the official Ctrl+G binding to use Workspace2 groups.";
+  const message = "Ctrl+G is still handled by ComfyUI. Remove the official Ctrl+G binding to use WorkspaceKit groups.";
   const toast = app.extensionManager?.toast;
   if (toast?.addAlert) {
     toast.addAlert(message);
   } else if (toast?.add) {
-    toast.add({ severity: "warn", summary: "Workspace2", detail: message, life: 5000 });
+    toast.add({ severity: "warn", summary: "WorkspaceKit", detail: message, life: 5000 });
   } else {
     console.warn(`[Workspace2] ${message}`);
   }
@@ -1905,14 +1905,14 @@ function registerWorkspace2CanvasGroupCommands() {
   const commands = [
     {
       id: "Workspace2.CanvasGroups.CreateGroup",
-      label: "Workspace2: Create canvas group",
+      label: "WorkspaceKit: Create canvas group",
       function: () => {
         workspace2CanvasGroups.createGroupFromSelection?.();
       },
     },
     {
       id: "Workspace2.CanvasGroups.UngroupSelection",
-      label: "Workspace2: Ungroup selected canvas group",
+      label: "WorkspaceKit: Ungroup selected canvas group",
       function: () => {
         workspace2CanvasGroups.ungroupSelection?.();
       },
@@ -13447,14 +13447,14 @@ app.registerExtension({
   commands: [
     {
       id: "Workspace2.CanvasGroups.CreateGroup",
-      label: "Workspace2: Create canvas group",
+      label: "WorkspaceKit: Create canvas group",
       function: () => {
         workspace2CanvasGroups.createGroupFromSelection?.();
       },
     },
     {
       id: "Workspace2.CanvasGroups.UngroupSelection",
-      label: "Workspace2: Ungroup selected canvas group",
+      label: "WorkspaceKit: Ungroup selected canvas group",
       function: () => {
         workspace2CanvasGroups.ungroupSelection?.();
       },
@@ -13534,4 +13534,3 @@ app.registerExtension({
     finish({ sidebar: "fallback" });
   },
 });
-

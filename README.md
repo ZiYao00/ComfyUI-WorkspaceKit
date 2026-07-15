@@ -1,16 +1,16 @@
-# ComfyUI-Workspace2
+# ComfyUI-WorkspaceKit
 
 English | [中文说明](README.zh-CN.md)
 
-ComfyUI-Workspace2 is a workspace enhancement extension for ComfyUI. It focuses on practical organization for large workflow libraries, large custom-node setups, node favorites, reusable node templates, and complex canvas layouts.
+ComfyUI-WorkspaceKit is a workspace enhancement extension for ComfyUI. It focuses on practical organization for large workflow libraries, large custom-node setups, node favorites, reusable node templates, and complex canvas layouts.
 
 It does not try to replace the official ComfyUI UI. Instead, it adds a focused workspace layer for users who need faster organization, safer file operations, better node reuse, and clearer visual structure.
 
 Current status: **public beta, 0.2.1-beta**. It is usable for daily testing, but it is not a stable 1.0 release yet. Before using it in a main ComfyUI environment, back up your workflows, user settings, important node favorites, and important template data.
 
-## When Workspace2 Helps
+## When WorkspaceKit Helps
 
-Workspace2 is designed for users who run into these problems after using ComfyUI for a while:
+WorkspaceKit is designed for users who run into these problems after using ComfyUI for a while:
 
 - Too many workflow files to manage comfortably in a plain list.
 - Too many custom nodes and extensions mixed into the node browser.
@@ -18,11 +18,11 @@ Workspace2 is designed for users who run into these problems after using ComfyUI
 - Large workflows that need clearer groups, titles, and visual sections.
 - File operations such as move, rename, and delete that need safer recovery behavior.
 
-Workspace2 brings these daily organization tasks into one workspace sidebar.
+WorkspaceKit brings these daily organization tasks into one workspace sidebar.
 
 ## Main Features
 
-Workspace2 currently provides one unified sidebar entry with three internal tabs:
+WorkspaceKit currently provides one unified sidebar entry with three internal tabs:
 
 - **Workflows 2**: Manage workflow files in the ComfyUI workflow directory.
 - **Nodes 2**: Browse, search, favorite, group, and organize nodes.
@@ -91,7 +91,7 @@ Key features:
 - Template context menu: rename, place at canvas center, copy name, delete.
 - Inline delete confirmation for templates and template groups.
 
-Template data is stored under the ComfyUI user directory in Workspace2 data files. Back up important template data regularly.
+During the beta compatibility period, template data continues to use the existing Workspace2-compatible location under the ComfyUI user directory. Existing template data therefore remains available after upgrading to WorkspaceKit. Back up important template data regularly.
 
 ### Group Enhancements
 
@@ -99,15 +99,15 @@ Group Enhancements make canvas groups closer to common design-tool behavior.
 
 Key features:
 
-- `Ctrl+G` creates a Workspace2 group from the selected nodes.
+- `Ctrl+G` creates a WorkspaceKit group from the selected nodes.
 - `Shift+G` ungroups.
-- `Shift + left click` toggles whether Workspace2 groups ignore node selection.
+- `Shift + left click` toggles whether WorkspaceKit groups ignore node selection.
 - Right-click a group title bar to edit group style.
 - Save the current group style as one of the default group presets.
 - Configure group margin, border, shadow, animation, and related visual settings.
 - Group data is saved into the workflow.
 
-If `Ctrl+G` conflicts with an official ComfyUI keybinding, change the official keybinding first or disable the Workspace2 Ctrl+G option in settings.
+If `Ctrl+G` conflicts with an official ComfyUI keybinding, change the official keybinding first or disable the WorkspaceKit Ctrl+G option in settings.
 
 ### Title2
 
@@ -127,10 +127,10 @@ Default style:
 | `Shift+2` / `Shift+N` | Open Nodes 2 |
 | `Shift+3` | Open Templates |
 | `Alt+C` | Save selected nodes as a template |
-| `Ctrl+G` | Create Workspace2 group |
+| `Ctrl+G` | Create WorkspaceKit group |
 | `Shift+G` | Ungroup |
 | `Ctrl + click` folder toggle | Recursively expand or collapse folders / groups |
-| `Shift + left click` | Toggle whether Workspace2 groups ignore node selection |
+| `Shift + left click` | Toggle whether WorkspaceKit groups ignore node selection |
 
 ## Installation
 
@@ -138,14 +138,14 @@ Clone this repository into your ComfyUI `custom_nodes` directory:
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/ZiYao00/ComfyUI-Workspace2.git
+git clone https://github.com/ZiYao00/ComfyUI-WorkspaceKit.git
 ```
 
 Then restart ComfyUI.
 
 ## Requirements
 
-Workspace2 recommends:
+WorkspaceKit recommends:
 
 ```text
 send2trash
@@ -161,16 +161,16 @@ Do not update your ComfyUI Python environment unless you understand the environm
 
 ## System Trash Behavior
 
-Workspace2 has two trash layers:
+WorkspaceKit has two trash layers:
 
-- **Workspace2 trash**: the plugin-level recoverable trash used when deleting workflows from Workflows 2.
+- **WorkspaceKit trash**: the plugin-level recoverable trash used when deleting workflows from Workflows 2.
 - **System trash**: the operating system trash / recycle bin.
 
-On Windows, Workspace2 has a built-in recycle bin fallback. On other platforms, system trash support depends on `send2trash` and the desktop environment it supports.
+On Windows, WorkspaceKit has a built-in recycle bin fallback. On other platforms, system trash support depends on `send2trash` and the desktop environment it supports.
 
 ## Before First Use
 
-Workspace2 moves, renames, and organizes workflow files. Before using it in a main ComfyUI environment, back up:
+WorkspaceKit moves, renames, and organizes workflow files. Before using it in a main ComfyUI environment, back up:
 
 - Your ComfyUI workflow directory.
 - Your ComfyUI user settings.
@@ -192,7 +192,7 @@ I am a ComfyUI user, designer, and creator, not a professional programmer. This 
 
 Maintainer: ZiYao00
 
-Project homepage: https://github.com/ZiYao00/ComfyUI-Workspace2
+Project homepage: https://github.com/ZiYao00/ComfyUI-WorkspaceKit
 
 ## Credits
 
@@ -203,7 +203,7 @@ Special thanks to the authors of these projects for providing useful foundations
 - [ComfyUI-xiaozhuguang](https://github.com/xiaozhuguang/ComfyUI-xiaozhuguang)
 - [pinyin-pro](https://github.com/zh-lx/pinyin-pro)
 
-Workspace2 references, migrates, or adapts some ideas and implementation details from these projects. This does not mean the original authors maintain or endorse Workspace2.
+WorkspaceKit references, migrates, or adapts some ideas and implementation details from these projects. This does not mean the original authors maintain or endorse WorkspaceKit.
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
 

@@ -1,6 +1,6 @@
-# Workspace2 Testing Log
+# WorkspaceKit Testing Log
 
-This document records reproducible test evidence and unresolved errors found while validating Workspace2. A recorded error is not treated as a confirmed Workspace2 root cause until the owning call chain is isolated.
+This document records reproducible test evidence and unresolved errors found while validating WorkspaceKit. Historical endpoint, storage, and implementation names such as `Workspace2` remain in individual records where they identify the compatibility layer. A recorded error is not treated as a confirmed WorkspaceKit root cause until the owning call chain is isolated.
 
 ## 2026-07-09 - Node cache coordination
 

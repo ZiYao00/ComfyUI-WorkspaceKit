@@ -8,6 +8,7 @@ import {
   startPerformanceSpan,
 } from "./core/performance.js";
 import { withNodeIndexRefreshLock } from "./nodes/cache-coordinator.js";
+import { createTemplateLibraryStore } from "./templates/library.js";
 import {
   closeOfficialWorkflow,
   getActiveOfficialWorkflow,
@@ -15,7 +16,7 @@ import {
   getOfficialWorkflowStore,
   getOpenOfficialWorkflows,
   isOfficialWorkflowModified,
-  openOfficialWorkflow,
+  loadOfficialWorkflow,
   saveOfficialWorkflow,
   subscribeOfficialWorkflowStore,
 } from "./workflows/official-adapter.js";
@@ -72,12 +73,16 @@ import {
   WORKSPACE2_PANEL_GLASS_KEY,
   WORKSPACE2_PANEL_GLASS_TRANSPARENCY_KEY,
   WORKSPACE2_PANEL_OPACITY_KEY,
-  WORKSPACE2_SHORTCUT_CLOSE_SAME_KEY,
   WORKSPACE2_TAB_ID,
 } from "./core/constants.js";
 
 const WORKFLOW_OPEN_SECTION_COLLAPSED_KEY = "workspace2.workflows.openCollapsed";
 const WORKFLOW_BROWSE_SECTION_COLLAPSED_KEY = "workspace2.workflows.browseCollapsed";
+const WORKSPACE2_MENU_MARK = "🧩 ";
+const WORKSPACE2_MENU_LABELS = new Set([
+  `${WORKSPACE2_MENU_MARK}编组`,
+  `${WORKSPACE2_MENU_MARK}保存为模板`,
+]);
 
 const FALLBACK_STRINGS = {
   "zh-CN": {
@@ -137,6 +142,10 @@ const FALLBACK_STRINGS = {
     "workflows.close": "关闭工作流",
     "workflows.saveCurrent": "保存当前工作流",
     "workflows.unsavedChanges": "未保存的更改",
+    "workflows.closeUnsavedTitle": "关闭未保存的工作流",
+    "workflows.closeUnsavedMessage": "“{name}”有未保存的更改。",
+    "workflows.closeSave": "保存并关闭",
+    "workflows.closeDiscard": "不保存并关闭",
     "toolbar.openWorkflow": "打开工作流",
     "nodes.title": "节点2",
     "nodes.status": "{count} 个节点",
@@ -315,6 +324,10 @@ const FALLBACK_STRINGS = {
     "workflows.close": "Close workflow",
     "workflows.saveCurrent": "Save current workflow",
     "workflows.unsavedChanges": "Unsaved changes",
+    "workflows.closeUnsavedTitle": "Close unsaved workflow",
+    "workflows.closeUnsavedMessage": "“{name}” has unsaved changes.",
+    "workflows.closeSave": "Save and close",
+    "workflows.closeDiscard": "Close without saving",
     "toolbar.openWorkflow": "Open workflow",
     "nodes.title": "Nodes 2",
     "nodes.status": "{count} nodes",
@@ -524,6 +537,13 @@ const state = {
   expanded: new Set([""]),
   selectedPath: "",
   editingPath: "",
+  // The same workflow can appear in both Open and Browse. Keep the editor in
+  // the surface where it was invoked so a rename never renders two inputs.
+  editingSurface: "",
+  // Official rename emits store updates before the local file-tree path map is
+  // reconciled. Defer that render until the rename transaction is complete.
+  workflowRenameInProgress: false,
+  officialWorkflowRenderPending: false,
   contextMenu: null,
   contextMenuElement: null,
   sortMenuElement: null,
@@ -1141,21 +1161,21 @@ function setupWorkspaceShortcuts() {
       event.preventDefault();
       event.stopPropagation();
       event.workspace2Handled = true;
-      activateWorkspace2Module("workflows");
+      openWorkspace2Module("workflows");
       return;
     }
     if (event.shiftKey && !event.ctrlKey && (event.code === "KeyN" || event.code === "Digit2")) {
       event.preventDefault();
       event.stopPropagation();
       event.workspace2Handled = true;
-      activateWorkspace2Module("nodes");
+      openWorkspace2Module("nodes");
       return;
     }
     if (event.shiftKey && !event.ctrlKey && event.code === "Digit3") {
       event.preventDefault();
       event.stopPropagation();
       event.workspace2Handled = true;
-      activateWorkspace2Module("templates");
+      openWorkspace2Module("templates");
       return;
     }
     if (event.shiftKey && !event.ctrlKey && event.code === "KeyG") {
@@ -1187,10 +1207,20 @@ function isWorkspace2CtrlGCreateEnabled() {
 
 function isWorkspace2PanelOpen() {
   const target = workspaceState.renderTarget;
+  // In glass mode the visible shell is deliberately moved to document.body so
+  // backdrop-filter can sample the canvas behind the sidebar.  Looking only
+  // below `target` consequently reports "closed" even though the Workspace2
+  // panel is on screen; a following tab click then toggles it closed.  Treat
+  // the connected, visible glass portal as the same panel instance.
+  const shell = workspaceState.glassPortalElement?.isConnected
+    ? workspaceState.glassPortalElement
+    : target?.querySelector?.(".workspace2-shell");
   return Boolean(
     target?.isConnected
     && isElementVisible(target)
-    && target.querySelector?.(".workspace2-shell"),
+    && shell?.isConnected
+    && isElementVisible(shell)
+    && !shell.classList.contains("is-workspace2-overlay-hidden"),
   );
 }
 
@@ -1222,14 +1252,6 @@ function closeWorkspace2Sidebar() {
   return false;
 }
 
-function activateWorkspace2Module(moduleId) {
-  const nextModule = normalizeWorkspaceModule(moduleId);
-  if (isWorkspace2ShortcutCloseSameEnabled() && isWorkspace2PanelOpen() && workspaceState.activeModule === nextModule) {
-    return closeWorkspace2Sidebar();
-  }
-  return openWorkspace2Module(nextModule);
-}
-
 function openWorkspace2Module(moduleId) {
   const nextModule = normalizeWorkspaceModule(moduleId);
   workspaceState.activeModule = nextModule;
@@ -1259,10 +1281,6 @@ function notifyCtrlGConflict() {
 
 function isWorkspace2AltCOpenTemplatesEnabled() {
   return localStorage.getItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY) !== "0";
-}
-
-function isWorkspace2ShortcutCloseSameEnabled() {
-  return localStorage.getItem(WORKSPACE2_SHORTCUT_CLOSE_SAME_KEY) !== "0";
 }
 
 function snapPanelOpacity(value) {
@@ -2054,6 +2072,149 @@ function workspace2Confirm({ title = "", message = "", confirmText = t("confirm.
     dialog.addEventListener("pointerdown", (event) => event.stopPropagation());
     cancel.addEventListener("click", () => cleanup(false));
     confirm.addEventListener("click", () => cleanup(true));
+    document.addEventListener("keydown", onKeydown, true);
+    document.body.append(backdrop);
+    setTimeout(() => cancel.focus(), 0);
+  });
+}
+
+// Reuse the same themed dialog shell for informational feedback. This keeps
+// normal validation messages out of the browser's native alert() UI while
+// avoiding a misleading Cancel/Confirm choice for a one-step notice.
+function workspace2Notice({ title = "", message = "", closeText = t("settings.close") } = {}) {
+  if (workspace2ConfirmClose) {
+    workspace2ConfirmClose(false);
+  }
+  closeWorkspace2OverlaysForConfirm();
+  return new Promise((resolve) => {
+    let settled = false;
+    const backdrop = document.createElement("div");
+    backdrop.className = "workspace2-confirm-backdrop";
+    const dialog = document.createElement("div");
+    dialog.className = "workspace2-confirm-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    isolateComfyKeys(dialog);
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "workspace2-confirm-title";
+    titleEl.textContent = title || closeText;
+    const messageEl = document.createElement("div");
+    messageEl.className = "workspace2-confirm-message";
+    messageEl.textContent = message;
+    const actions = document.createElement("div");
+    actions.className = "workspace2-confirm-actions";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "workspace2-confirm-button";
+    close.textContent = closeText;
+    actions.append(close);
+    dialog.append(titleEl, messageEl, actions);
+    backdrop.append(dialog);
+
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      document.removeEventListener("keydown", onKeydown, true);
+      workspace2ConfirmClose = null;
+      backdrop.remove();
+      resolve();
+    };
+    const onKeydown = (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cleanup();
+      }
+    };
+    workspace2ConfirmClose = cleanup;
+    backdrop.addEventListener("pointerdown", (event) => {
+      if (event.target === backdrop) cleanup();
+      event.stopPropagation();
+    });
+    backdrop.addEventListener("click", (event) => event.stopPropagation());
+    dialog.addEventListener("pointerdown", (event) => event.stopPropagation());
+    close.addEventListener("click", cleanup);
+    document.addEventListener("keydown", onKeydown, true);
+    document.body.append(backdrop);
+    setTimeout(() => close.focus(), 0);
+  });
+}
+
+/**
+ * The official workflow service exposes a three-way dirty-close dialog, but
+ * that service is not a stable extension API. Keep the same data-safe choice
+ * in Workspace2 rather than calling the store's destructive close method
+ * directly: save, discard, or cancel.
+ */
+function workspace2ConfirmDirtyWorkflowClose(name) {
+  if (workspace2ConfirmClose) {
+    workspace2ConfirmClose(null);
+  }
+  closeWorkspace2OverlaysForConfirm();
+  return new Promise((resolve) => {
+    let settled = false;
+    const backdrop = document.createElement("div");
+    backdrop.className = "workspace2-confirm-backdrop";
+    const dialog = document.createElement("div");
+    dialog.className = "workspace2-confirm-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    isolateComfyKeys(dialog);
+
+    const title = document.createElement("div");
+    title.className = "workspace2-confirm-title";
+    title.textContent = t("workflows.closeUnsavedTitle");
+    const message = document.createElement("div");
+    message.className = "workspace2-confirm-message";
+    message.textContent = t("workflows.closeUnsavedMessage", { name });
+    const actions = document.createElement("div");
+    actions.className = "workspace2-confirm-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "workspace2-confirm-button is-secondary";
+    cancel.textContent = t("confirm.cancel");
+    const discard = document.createElement("button");
+    discard.type = "button";
+    discard.className = "workspace2-confirm-button is-danger";
+    discard.textContent = t("workflows.closeDiscard");
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "workspace2-confirm-button";
+    save.textContent = t("workflows.closeSave");
+    actions.append(cancel, discard, save);
+    dialog.append(title, message, actions);
+    backdrop.append(dialog);
+
+    const cleanup = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      document.removeEventListener("keydown", onKeydown, true);
+      workspace2ConfirmClose = null;
+      backdrop.remove();
+      resolve(result);
+    };
+    const onKeydown = (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cleanup(null);
+      }
+    };
+    workspace2ConfirmClose = cleanup;
+    backdrop.addEventListener("pointerdown", (event) => {
+      if (event.target === backdrop) {
+        cleanup(null);
+      }
+      event.stopPropagation();
+    });
+    backdrop.addEventListener("click", (event) => event.stopPropagation());
+    dialog.addEventListener("pointerdown", (event) => event.stopPropagation());
+    cancel.addEventListener("click", () => cleanup(null));
+    discard.addEventListener("click", () => cleanup("discard"));
+    save.addEventListener("click", () => cleanup("save"));
     document.addEventListener("keydown", onKeydown, true);
     document.body.append(backdrop);
     setTimeout(() => cancel.focus(), 0);
@@ -3013,6 +3174,10 @@ function styles() {
       font-size: var(--workspace2-tree-font);
       font-weight: 500;
     }
+    .workspace2-current-workflow-info .workspace2-rename-input {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
     .workspace2-current-workflow-dirty-dot {
       width: 7px;
       height: 7px;
@@ -3739,6 +3904,18 @@ function styles() {
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 4px;
       font-size: var(--workspace2-tree-font);
+    }
+    .workspace2-trash-info {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .workspace2-trash-info > span {
+      flex: 0 0 auto;
+    }
+    .workspace2-trash-text {
+      min-width: 0;
     }
     .workspace2-trash-name {
       overflow: hidden;
@@ -4676,6 +4853,7 @@ function removeWorkflowPathState(path) {
   }
   if (workflowPathIsWithin(state.editingPath, path)) {
     state.editingPath = "";
+    state.editingSurface = "";
   }
   state.expanded = new Set(
     [...state.expanded].filter((entry) => !workflowPathIsWithin(entry, path)),
@@ -4919,16 +5097,16 @@ async function openWorkflowFromOfficialStore(path) {
   if (!workflow) {
     return false;
   }
-  if (!await openOfficialWorkflow(app, workflow)) {
+  const loadedWorkflow = await loadOfficialWorkflow(workflow);
+  if (!loadedWorkflow) {
     return false;
   }
 
-  const activeWorkflow = getActiveOfficialWorkflow(app) || workflow;
-  const workflowData = activeWorkflow.activeState || (activeWorkflow.content ? JSON.parse(activeWorkflow.content) : null);
+  const workflowData = loadedWorkflow.activeState || (loadedWorkflow.content ? JSON.parse(loadedWorkflow.content) : null);
   if (!workflowData) {
     return false;
   }
-  await app.loadGraphData(workflowData, true, true, activeWorkflow, {
+  await app.loadGraphData(workflowData, true, true, loadedWorkflow, {
     checkForRerouteMigration: false,
     deferWarnings: true,
     skipAssetScans: false,
@@ -5063,11 +5241,19 @@ function syncOfficialWorkflowSelection() {
 }
 
 function scheduleOfficialWorkflowPanelRender() {
+  if (state.workflowRenameInProgress) {
+    state.officialWorkflowRenderPending = true;
+    return;
+  }
   if (state.officialWorkflowRenderTimer) {
     window.clearTimeout(state.officialWorkflowRenderTimer);
   }
   state.officialWorkflowRenderTimer = window.setTimeout(() => {
     state.officialWorkflowRenderTimer = null;
+    if (state.workflowRenameInProgress) {
+      state.officialWorkflowRenderPending = true;
+      return;
+    }
     syncOfficialWorkflowSelection();
     if (workspaceState.activeModule === "workflows" && state.workflowsTarget?.isConnected) {
       renderPanel(state.workflowsTarget);
@@ -5159,6 +5345,7 @@ async function createFolder(el, parent = "") {
   state.expanded.add(parent);
   state.selectedPath = createdPath;
   state.editingPath = createdPath;
+  state.editingSurface = "browse";
   state.status = t("status.folderCreated");
   renderPanel(el);
   refreshOfficialWorkflowsDeferred(250);
@@ -5239,6 +5426,7 @@ async function createWorkflow(el, parent = selectedFolderPath()) {
 async function renameItem(el, item, newName) {
   if (!newName || newName === item.name) {
     state.editingPath = "";
+    state.editingSurface = "";
     renderPanel(el);
     return;
   }
@@ -5252,32 +5440,42 @@ async function renameItem(el, item, newName) {
     throw new Error("Target already exists");
   }
 
-  const workflowStore = app.extensionManager?.workflow;
-  const officialWorkflow = state.isOfficialRoot && item.type === "file"
-    ? workflowStore?.getWorkflowByPath?.(officialWorkflowPath(oldPath))
-    : null;
-  if (officialWorkflow && typeof workflowStore?.renameWorkflow === "function") {
-    await workflowStore.renameWorkflow(officialWorkflow, officialWorkflowPath(nextPath));
-    nextPath = relativeWorkflowPathFromOfficial(officialWorkflow.path || officialWorkflowPath(nextPath));
-  } else {
-    const data = await postJson("/workspace2/rename", {
-      path: item.path,
-      new_name: newName,
-    });
-    nextPath = data?.path || nextPath;
+  state.workflowRenameInProgress = true;
+  try {
+    const workflowStore = app.extensionManager?.workflow;
+    const officialWorkflow = state.isOfficialRoot && item.type === "file"
+      ? workflowStore?.getWorkflowByPath?.(officialWorkflowPath(oldPath))
+      : null;
+    if (officialWorkflow && typeof workflowStore?.renameWorkflow === "function") {
+      await workflowStore.renameWorkflow(officialWorkflow, officialWorkflowPath(nextPath));
+      nextPath = relativeWorkflowPathFromOfficial(officialWorkflow.path || officialWorkflowPath(nextPath));
+    } else {
+      const data = await postJson("/workspace2/rename", {
+        path: item.path,
+        new_name: newName,
+      });
+      nextPath = data?.path || nextPath;
+    }
+    remapLocalWorkflowItems(oldPath, nextPath);
+    remapWorkflowPathState(oldPath, nextPath);
+    state.editingPath = "";
+    state.editingSurface = "";
+    state.status = t("status.renamed");
+    if (wasSelected) {
+      state.selectedPath = nextPath;
+      recordRecentWorkflow(nextPath);
+    }
+    if (!officialWorkflow) {
+      refreshOfficialWorkflowsDeferred(500);
+    }
+    renderPanel(el);
+  } finally {
+    state.workflowRenameInProgress = false;
+    if (state.officialWorkflowRenderPending) {
+      state.officialWorkflowRenderPending = false;
+      scheduleOfficialWorkflowPanelRender();
+    }
   }
-  remapLocalWorkflowItems(oldPath, nextPath);
-  remapWorkflowPathState(oldPath, nextPath);
-  state.editingPath = "";
-  state.status = t("status.renamed");
-  if (wasSelected) {
-    state.selectedPath = nextPath;
-    recordRecentWorkflow(nextPath);
-  }
-  if (!officialWorkflow) {
-    refreshOfficialWorkflowsDeferred(500);
-  }
-  renderPanel(el);
 }
 
 async function moveItem(el, sourcePath, targetFolder) {
@@ -5304,8 +5502,20 @@ async function moveToTrash(el, item) {
   removeLocalWorkflowItems(item.path);
   removeWorkflowPathState(item.path);
   state.status = t("status.movedToTrash");
-  renderPanel(el);
-  restoreTreeScrollTop(el, scrollTop);
+  // In frosted-glass mode the visible shell lives in document.body while the
+  // sidebar host remains its layout anchor. A delete also changes the
+  // official workflow store asynchronously, so its previous module body can
+  // be stale by the time this redraw runs. Rebuild from the stable host rather
+  // than clearing that stale body; transparent mode keeps the cheaper redraw.
+  const shouldRebuildGlassShell = isPanelGlassEnabled()
+    && workspaceState.activeModule === "workflows"
+    && workspaceState.renderTarget?.isConnected;
+  if (shouldRebuildGlassShell) {
+    renderWorkspace2Panel(workspaceState.renderTarget);
+  } else {
+    renderPanel(el);
+    restoreTreeScrollTop(el, scrollTop);
+  }
   refreshOfficialWorkflowsDeferred(250);
 }
 
@@ -5639,17 +5849,42 @@ async function loadNodeLibraryInternal() {
     ]);
     nodesState.library = normalizeNodeLibrary(libraryData.library);
     nodesState.nodeFrequencyLookup = nodeFrequencyData && typeof nodeFrequencyData === "object" ? nodeFrequencyData : {};
-    if (cachedObjectInfo?.objectInfo && typeof cachedObjectInfo.objectInfo === "object") {
-      nodesState.objectInfo = cachedObjectInfo.objectInfo;
-      nodesState.objectInfoCachedAt = Number(cachedObjectInfo.updatedAt || 0);
-      nodesState.objectInfoFromCache = true;
-    }
     const nodeIndexSignature = String(signatureData?.signature || "");
-    const cacheIsCurrent = Boolean(
+    const browserCacheIsCurrent = Boolean(
       nodeIndexSignature
       && cachedObjectInfo?.signature === nodeIndexSignature
       && cachedObjectInfo?.objectInfo,
     );
+    let serverCachedObjectInfo = null;
+    let serverCacheIsCurrent = false;
+    if (!browserCacheIsCurrent && nodeIndexSignature) {
+      const serverCacheData = await measurePromise(
+        "nodes.server-cache-request",
+        () => fetchJson("/workspace2/nodes/object-info-cache").catch((error) => {
+          console.debug("[Workspace2] Server node cache request failed", error);
+          return null;
+        }),
+      );
+      serverCachedObjectInfo = normalizeServerObjectInfoCache(serverCacheData);
+      serverCacheIsCurrent = Boolean(
+        serverCacheData?.cache_hit
+        && serverCachedObjectInfo?.signature === nodeIndexSignature,
+      );
+    }
+    const preferredCache = browserCacheIsCurrent
+      ? cachedObjectInfo
+      : (serverCacheIsCurrent ? serverCachedObjectInfo : cachedObjectInfo);
+    if (preferredCache?.objectInfo && typeof preferredCache.objectInfo === "object") {
+      nodesState.objectInfo = preferredCache.objectInfo;
+      nodesState.objectInfoCachedAt = Number(preferredCache.updatedAt || 0);
+      nodesState.objectInfoFromCache = true;
+    }
+    const cacheIsCurrent = browserCacheIsCurrent || serverCacheIsCurrent;
+    if (serverCacheIsCurrent && !browserCacheIsCurrent) {
+      writeCachedObjectInfo(serverCachedObjectInfo.objectInfo, nodeIndexSignature).catch((error) => {
+        console.debug("[Workspace2] Server cache IndexedDB warm-up failed", error);
+      });
+    }
     nodesState.nodeDefinitionsCache = null;
     nodesState.nodeDefinitionMapCache = null;
     nodesState.nodeDefinitionsSource = null;
@@ -5685,6 +5920,18 @@ async function loadNodeLibraryInternal() {
     nodesState.objectInfoLoading = false;
     finish({ error: error?.message || String(error) }, "error");
   }
+}
+
+function normalizeServerObjectInfoCache(serverCacheData) {
+  const cache = serverCacheData?.cache;
+  if (!cache?.object_info || typeof cache.object_info !== "object" || Array.isArray(cache.object_info)) {
+    return null;
+  }
+  return {
+    objectInfo: cache.object_info,
+    signature: String(cache.signature || ""),
+    updatedAt: Number(cache.updated_at || 0),
+  };
 }
 
 function applyCachedObjectInfo(cachedObjectInfo) {
@@ -5749,6 +5996,9 @@ async function loadFullObjectInfo(signature = "") {
       "nodes.indexeddb-write",
       () => writeCachedObjectInfo(nodesState.objectInfo, signature),
     );
+    persistObjectInfoToServerCache(nodesState.objectInfo, signature).catch((error) => {
+      console.debug("[Workspace2] Server node cache write failed", error);
+    });
     finish({ nodeCount: Object.keys(nodesState.objectInfo).length });
   } catch (error) {
     nodesState.objectInfoError = error.message || String(error);
@@ -5761,6 +6011,47 @@ async function loadFullObjectInfo(signature = "") {
   }
 }
 
+async function persistObjectInfoToServerCache(objectInfo, signature) {
+  if (!signature || !objectInfo || typeof objectInfo !== "object" || Array.isArray(objectInfo)) {
+    return;
+  }
+  if (typeof CompressionStream !== "function" || typeof Blob !== "function") {
+    console.debug("[Workspace2] CompressionStream is unavailable; server node cache write skipped");
+    return;
+  }
+  const started = await postJson("/workspace2/nodes/object-info-cache/upload", { signature });
+  const uploadId = String(started.upload_id || "");
+  const chunkBytes = Number(started.chunk_bytes || 0);
+  if (!uploadId || !Number.isInteger(chunkBytes) || chunkBytes <= 0) {
+    throw new Error("Invalid server node cache upload session.");
+  }
+  let uploadCompleted = false;
+  try {
+    const json = JSON.stringify(objectInfo);
+    const stream = new Blob([json], { type: "application/json" })
+      .stream()
+      .pipeThrough(new CompressionStream("gzip"));
+    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+    for (let offset = 0, chunkIndex = 0; offset < compressed.byteLength; offset += chunkBytes, chunkIndex += 1) {
+      const chunk = compressed.slice(offset, Math.min(offset + chunkBytes, compressed.byteLength));
+      await fetchJson(
+        `/workspace2/nodes/object-info-cache/upload/${encodeURIComponent(uploadId)}/${chunkIndex}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: chunk,
+        },
+      );
+    }
+    await postJson(`/workspace2/nodes/object-info-cache/upload/${encodeURIComponent(uploadId)}/finish`, {});
+    uploadCompleted = true;
+  } finally {
+    if (!uploadCompleted) {
+      postJson(`/workspace2/nodes/object-info-cache/upload/${encodeURIComponent(uploadId)}/abort`, {}).catch(() => {});
+    }
+  }
+}
+
 async function saveNodeLibrary(el) {
   const data = await postJson("/workspace2/nodes/library", { library: nodesState.library });
   nodesState.library = normalizeNodeLibrary(data.library);
@@ -5769,179 +6060,27 @@ async function saveNodeLibrary(el) {
   }
 }
 
-function emptyTemplateLibrary() {
-  return {
-    version: 1,
-    groups: [],
-    templates: [],
-    settings: {},
-  };
-}
-
-function normalizeTemplateLibrary(library) {
-  const fallback = emptyTemplateLibrary();
-  if (!library || typeof library !== "object") {
-    return fallback;
-  }
-  const groups = Array.isArray(library.groups)
-    ? library.groups.map((group, index) => ({
-        id: String(group.id || `group-${index}`),
-        name: String(group.name || group.id || `Group ${index + 1}`),
-        parentId: String(group.parentId || ""),
-        order: Number(group.order ?? index),
-        collapsed: Boolean(group.collapsed),
-        icon: String(group.icon || ""),
-        color: String(group.color || ""),
-      }))
-    : [];
-  const groupIds = new Set(groups.map((group) => group.id));
-  for (const group of groups) {
-    if (group.parentId === group.id || !groupIds.has(group.parentId)) {
-      group.parentId = "";
-    }
-  }
-  const templates = Array.isArray(library.templates)
-    ? library.templates
-        .filter((template) => template?.id && template?.name)
-        .map((template, index) => ({
-          id: String(template.id),
-          name: String(template.name),
-          groupId: groupIds.has(template.groupId) ? String(template.groupId) : "",
-          order: Number(template.order ?? index),
-          nodes: Array.isArray(template.nodes) ? template.nodes : [],
-          links: Array.isArray(template.links) ? template.links : [],
-          bounds: template.bounds && typeof template.bounds === "object" ? template.bounds : {},
-          createdAt: Number(template.createdAt || Date.now()),
-          updatedAt: Number(template.updatedAt || Date.now()),
-          useCount: Number(template.useCount || 0),
-          lastUsed: Number(template.lastUsed || 0),
-          source: String(template.source || "workspace2"),
-        }))
-    : [];
-  return {
-    ...fallback,
-    ...library,
-    groups,
-    templates,
-    settings: { ...fallback.settings, ...(library.settings || {}) },
-  };
-}
-
-async function loadTemplateLibraryInternal() {
-  const finish = startPerformanceSpan("templates.load");
-  templatesState.loading = true;
-  templatesState.error = "";
-  try {
-    const data = await measurePromise(
-      "templates.library-request",
-      () => fetchJson("/workspace2/templates/library"),
-    );
-    templatesState.library = await measurePromise(
-      "templates.library-normalize",
-      () => Promise.resolve(normalizeTemplateLibrary(data.library)),
-    );
-    finish({ templateCount: templatesState.library.templates.length });
-  } catch (error) {
-    templatesState.error = error.message;
-    templatesState.library = emptyTemplateLibrary();
-    finish({ error: templatesState.error }, "error");
-  } finally {
-    templatesState.loading = false;
-  }
-}
-
-function loadTemplateLibrary() {
-  if (templatesState.library) {
-    return Promise.resolve(templatesState.library);
-  }
-  if (!templatesState.loadPromise) {
-    templatesState.loadPromise = loadTemplateLibraryInternal().finally(() => {
-      templatesState.loadPromise = null;
-    });
-  }
-  return templatesState.loadPromise;
-}
-
-function prefetchTemplateLibrary() {
-  if (templatesState.library || templatesState.loadPromise) {
-    return;
-  }
-  const load = () => loadTemplateLibrary().catch((error) => {
-    console.debug("[Workspace2] Template prefetch failed", error);
-  });
-  if (typeof window.requestIdleCallback === "function") {
-    window.requestIdleCallback(load, { timeout: 1200 });
-  } else {
-    window.setTimeout(load, 0);
-  }
-}
-
-async function saveTemplateLibrary(el) {
-  const data = await postJson("/workspace2/templates/library", { library: templatesState.library });
-  templatesState.library = normalizeTemplateLibrary(data.library);
-  if (el?.isConnected) {
-    renderTemplatesPanel(el);
-  }
-}
-
-function uniqueTemplateGroupName(baseName = t("templates.defaultGroupName")) {
-  const existing = new Set((templatesState.library?.groups || []).map((group) => String(group.name || "").toLowerCase()));
-  let name = baseName;
-  let index = 2;
-  while (existing.has(name.toLowerCase())) {
-    name = `${baseName} ${index}`;
-    index += 1;
-  }
-  return name;
-}
-
-function getTemplateGroup(groupId) {
-  return (templatesState.library?.groups || []).find((group) => group.id === groupId) || null;
-}
-
-function childTemplateGroups(parentId = "") {
-  return [...(templatesState.library?.groups || [])]
-    .filter((group) => (group.parentId || "") === parentId)
-    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
-}
-
-function templateGroupKeys(groupId) {
-  const keys = [];
-  const group = getTemplateGroup(groupId);
-  if (!group) {
-    return keys;
-  }
-  keys.push(group.id);
-  for (const child of childTemplateGroups(group.id)) {
-    keys.push(...templateGroupKeys(child.id));
-  }
-  return keys;
-}
-
-function isTemplateGroupDescendant(groupId, possibleAncestorId) {
-  let current = getTemplateGroup(groupId);
-  const visited = new Set();
-  while (current?.parentId) {
-    if (current.parentId === possibleAncestorId) {
-      return true;
-    }
-    if (visited.has(current.parentId)) {
-      return false;
-    }
-    visited.add(current.parentId);
-    current = getTemplateGroup(current.parentId);
-  }
-  return false;
-}
-
-function normalizeTemplateOrders(groupId = "") {
-  (templatesState.library?.templates || [])
-    .filter((template) => (template.groupId || "") === groupId)
-    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
-    .forEach((template, index) => {
-      template.order = index;
-    });
-}
+const {
+  emptyTemplateLibrary,
+  normalizeTemplateLibrary,
+  loadTemplateLibrary,
+  prefetchTemplateLibrary,
+  saveTemplateLibrary,
+  uniqueTemplateGroupName,
+  getTemplateGroup,
+  childTemplateGroups,
+  templateGroupKeys,
+  isTemplateGroupDescendant,
+  normalizeTemplateOrders,
+} = createTemplateLibraryStore({
+  state: templatesState,
+  t,
+  fetchJson,
+  postJson,
+  startPerformanceSpan,
+  measurePromise,
+  renderTemplatesPanel,
+});
 
 async function createTemplateGroup(el, parentId = "") {
   templatesState.library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
@@ -6081,7 +6220,10 @@ async function moveTemplateGroupToParent(el, groupId, targetParentId = "") {
   await saveTemplateLibrary(el);
 }
 
-function selectedGraphNodes() {
+function selectedGraphNodes(override = null) {
+  if (Array.isArray(override)) {
+    return override.filter(Boolean);
+  }
   const selected = app.canvas?.selected_nodes;
   if (selected instanceof Map) {
     return [...selected.values()].filter(Boolean);
@@ -6242,8 +6384,8 @@ function uniqueTemplateName(baseName = t("templates.defaultName")) {
   return name;
 }
 
-function serializeSelectedTemplate(name = "") {
-  const selectedNodes = selectedGraphNodes();
+function serializeSelectedTemplate(name = "", selectedNodesOverride = null) {
+  const selectedNodes = selectedGraphNodes(selectedNodesOverride);
   if (!selectedNodes.length) {
     throw new Error(t("templates.selectNodesFirst"));
   }
@@ -6284,16 +6426,22 @@ function serializeSelectedTemplate(name = "") {
   };
 }
 
-async function saveSelectedNodesAsTemplate(el = templatesState.renderTarget) {
+async function saveSelectedNodesAsTemplate(el = templatesState.renderTarget, selectedNodesOverride = null) {
   if (!templatesState.library) {
     await loadTemplateLibrary();
   }
-  const selectedNodes = selectedGraphNodes();
+  const selectedNodes = selectedGraphNodes(selectedNodesOverride);
   if (!selectedNodes.length) {
-    alert(t("templates.selectNodesFirst"));
+    await workspace2Notice({
+      title: t("templates.title"),
+      message: t("templates.selectNodesFirst"),
+    });
     return null;
   }
-  const template = serializeSelectedTemplate(uniqueTemplateName(defaultTemplateName(selectedNodes)));
+  const template = serializeSelectedTemplate(
+    uniqueTemplateName(defaultTemplateName(selectedNodes)),
+    selectedNodes,
+  );
   templatesState.library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
   templatesState.library.templates.push(template);
   templatesState.editingTemplateId = template.id;
@@ -6308,16 +6456,65 @@ async function saveSelectedNodesAsTemplate(el = templatesState.renderTarget) {
   return template;
 }
 
+async function saveSelectedNodesAsTemplateFromContextMenu(contextNode = null) {
+  try {
+    const selectedNodes = selectedGraphNodes();
+    // Node menus should work for the node under the pointer even when ComfyUI
+    // has not added it to selected_nodes. Do not change the user's selection.
+    const nodesToSave = selectedNodes.length
+      ? selectedNodes
+      : (contextNode ? [contextNode] : []);
+    const template = await saveSelectedNodesAsTemplate(null, nodesToSave);
+    if (!template) {
+      return;
+    }
+    await openTemplatesForRename(template.id);
+  } catch (error) {
+    await workspace2Notice({
+      title: t("templates.title"),
+      message: error?.message || String(error),
+    });
+  }
+}
+
+function templateRenameInput(templateId) {
+  const row = document.querySelector(`[data-workspace2-template-id="${CSS.escape(templateId)}"]`);
+  return row?.querySelector(".workspace2-rename-input") || null;
+}
+
+async function openTemplatesForRename(templateId) {
+  templatesState.editingTemplateId = templateId;
+  // All Workspace2 shortcuts use this non-toggling path. Alt+C must always
+  // leave Templates open before it waits for the rename input.
+  openWorkspace2Module("templates");
+
+  // Sidebar activation can mount on the next frame. Waiting for the specific
+  // template row avoids the former race where Alt+C saved successfully but
+  // focus was attempted before the Templates panel existed.
+  const deadline = performance.now() + 1800;
+  while (performance.now() < deadline) {
+    const input = templateRenameInput(templateId);
+    if (input) {
+      input.focus();
+      input.select();
+      return true;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 32));
+  }
+  console.warn("[Workspace2] Template rename input was not mounted after save", { templateId });
+  return false;
+}
+
 async function saveSelectedNodesAsTemplateFromShortcut() {
   try {
     const template = await saveSelectedNodesAsTemplate(null);
     if (!template) {
       return;
     }
-    templatesState.editingTemplateId = template.id;
     if (isWorkspace2AltCOpenTemplatesEnabled()) {
-      openWorkspace2Module("templates");
+      await openTemplatesForRename(template.id);
     } else if (templatesState.renderTarget?.isConnected) {
+      templatesState.editingTemplateId = template.id;
       renderTemplatesPanel(templatesState.renderTarget);
     }
   } catch (error) {
@@ -10410,8 +10607,7 @@ function renderContextMenu(el, panel) {
     addItem(t("menu.open"), () => openWorkflow(item.path));
   }
   addItem(t("menu.rename"), () => {
-    state.editingPath = item.path;
-    renderPanel(el);
+    beginWorkflowRename(el, item.path, "browse");
   });
   addItem(t("menu.moveToRoot"), () => moveItem(el, item.path, ""));
   addItem(t("menu.moveToTrash"), () => moveToTrash(el, item));
@@ -10436,14 +10632,25 @@ function renderTrashPanel(el, panel) {
     row.className = "workspace2-trash-item";
 
     const info = document.createElement("div");
+    info.className = "workspace2-trash-info";
+    const icon = document.createElement("span");
+    applyDecoratedIcon(
+      icon,
+      "",
+      "",
+      item.type === "folder" ? DEFAULT_FOLDER_ICON_CLASS : DEFAULT_FILE_ICON_CLASS,
+    );
+    const text = document.createElement("div");
+    text.className = "workspace2-trash-text";
     const name = document.createElement("div");
     name.className = "workspace2-trash-name";
-    name.textContent = `${item.type === "folder" ? t("trash.folderPrefix") : t("trash.filePrefix")}${item.name}`;
+    name.textContent = item.name;
     const meta = document.createElement("div");
     meta.className = "workspace2-trash-meta";
     meta.title = item.original_path;
     meta.textContent = `${item.original_path} | ${item.deleted_at || ""}`;
-    info.append(name, meta);
+    text.append(name, meta);
+    info.append(icon, text);
 
     const restore = iconButton("restore", t("trash.restore"), async () => {
       try {
@@ -10473,6 +10680,74 @@ function renderTrashPanel(el, panel) {
   }
 
   panel.append(list);
+}
+
+function beginWorkflowRename(el, path, surface) {
+  state.editingPath = path;
+  state.editingSurface = surface;
+  renderPanel(el);
+}
+
+function createWorkflowRenameInput(el, item, surface) {
+  const input = document.createElement("input");
+  input.className = "workspace2-rename-input";
+  input.value = workflowDisplayName(item);
+  isolateComfyKeys(input);
+
+  // Enter and blur can arrive back-to-back. They must share one in-flight
+  // request rather than each trying to submit (or leaving the UI halfway
+  // through a rename). A rejected request remains editable after re-render.
+  let renamePromise = null;
+  const commitRename = () => {
+    if (!renamePromise) {
+      input.disabled = true;
+      renamePromise = renameItem(el, item, input.value.trim());
+    }
+    return renamePromise;
+  };
+  const handleCommitError = (error) => {
+    handleError(el, error);
+  };
+
+  input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("keydown", async (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      try {
+        await commitRename();
+      } catch (error) {
+        handleCommitError(error);
+      }
+      return;
+    }
+    if (event.key === "Escape" && !renamePromise) {
+      event.preventDefault();
+      event.stopPropagation();
+      state.editingPath = "";
+      state.editingSurface = "";
+      renderPanel(el);
+    }
+  });
+  input.addEventListener("blur", async () => {
+    // Enter has already started the same promise. Its key handler owns the
+    // result/error, so blur must not report a duplicate failure.
+    if (renamePromise) {
+      return;
+    }
+    try {
+      await commitRename();
+    } catch (error) {
+      handleCommitError(error);
+    }
+  });
+  setTimeout(() => {
+    if (state.editingPath === item.path && state.editingSurface === surface) {
+      input.focus();
+      input.select();
+    }
+  }, 0);
+  return input;
 }
 
 function renderNode(el, list, node, depth) {
@@ -10560,48 +10835,8 @@ function renderNode(el, list, node, depth) {
   const nameCell = document.createElement("div");
   nameCell.className = "workspace2-name";
 
-  if (state.editingPath === node.path) {
-    const input = document.createElement("input");
-    input.className = "workspace2-rename-input";
-    input.value = workflowDisplayName(node);
-    isolateComfyKeys(input);
-    let renameSubmitted = false;
-    const commitRename = async () => {
-      if (renameSubmitted) {
-        return;
-      }
-      renameSubmitted = true;
-      await renameItem(el, node, input.value.trim());
-    };
-    input.addEventListener("click", (event) => event.stopPropagation());
-    input.addEventListener("keydown", async (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        try {
-          await commitRename();
-        } catch (error) {
-          handleError(el, error);
-        }
-      }
-      if (event.key === "Escape") {
-        renameSubmitted = true;
-        state.editingPath = "";
-        renderPanel(el);
-      }
-    });
-    input.addEventListener("blur", async () => {
-      try {
-        await commitRename();
-      } catch (error) {
-        handleError(el, error);
-      }
-    });
-    nameCell.append(input);
-    setTimeout(() => {
-      input.focus();
-      input.select();
-    }, 0);
+  if (state.editingPath === node.path && state.editingSurface !== "open") {
+    nameCell.append(createWorkflowRenameInput(el, node, "browse"));
   } else {
     const name = document.createElement("span");
     name.textContent = workflowDisplayName(node);
@@ -10641,8 +10876,7 @@ function renderNode(el, list, node, depth) {
 
   actions.append(
     iconButton("edit", t("row.rename"), () => {
-      state.editingPath = node.path;
-      renderPanel(el);
+      beginWorkflowRename(el, node.path, "browse");
     }),
   );
   actions.append(
@@ -10756,16 +10990,28 @@ function recentWorkflowRows(el) {
   const activeOfficialWorkflow = officialMode ? getActiveOfficialWorkflow(app) : null;
   const recent = officialMode
     ? getOpenOfficialWorkflows(app)
+      // ComfyUI can leave a transient empty slot in openWorkflows while a
+      // deleted workflow is being removed from the official store. Rendering
+      // must tolerate that intermediate state; otherwise the exception occurs
+      // after the module body has been cleared and makes the panel look blank.
+      .filter((workflow) => workflow && typeof workflow === "object")
       .map((workflow) => {
         const path = relativeWorkflowPathFromOfficial(workflow.path || "");
         return {
           path,
           name: workflow.filename || path,
-          item: existing.get(path),
+          // The official store changes this path atomically. The filesystem
+          // list can legitimately arrive one refresh later, so do not hide an
+          // open tab just because its matching local item is briefly stale.
+          item: existing.get(path) || {
+            type: "file",
+            name: workflow.filename || path.split("/").pop() || path,
+            path,
+          },
           officialWorkflow: workflow,
         };
       })
-      .filter((entry) => entry.path && entry.item)
+      .filter((entry) => entry.path)
     : readRecentWorkflows()
       .map((entry) => ({ ...entry, item: existing.get(entry.path) }))
       .filter((entry) => entry.item)
@@ -10798,13 +11044,13 @@ function recentWorkflowRows(el) {
     if (isActive) {
       row.classList.add("is-selected");
     }
-    const info = document.createElement("button");
-    info.type = "button";
+    const isRenaming = state.editingPath === entry.path && state.editingSurface === "open";
+    const info = document.createElement(isRenaming ? "div" : "button");
+    if (!isRenaming) {
+      info.type = "button";
+    }
     info.className = "workspace2-current-workflow-info";
     info.title = entry.path;
-    const name = document.createElement("div");
-    name.className = "workspace2-current-workflow-name";
-    name.textContent = workflowDisplayName(entry.item) || entry.name || entry.path;
     if (isDirty) {
       const dirtyDot = document.createElement("span");
       dirtyDot.className = "workspace2-current-workflow-dirty-dot";
@@ -10812,22 +11058,31 @@ function recentWorkflowRows(el) {
       dirtyDot.setAttribute("aria-label", t("workflows.unsavedChanges"));
       info.append(dirtyDot);
     }
-    info.append(name);
-    info.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      try {
-        state.selectedPath = entry.path;
-        await openWorkflow(entry.path);
-        renderPanel(el);
-      } catch (error) {
-        handleError(el, error);
-      }
-    });
+    if (isRenaming) {
+      info.append(createWorkflowRenameInput(el, entry.item, "open"));
+    } else {
+      const name = document.createElement("div");
+      name.className = "workspace2-current-workflow-name";
+      name.textContent = workflowDisplayName(entry.item) || entry.name || entry.path;
+      info.append(name);
+      info.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          state.selectedPath = entry.path;
+          await openWorkflow(entry.path);
+          renderPanel(el);
+        } catch (error) {
+          handleError(el, error);
+        }
+      });
+    }
 
     const actions = document.createElement("div");
     actions.className = "workspace2-actions";
-    if (isDirty) {
+    // A dirty marker belongs to every unsaved workflow, but only the workflow
+    // currently shown on the canvas can be saved from this list.
+    if (isDirty && isActive) {
       actions.append(
         iconButton("save", t("workflows.saveCurrent"), async (event) => {
           event.preventDefault();
@@ -10842,12 +11097,35 @@ function recentWorkflowRows(el) {
     }
     if (isOfficialWorkflow) {
       actions.append(
+        iconButton("edit", t("row.rename"), (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          beginWorkflowRename(el, entry.path, "open");
+        }),
+      );
+      actions.append(
         iconButton("x", t("workflows.close"), async (event) => {
           event.preventDefault();
           event.stopPropagation();
           try {
-            await closeOfficialWorkflow(app, entry.officialWorkflow);
-            renderPanel(el);
+            if (isDirty) {
+              const choice = await workspace2ConfirmDirtyWorkflowClose(
+                workflowDisplayName(entry.item) || entry.name || entry.path,
+              );
+              if (!choice) {
+                return;
+              }
+              if (choice === "save") {
+                const saved = await saveOfficialWorkflow(entry.officialWorkflow);
+                if (!saved) {
+                  return;
+                }
+              }
+            }
+            const closed = await closeOfficialWorkflow(app, entry.officialWorkflow);
+            if (closed) {
+              renderPanel(el);
+            }
           } catch (error) {
             handleError(el, error);
           }
@@ -13067,7 +13345,101 @@ function registerWorkspace2SidebarTab() {
     render: renderWorkspace2Panel,
   });
   registry.add(WORKSPACE2_TAB_ID);
+  installWorkspace2SidebarEmojiIcon();
   return true;
+}
+
+function installWorkspace2SidebarEmojiIcon() {
+  const styleId = "workspace2-sidebar-emoji-icon-style";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    // SidebarTabExtension.icon accepts an icon-class string, not arbitrary
+    // text. Render the agreed emoji in Workspace2's own button only instead
+    // of passing an invalid class to ComfyUI's shared sidebar component.
+    style.textContent = `
+      .workspace2-tab-button .sidebar-icon-wrapper > .side-bar-button-icon {
+        display: none !important;
+      }
+      .workspace2-tab-button .sidebar-icon-wrapper::before {
+        content: "🧩";
+        display: block;
+        font-size: 16px;
+        line-height: 1;
+      }
+    `;
+    document.head.append(style);
+  }
+
+  let attempts = 0;
+  const markButton = () => {
+    const button = findWorkspace2SidebarTabElement(WORKSPACE2_TAB_ID);
+    if (button) {
+      button.classList.add("workspace2-tab-button");
+      return;
+    }
+    attempts += 1;
+    if (attempts < 12) {
+      window.setTimeout(markButton, 80);
+    }
+  };
+  markButton();
+}
+
+function setupWorkspace2ContextMenuOrdering() {
+  if (setupWorkspace2ContextMenuOrdering.ready) {
+    return;
+  }
+  setupWorkspace2ContextMenuOrdering.ready = true;
+
+  const moveWorkspace2ItemsToTop = () => {
+    for (const menu of document.querySelectorAll(".litecontextmenu")) {
+      const entries = [...menu.querySelectorAll(":scope > .litemenu-entry")];
+      // Always derive the order from the registered menu labels.  Repeated
+      // insertBefore(entry, sameAnchor) reverses siblings and was responsible
+      // for the visible "Save as template" one-row jump after the menu opened.
+      const workspace2Entries = [...WORKSPACE2_MENU_LABELS]
+        .map((label) => entries.find((entry) => entry.textContent?.trim() === label))
+        .filter(Boolean);
+      if (!workspace2Entries.length) {
+        continue;
+      }
+      const isAlreadyFirst = workspace2Entries.every((entry, index) => entries[index] === entry);
+      if (isAlreadyFirst) {
+        continue;
+      }
+      // The official API appends extension items. Move only Workspace2's two
+      // entries, preserving their internal order and leaving other extensions
+      // untouched.
+      const fragment = document.createDocumentFragment();
+      workspace2Entries.forEach((entry) => fragment.append(entry));
+      menu.insertBefore(fragment, entries.find((entry) => !workspace2Entries.includes(entry)) || null);
+    }
+  };
+
+  // LiteGraph creates menu entries after the native contextmenu event. A
+  // MutationObserver runs before the next paint, unlike the former timeout
+  // passes, so the user never sees an initial row followed by a rearrangement.
+  let queued = false;
+  const queueOrdering = () => {
+    if (queued) {
+      return;
+    }
+    queued = true;
+    queueMicrotask(() => {
+      queued = false;
+      moveWorkspace2ItemsToTop();
+    });
+  };
+  new MutationObserver((records) => {
+    if (records.some((record) => [...record.addedNodes].some((node) => (
+      node instanceof Element
+      && (node.matches?.(".litecontextmenu") || node.querySelector?.(".litecontextmenu"))
+    )))) {
+      queueOrdering();
+    }
+  }).observe(document.body, { childList: true, subtree: true });
+  document.addEventListener("contextmenu", queueOrdering, true);
 }
 
 app.registerExtension({
@@ -13098,9 +13470,34 @@ app.registerExtension({
     return [
       null,
       {
-        content: "Workspace2 编组",
+        content: `${WORKSPACE2_MENU_MARK}编组`,
         callback: () => {
           workspace2CanvasGroups.createGroupFromSelection?.();
+        },
+      },
+      {
+        content: `${WORKSPACE2_MENU_MARK}保存为模板`,
+        callback: () => {
+          saveSelectedNodesAsTemplateFromContextMenu();
+        },
+      },
+    ];
+  },
+  // ComfyUI calls this hook only when a node context menu is opened.  Keeping
+  // it declarative avoids the legacy global LiteGraph menu monkey-patch from
+  // leaking Workspace2 items into other extensions' menus.
+  getNodeMenuItems(node) {
+    return [
+      {
+        content: `${WORKSPACE2_MENU_MARK}编组`,
+        callback: () => {
+          workspace2CanvasGroups.createGroupFromSelection?.(node);
+        },
+      },
+      {
+        content: `${WORKSPACE2_MENU_MARK}保存为模板`,
+        callback: () => {
+          saveSelectedNodesAsTemplateFromContextMenu(node);
         },
       },
     ];
@@ -13111,8 +13508,10 @@ app.registerExtension({
     await loadLocale();
     startLocaleWatcher();
     setupWorkspaceShortcuts();
+    setupWorkspace2ContextMenuOrdering();
     setupWorkflowDirtyTracking();
     setupOfficialWorkflowStateSync();
+    workspace2CanvasGroups.setNoticeHandler?.(workspace2Notice);
     workspace2CanvasGroups.init();
     registerWorkspace2CanvasGroupCommands();
     detectOfficialNodeAdapter();

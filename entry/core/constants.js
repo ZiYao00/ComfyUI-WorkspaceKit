@@ -32,7 +32,6 @@ export const OFFICIAL_NODE_ADAPTER_KEY = "workspace2.officialNodeAdapter";
 export const CANVAS_GROUP_CTRL_G_KEY = "workspace2.canvasGroups.ctrlGCreate";
 export const WORKSPACE2_MODULE_KEY = "workspace2.activeModule";
 export const WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY = "workspace2.shortcuts.altCOpenTemplates";
-export const WORKSPACE2_SHORTCUT_CLOSE_SAME_KEY = "workspace2.shortcuts.closeSameModule";
 export const DEFAULT_LOCALE = "en-US";
 export const NODE_DEFAULT_GROUP_ID = "default";
 export const WORKSPACE2_TAB_ID = "workspace2";

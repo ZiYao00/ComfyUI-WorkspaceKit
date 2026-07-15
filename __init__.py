@@ -50,7 +50,7 @@ class Workspace2Title:
     FUNCTION = "execute"
     # Public node-menu category. Keep the serialized node mapping below under
     # its legacy name until an explicit workflow migration is introduced.
-    CATEGORY = "WorkspaceKit"
+    CATEGORY = "🧩 WorkspaceKit"
 
     def execute(self):
         return ()
@@ -62,7 +62,7 @@ NODE_CLASS_MAPPINGS = {
 NODE_DISPLAY_NAME_MAPPINGS = {
     # The mapping key remains legacy-compatible; this string is what users see
     # in the ComfyUI node menu and can follow the new public brand.
-    "Workspace2Title": "WorkspaceKit 标题",
+    "Workspace2Title": "Transparent Title（透明标题）",
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 

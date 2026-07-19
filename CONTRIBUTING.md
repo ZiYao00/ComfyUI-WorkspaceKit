@@ -16,9 +16,10 @@ Thank you for helping improve WorkspaceKit.
 2. Install the plugin in a test ComfyUI environment.
 3. Make the smallest change that solves the issue.
 4. Test both normal and failure paths.
-5. Update English and Chinese documentation when user-facing behavior changes.
-6. Include screenshots or a short recording for UI changes.
-7. Open a pull request using the repository template.
+5. Update `docs/MODULE_MAP.md`, `docs/ARCHITECTURE.md`, and `docs/TESTING.md` when a module boundary changes.
+6. Update English and Chinese documentation when user-facing behavior changes.
+7. Include screenshots or a short recording for UI changes.
+8. Open a pull request using the repository template.
 
 ## Pull request expectations
 
@@ -40,6 +41,10 @@ A pull request should include:
 - Keep UI, storage, services, and ComfyUI adapters separated.
 - Avoid broad prototype patches and undocumented global side effects.
 - Optional integrations must fail safely.
+- Keep `entry.js` as the composition root; do not move sidebar registration or global shortcut ownership into a feature renderer.
+- New extracted modules must not do work at import time. Inject network, storage, rendering, and ComfyUI adapter dependencies explicitly.
+- Update `docs/MODULE_MAP.md` with ownership, forbidden responsibilities, and validation status for every module boundary change.
+- Do not merge modules merely to reduce file count. Merge only when they have the same owner, dependency boundary, and regression suite.
 
 ## Security and file operations
 

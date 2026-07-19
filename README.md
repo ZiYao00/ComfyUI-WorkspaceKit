@@ -194,6 +194,8 @@ Maintainer: ZiYao00
 
 Project homepage: https://github.com/ZiYao00/ComfyUI-WorkspaceKit
 
+Developer documentation: [Architecture](docs/ARCHITECTURE.md), [Module Map](docs/MODULE_MAP.md), [Testing Log](docs/TESTING.md), and [Contributing](CONTRIBUTING.md).
+
 ## Credits
 
 Special thanks to the authors of these projects for providing useful foundations, references, and inspiration:

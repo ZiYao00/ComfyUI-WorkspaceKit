@@ -194,6 +194,8 @@ WorkspaceKit 会移动、重命名和整理工作流文件。首次在主 ComfyU
 
 项目主页：https://github.com/ZiYao00/ComfyUI-WorkspaceKit
 
+开发维护文档：[架构说明](docs/ARCHITECTURE.md)、[模块清单](docs/MODULE_MAP.md)、[测试记录](docs/TESTING.md)、[贡献说明](CONTRIBUTING.md)。
+
 ## 致谢
 
 特别感谢以下项目和作者提供的基础、灵感和参考：

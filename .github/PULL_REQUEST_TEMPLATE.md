@@ -9,6 +9,8 @@ Explain the implementation and why this approach was chosen.
 ## Scope
 
 - Files and modules changed:
+- Module ownership or dependency boundary changed:
+- `docs/MODULE_MAP.md` updated (or why not):
 - User-facing behavior changed:
 - Data or settings migration:
 - Backward compatibility impact:
@@ -19,6 +21,8 @@ Explain the implementation and why this approach was chosen.
 - [ ] Frontend registration checked
 - [ ] Relevant automated tests passed
 - [ ] Manual ComfyUI test completed
+- [ ] Module boundary and injected dependencies reviewed
+- [ ] Module Map and architecture/testing records updated where applicable
 - [ ] Dark and light themes checked for UI changes
 - [ ] Existing Workspace2 data compatibility considered
 

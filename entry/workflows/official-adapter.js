@@ -30,18 +30,19 @@ export function isOfficialWorkflowModified(workflow) {
 }
 
 /**
- * Load a workflow's persisted state without making it active.
+ * Load persisted content without changing the official active workflow.
  *
- * ComfyUI must deactivate the old workflow while it is still active, then
- * activate the target only after the new graph is in place. Calling the store's
- * openWorkflow() here reverses that order and can capture the old canvas into
- * the target workflow, producing a false unsaved marker after a tab switch.
+ * ComfyUI's workflow service performs the active-workflow transition from
+ * app.loadGraphData(..., workflow) in afterLoadNewGraph(). Calling
+ * workflowStore.openWorkflow() first skips that service ordering and can leave
+ * the change tracker in an inconsistent state. Reuse an already loaded state,
+ * matching the official service's loadFromRemote guard.
  */
 export async function loadOfficialWorkflow(workflow) {
   if (!workflow || typeof workflow.load !== "function") {
     return false;
   }
-  return await workflow.load();
+  return workflow.isLoaded ? workflow : await workflow.load();
 }
 
 export async function saveOfficialWorkflow(workflow) {

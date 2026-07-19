@@ -75,12 +75,20 @@ comfy_path = Path(folder_paths.__file__).resolve().parent
 print(f"Loading: WorkspaceKit ({VERSION})")
 
 
-def _json_response(data, status=200):
-    return web.Response(
+def _json_response(data, status=200, compress=False):
+    response = web.Response(
         text=json.dumps(data, ensure_ascii=False),
         status=status,
         content_type="application/json",
     )
+    # The node-object-info snapshot can be tens of megabytes on large ComfyUI
+    # installations.  Keep normal API responses untouched, but let aiohttp
+    # negotiate gzip/deflate for that payload so a fresh browser profile does
+    # not trade a slow /object_info build for an equally large uncompressed
+    # cache download.  fetch() transparently decompresses the response.
+    if compress:
+        response.enable_compression()
+    return response
 
 
 def _legacy_settings_paths():
@@ -562,7 +570,7 @@ async def workspace2_nodes_object_info_cache(_request):
             "plugin_count": signature_data["plugin_count"],
             "registered_node_count": signature_data["registered_node_count"],
             "cache": cache,
-        })
+        }, compress=cache is not None)
     except Exception as exc:
         return _json_error(str(exc), status=500)
 

@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-workspacekit"
 description = "A modular workspace, sidebar, and panel system for organizing workflows, nodes, favorites, templates, and canvas groups in ComfyUI."
-version = "0.2.1b0"
+version = "0.2.1"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
@@ -21,6 +21,5 @@ Repository = "https://github.com/ZiYao00/ComfyUI-WorkspaceKit"
 Issues = "https://github.com/ZiYao00/ComfyUI-WorkspaceKit/issues"
 
 [tool.comfy]
-# PublisherId will be added after the Comfy Registry publisher account is confirmed.
+PublisherId = "yuer424"
 DisplayName = "WorkspaceKit"
-Icon = ""

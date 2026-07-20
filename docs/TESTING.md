@@ -778,3 +778,7 @@ Run this checklist in the test package before accepting a main-package release. 
 - WorkspaceKit's Open-row dot and Save visibility now use an in-memory official-workflow baseline with the same semantics: canvas viewport and node ordering are ignored; node properties, links, groups, reroutes, definitions, subgraphs, and other graph content remain compared.
 - Isolated regression check passed: changing only `extra.ds` plus node order remains clean; changing a node title becomes dirty.
 - **2026-07-18 live test-package acceptance:** the clean `小红书 → 99 → 小红书` sequence passed with no dirty dot or Save button on either Open row. The separate dirty-tab reactivation regression is repaired and passed the real-node-move test above; main-package release acceptance remains outstanding.
+# Current release baseline
+
+- **2026-07-20:** The published Comfy Registry release is `0.2.1` for `comfyui-workspacekit`. `pyproject.toml` is the authoritative release-version source; the backend reads it for `/workspace2/info`, and the Settings dialog reads that endpoint.
+- Historical entries below retain their original `0.2.1b0` observations and must not be rewritten as though they were recorded against a later release.

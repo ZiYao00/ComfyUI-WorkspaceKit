@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.2 - 2026-07-20
+
+Release-version governance and documentation synchronization.
+
+### Changed
+
+- Made `pyproject.toml` the authoritative package and Registry version source.
+- Made the backend runtime version read that source instead of maintaining a second literal version.
+- Added release-version validation and update tooling for future GitHub and Registry releases.
+- Synchronized public-beta version status in the English and Chinese README files.
+
+### Notes
+
+- This GitHub release is `0.2.2`; the Comfy Registry listing remains on `0.2.1` until the next explicit Registry publication.
+
+## 0.2.1 - 2026-07-20
+
+First Comfy Registry release of WorkspaceKit.
+
+### Changed
+
+- Published the public-beta package to the Comfy Registry as `comfyui-workspacekit`.
+- Standardized the release version as `0.2.1` across package metadata, runtime reporting, and README status lines.
+- Made `pyproject.toml` the runtime version source and added a release-version check/update script.
+
+### Notes
+
+- The product remains a public beta; the semantic release version does not imply a stable 1.0 release.
+
 ## 0.2.1-beta / 0.2.1b0 - 2026-07-08
 
 Release documentation, version alignment, and public beta packaging update.

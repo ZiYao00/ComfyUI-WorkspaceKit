@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -66,7 +67,28 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
-VERSION = "0.2.1"
+
+def _read_package_version():
+    """Read the Registry/package version from the single release source.
+
+    `pyproject.toml` is required by the Comfy Registry and is shipped with the
+    plugin.  Keep the parser deliberately small so this plugin remains usable
+    on ComfyUI's supported Python 3.9 installations, where `tomllib` is not
+    available in the standard library.
+    """
+    pyproject_path = Path(__file__).resolve().with_name("pyproject.toml")
+    try:
+        content = pyproject_path.read_text(encoding="utf-8")
+        project_section = content.split("[project]", 1)[1].split("[", 1)[0]
+        match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']\s*$', project_section, re.MULTILINE)
+        if match:
+            return match.group(1)
+    except (IndexError, OSError):
+        pass
+    return "unknown"
+
+
+VERSION = _read_package_version()
 PLUGIN_NAME = "comfyui-workspacekit"
 
 workspace_path = Path(__file__).resolve().parent

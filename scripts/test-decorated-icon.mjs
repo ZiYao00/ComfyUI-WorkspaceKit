@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import { applyDecoratedIcon, isPrimeIconClass } from "../entry/ui/decorated-icon.js";
+const changes = [];
+const element = { className: "old", textContent: "old", style: { removeProperty: (key) => changes.push(["remove", key]), setProperty: (key, value) => changes.push(["set", key, value]) } };
+assert.equal(isPrimeIconClass("pi pi-folder"), true);
+assert.equal(isPrimeIconClass("📁"), false);
+applyDecoratedIcon(element, "📁", "#0A84FF", "pi-folder");
+assert.equal(element.className, "workspace2-emoji-icon");
+assert.equal(element.textContent, "📁");
+assert.deepEqual(changes, [["remove", "--workspace2-icon-color"], ["set", "--workspace2-icon-color", "#0A84FF"]]);
+changes.length = 0;
+applyDecoratedIcon(element, "pi pi-star", "", "pi-folder");
+assert.equal(element.className, "workspace2-prime-icon pi pi-star");
+assert.equal(element.textContent, "");
+assert.deepEqual(changes, [["remove", "--workspace2-icon-color"]]);
+applyDecoratedIcon(element, "", "", "pi-folder");
+assert.equal(element.className, "workspace2-prime-icon pi-folder");
+console.log("decorated icon contract passed");

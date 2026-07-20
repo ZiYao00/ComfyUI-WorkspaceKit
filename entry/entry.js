@@ -12,7 +12,35 @@ import { createNodePanelState } from "./nodes/panel-state.js";
 import { createNodeLibraryNormalizer } from "./nodes/library-normalizer.js";
 import { createNodeLibraryLoader } from "./nodes/library-loader.js";
 import { createNodeObjectInfoState } from "./nodes/object-info-state.js";
+import { createNodeObjectInfoCache } from "./nodes/object-info-cache.js";
+import { createNodeObjectInfoRefreshCoordinator } from "./nodes/object-info-refresh.js";
+import { createNodeFavoriteStore } from "./nodes/favorite-store.js";
+import { createNodeFavoriteGroupStore } from "./nodes/favorite-group-store.js";
+import { createOfficialNodeTreeBuilder } from "./nodes/official-tree.js";
+import { createOfficialNodeTreeRenderer } from "./nodes/official-tree-renderer.js";
+import { createNodeRowRenderer } from "./nodes/row-renderer.js";
+import { createNodeTopSectionRenderer } from "./nodes/top-section-renderer.js";
+import { createNodeCategoryProjection } from "./nodes/category-projection.js";
 import { createTemplateLibraryStore } from "./templates/library.js";
+import { createTemplateSearch } from "./templates/search.js";
+import { createTemplateResultsProjection } from "./templates/results-projection.js";
+import { createTemplateRootRenderer } from "./templates/root-renderer.js";
+import { createTemplateBodyStateRenderer } from "./templates/body-state-renderer.js";
+import { createTemplateGroupContentsRenderer } from "./templates/group-contents-renderer.js";
+import { openTemplateGroupContextMenu as openTemplateGroupContextMenuRenderer } from "./templates/group-context-menu.js";
+import { createTemplateDragDrop } from "./templates/drag-drop.js";
+import { createTemplateGroupHeaderRenderer } from "./templates/group-header-renderer.js";
+import { createTemplateRowRenderer } from "./templates/row-renderer.js";
+import { renderTemplateContextMenu as renderTemplateContextMenuRenderer } from "./templates/context-menu-renderer.js";
+import { createTemplateMinimap } from "./templates/minimap.js";
+import { createPersonalizationPanel } from "./ui/personalization-panel.js";
+import { setExpandedRecursive } from "./ui/tree-expansion.js";
+import { applyDecoratedIcon } from "./ui/decorated-icon.js";
+import { createPreviewPositioner } from "./ui/preview-positioner.js";
+import { createPanelChrome } from "./ui/panel-chrome.js";
+import { createSettingsControls } from "./settings/controls.js";
+import { createSettingsDialogSections } from "./settings/dialog-sections.js";
+import { createSettingsDialogShell } from "./settings/dialog-shell.js";
 import { configureI18n, t as translate } from "./core/i18n.js";
 import {
   closeOfficialWorkflow,
@@ -32,8 +60,22 @@ import { createWorkflowContextMenuRenderer } from "./workflows/context-menu-rend
 import { createWorkflowTrashRenderer } from "./workflows/trash-renderer.js";
 import { createWorkflowItemStore } from "./workflows/item-store.js";
 import { createWorkflowPathState } from "./workflows/path-state.js";
+import { createWorkflowFolderMetaService } from "./workflows/folder-meta.js";
+import { createWorkflowCustomOrderStore } from "./workflows/custom-order-store.js";
+import { createWorkflowTreeInteraction } from "./workflows/tree-interaction.js";
 import { createWorkflowTreeBuilder } from "./workflows/tree-builder.js";
 import { createWorkflowSearch } from "./workflows/search.js";
+import { createWorkflowRenameInputFactory } from "./workflows/rename-input.js";
+import { createWorkflowOpenListRenderer } from "./workflows/open-list-renderer.js";
+import {
+  joinPath,
+  normalizeMetaPath,
+  parentPath,
+  relativeWorkflowPathFromOfficial,
+  replaceWorkflowPathPrefix,
+  workflowPathIsWithin,
+  workflowRenameTargetPath,
+} from "./workflows/path-utils.js";
 import { renderWorkflowBrowseNode } from "./workflows/row-renderer.js";
 import {
   closeWorkflowSortMenu as closeWorkflowSortMenuRenderer,
@@ -558,6 +600,11 @@ const COMFY_CATEGORY_ORDER_KEYS = [
   "nodes.officialCategory.audio",
 ];
 
+const workflowCustomOrderStore = createWorkflowCustomOrderStore({
+  storage: window.localStorage,
+  key: WORKFLOW_ORDER_KEY,
+});
+
 const state = {
   query: "",
   items: [],
@@ -597,7 +644,7 @@ const state = {
   sort: WORKFLOW_SORTS.includes(localStorage.getItem(WORKFLOW_SORT_KEY)) ? localStorage.getItem(WORKFLOW_SORT_KEY) : "nameAsc",
   customOrderEnabled: localStorage.getItem(WORKFLOW_CUSTOM_ORDER_KEY) === "1",
   folderFirst: localStorage.getItem(WORKFLOW_FOLDER_FIRST_KEY) !== "0",
-  customOrder: readWorkflowCustomOrder(),
+  customOrder: workflowCustomOrderStore.read(),
   locale: DEFAULT_LOCALE,
   strings: {},
   localeTimer: null,
@@ -741,6 +788,28 @@ const workflowItems = createWorkflowItemStore({
   replacePathPrefix: replaceWorkflowPathPrefix,
 });
 
+const personalizationPanel = createPersonalizationPanel({
+  document,
+  window,
+  translate: t,
+  applyDecoratedIcon,
+  defaultFolderIconClass: DEFAULT_FOLDER_ICON_CLASS,
+});
+const closePersonalizationPanel = personalizationPanel.closePersonalizationPanel;
+const openPersonalizationPanel = personalizationPanel.openPersonalizationPanel;
+
+// This service owns only icon/color metadata. The generic personalization UI
+// and all workflow file/official Store behavior remain in this entry module.
+const workflowFolderMetaService = createWorkflowFolderMetaService({
+  state,
+  normalizePath: normalizeMetaPath,
+  postJson,
+  renderPanel,
+});
+const workflowFolderMeta = workflowFolderMetaService.get;
+const saveWorkflowFolderMeta = workflowFolderMetaService.save;
+const resetWorkflowFolderStyle = workflowFolderMetaService.reset;
+
 // This module owns only local Browse path state. It receives official dirty
 // state and recents persistence as callbacks to preserve their call order.
 const workflowPathState = createWorkflowPathState({
@@ -775,6 +844,121 @@ const templatesState = {
   sortMenuElement: null,
   sortMenuCloseHandler: null,
 };
+
+const { createRenameInput: createWorkflowRenameInputRenderer } = createWorkflowRenameInputFactory({
+  document,
+  schedule: (callback) => setTimeout(callback, 0),
+});
+
+const { createPanelHeader, createSearchToolbar } = createPanelChrome({
+  document,
+  translate: t,
+  iconSvg,
+  prepareInput: isolateComfyKeys,
+});
+
+const { renderOpenWorkflowList } = createWorkflowOpenListRenderer({
+  document,
+  translate: t,
+  iconButton,
+});
+
+const {
+  templateMatchesQuery,
+  compareTemplatesBySort,
+  sortedVisibleTemplates,
+} = createTemplateSearch({
+  splitCamelCase,
+  compactSearchFields,
+  genericSearchScores,
+  compareSearchScores,
+  getSortMode: () => templatesState.sort,
+});
+
+const workflowTreeInteraction = createWorkflowTreeInteraction({
+  state,
+  renderPanel,
+  requestAnimationFrame,
+  setExpandedRecursive,
+});
+const getTreeScrollTop = workflowTreeInteraction.getTreeScrollTop;
+const restoreTreeScrollTop = workflowTreeInteraction.restoreTreeScrollTop;
+const toggleWorkflowFolder = workflowTreeInteraction.toggleWorkflowFolder;
+
+const {
+  projectTemplateGroupResults,
+  projectTemplateRootResults,
+} = createTemplateResultsProjection({
+  // `childTemplateGroups` is created by the template-library factory later in
+  // this module. Pass a deferred callback instead of reading that const during
+  // entry-module evaluation; direct capture here caused a TDZ ReferenceError
+  // that prevented `app.registerExtension()` and the sidebar entry from running.
+  getChildGroups: (parentId) => childTemplateGroups(parentId),
+  templateMatchesQuery,
+  compareTemplatesBySort,
+});
+
+const {
+  readDraggedTemplate,
+  makeTemplateGroupDragSource,
+  makeTemplateDropTarget,
+} = createTemplateDragDrop({
+  state: templatesState,
+  templateDragType: TEMPLATE_DRAG_TYPE,
+  templateGroupDragType: TEMPLATE_GROUP_DRAG_TYPE,
+  // The template-library factory is initialized later. Defer this lookup to
+  // drag time so entry evaluation cannot hit its temporal-dead-zone.
+  isGroupDescendant: (targetId, sourceId) => isTemplateGroupDescendant(targetId, sourceId),
+  onMoveTemplate: moveTemplateToGroup,
+  onMoveGroup: moveTemplateGroupToParent,
+  onError: (el, error) => {
+    templatesState.error = error.message;
+    renderTemplatesPanel(el);
+  },
+});
+
+const { renderTemplateGroupHeader } = createTemplateGroupHeaderRenderer({
+  document,
+  translate: t,
+  iconButton,
+  dangerIconButton,
+  applyDecoratedIcon,
+  defaultOpenIconClass: DEFAULT_FOLDER_OPEN_ICON_CLASS,
+  defaultIconClass: DEFAULT_FOLDER_ICON_CLASS,
+  schedule: (callback) => setTimeout(callback, 0),
+});
+
+const { renderTemplateRow: renderTemplateRowRenderer } = createTemplateRowRenderer({
+  document,
+  translate: t,
+  iconSvg,
+  dangerIconButton,
+  schedule: (callback) => setTimeout(callback, 0),
+});
+
+const { renderTemplateRootResults } = createTemplateRootRenderer({
+  document,
+  translate: t,
+  makeTemplateDropTarget,
+  renderTemplateRow,
+  renderTemplateGroupFolder,
+});
+
+const { renderTemplateBodyState } = createTemplateBodyStateRenderer({ document, translate: t });
+
+const { renderTemplateGroupContents } = createTemplateGroupContentsRenderer({
+  document,
+  makeTemplateDropTarget,
+  renderTemplateRow,
+  renderTemplateGroupFolder,
+});
+
+const { renderTemplateMinimap } = createTemplateMinimap({
+  document,
+  getDevicePixelRatio: () => window.devicePixelRatio || 1,
+  t,
+  vectorPair,
+});
 
 const nodesState = {
   query: "",
@@ -825,7 +1009,135 @@ const nodesState = {
   loadPromise: null,
 };
 
+const { positionPreviewPopover: positionNodePreviewPopover } = createPreviewPositioner({
+  window,
+  getSidebarSetting: () => app.ui?.settings?.getSettingValue?.("Comfy.Sidebar.Location")
+    ?? app.extensionManager?.setting?.get?.("Comfy.Sidebar.Location")
+    ?? localStorage.getItem("Comfy.Sidebar.Location"),
+  getRenderTarget: () => nodesState.renderTarget,
+});
+
 const nodeObjectInfoState = createNodeObjectInfoState({ state: nodesState });
+const {
+  getFavorite,
+  normalizeFavoriteOrders,
+  addFavoriteNode: addFavoriteNodeToStore,
+  removeFavoriteNode: removeFavoriteNodeFromStore,
+  setFavoriteAlias,
+  moveFavoriteToGroup: moveFavoriteToStoreGroup,
+} = createNodeFavoriteStore({
+  state: nodesState,
+  defaultGroupId: NODE_DEFAULT_GROUP_ID,
+});
+const {
+  getNodeGroup,
+  uniqueNodeGroupName,
+  isNodeGroupDescendant,
+  createNodeGroup: createFavoriteGroup,
+  deleteNodeGroup: deleteFavoriteGroup,
+  moveNodeGroupToParent: moveFavoriteGroupToParent,
+} = createNodeFavoriteGroupStore({
+  state: nodesState,
+  defaultGroupId: NODE_DEFAULT_GROUP_ID,
+});
+
+const { buildOfficialNodeTree } = createOfficialNodeTreeBuilder({
+  categoryPartsForNode: officialNodeCategoryParts,
+  getUncategorizedLabel: () => t("nodes.uncategorized"),
+  getCategorySortRank: comfyCategorySortRank,
+  getCustomOrderEnabled: () => nodesState.customOrderEnabled,
+  getCustomOrder: (parentKey) => (
+    Array.isArray(nodesState.customOrder?.[parentKey]) ? nodesState.customOrder[parentKey] : []
+  ),
+  getSortMode: () => nodesState.sort,
+});
+
+const { renderNodeRow } = createNodeRowRenderer({
+  document,
+  isPendingNode: (node) => nodesState.pendingNode?.type === node.type,
+  shouldSuppressClick: () => nodesState.suppressClick,
+  clearSuppressClick: () => { nodesState.suppressClick = false; },
+  makeCanvasDragSource: makeNodeCanvasDragSource,
+  showPreview: showNodePreview,
+  movePreview: moveNodePreview,
+  hidePreview: hideNodePreview,
+  openContextMenu: openNodeContextMenu,
+  setPendingNode: (node) => setPendingNode(nodesState.pendingNode?.type === node.type ? null : node),
+  isCustomOrderEnabled: () => nodesState.customOrderEnabled,
+  translate: t,
+  beginReorderDrag: beginNodeReorderDrag,
+  iconButton,
+  addFavorite: addFavoriteNode,
+  removeFavorite: removeFavoriteNode,
+});
+
+const { renderOfficialNodeTree } = createOfficialNodeTreeRenderer({
+  document,
+  getQuery: () => nodesState.query,
+  isFolderExpanded: (folderKey) => nodesState.expanded.has(folderKey),
+  translate: t,
+  renderNodeRow,
+  toggleFolder: toggleOfficialTreeFolder,
+  applyDecoratedIcon,
+  folderIconClass: DEFAULT_FOLDER_ICON_CLASS,
+  folderOpenIconClass: DEFAULT_FOLDER_OPEN_ICON_CLASS,
+});
+
+const { renderNodeTopSection } = createNodeTopSectionRenderer({
+  document,
+  getQuery: () => nodesState.query,
+  translate: t,
+  renderTopSectionHeader,
+  renderNodeRow,
+  buildOfficialNodeTree,
+  renderOfficialNodeTree,
+});
+
+const { projectNodeCategories } = createNodeCategoryProjection({
+  nodeMatchesQuery,
+  sortNodeSearchResults,
+  isHiddenNode: isHiddenOfficialNodeSection,
+  isComfyCoreNode,
+  isCustomNode: (node) => node?.source === NODE_SOURCE.CUSTOM,
+  getDefaultVisibleSections: nodePanelState.defaultVisibleSections,
+  searchResultLimit: NODE_SEARCH_RESULT_LIMIT,
+});
+
+const {
+  readCachedObjectInfo,
+  writeCachedObjectInfo,
+  clearCachedObjectInfo,
+} = createNodeObjectInfoCache({
+  dbName: NODE_OBJECT_INFO_CACHE_DB,
+  storeName: NODE_OBJECT_INFO_CACHE_STORE,
+  cacheKey: NODE_OBJECT_INFO_CACHE_KEY,
+  onCleared: () => {
+    nodesState.objectInfoCachedAt = 0;
+    nodesState.objectInfoFromCache = false;
+    nodesState.objectInfo = null;
+    nodesState.library = null;
+    nodeObjectInfoState.clearDefinitionCaches();
+  },
+});
+
+const {
+  refreshFullObjectInfoCoordinated,
+  scheduleFullObjectInfoRefresh,
+} = createNodeObjectInfoRefreshCoordinator({
+  state: nodesState,
+  isTemplatesActive: () => workspaceState.activeModule === "templates",
+  withRefreshLock: withNodeIndexRefreshLock,
+  readCachedObjectInfo,
+  writeCachedObjectInfo,
+  applyCachedObjectInfo: nodeObjectInfoState.applyCachedObjectInfo,
+  applyFreshObjectInfo: nodeObjectInfoState.applyFreshObjectInfo,
+  renderNodesPanel,
+  startPerformanceSpan,
+  measurePromise,
+  fetchObjectInfo: () => fetchJsonWithTimeout("/object_info"),
+  fetchJson,
+  postJson,
+});
 
 const { loadNodeLibrary } = createNodeLibraryLoader({
   state: nodesState,
@@ -1761,6 +2073,55 @@ function closeWorkspaceSettings() {
   workspaceState.settingsElement = null;
 }
 
+const {
+  settingsCheckbox,
+  settingsSection,
+  settingsHelp,
+  settingsShortcutGrid,
+  settingsRange,
+  settingsModeRange,
+  updateSettingsModeRange,
+} = createSettingsControls({ document, t, isolateComfyKeys });
+
+const { buildSettingsDialogSections } = createSettingsDialogSections({
+  document,
+  t,
+  toolbarButton,
+  settingsCheckbox,
+  settingsSection,
+  settingsHelp,
+  settingsShortcutGrid,
+  settingsRange,
+  settingsModeRange,
+  updateSettingsModeRange,
+  isCtrlGEnabled: isWorkspace2CtrlGCreateEnabled,
+  setCtrlGEnabled: (checked) => localStorage.setItem(CANVAS_GROUP_CTRL_G_KEY, checked ? "1" : "0"),
+  isAltCOpenTemplatesEnabled: isWorkspace2AltCOpenTemplatesEnabled,
+  setAltCOpenTemplatesEnabled: (checked) => localStorage.setItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY, checked ? "1" : "0"),
+  workflowRecentLimit,
+  snapWorkflowRecentLimit,
+  setWorkflowRecentLimit,
+  panelBackgroundMode,
+  panelOpacity,
+  snapPanelOpacity,
+  setPanelOpacity,
+  glassTransparency,
+  snapGlassTransparency,
+  setGlassTransparency,
+  setPanelBackgroundMode,
+  getNodeCacheInfo: () => ({
+    count: nodesState.objectInfo ? Object.keys(nodesState.objectInfo).length : 0,
+    updatedAt: formatTimestamp(nodesState.objectInfoCachedAt),
+  }),
+  clearNodeCache: clearCachedObjectInfo,
+});
+
+const { createSettingsDialogShell: buildSettingsDialogShell } = createSettingsDialogShell({
+  document,
+  t,
+  toolbarButton,
+});
+
 function formatTimestamp(timestamp) {
   const value = Number(timestamp || 0);
   if (!value) {
@@ -1773,258 +2134,18 @@ function formatTimestamp(timestamp) {
   }
 }
 
-function settingsCheckbox(label, checked, onChange) {
-  const row = document.createElement("div");
-  row.className = "workspace2-settings-row";
-  const wrapper = document.createElement("label");
-  const input = document.createElement("input");
-  input.type = "checkbox";
-  input.checked = checked;
-  input.addEventListener("change", () => onChange(input.checked));
-  wrapper.append(input, document.createTextNode(label));
-  row.append(wrapper);
-  return row;
-}
-
-function settingsSection(title, children = []) {
-  const section = document.createElement("section");
-  section.className = "workspace2-settings-section";
-  const heading = document.createElement("div");
-  heading.className = "workspace2-settings-section-title";
-  heading.textContent = title;
-  section.append(heading, ...children);
-  return section;
-}
-
-function settingsHelp(text) {
-  const help = document.createElement("div");
-  help.className = "workspace2-settings-help";
-  help.textContent = text;
-  return help;
-}
-
-function settingsShortcutGrid() {
-  const shortcuts = [
-    ["Shift + 1", t("settings.shortcuts.workflow")],
-    ["Shift + 2", t("settings.shortcuts.nodes")],
-    ["Shift + 3", t("settings.shortcuts.templates")],
-    ["Alt + C", t("settings.shortcuts.saveTemplate")],
-    ["Ctrl + G", t("settings.shortcuts.createGroup")],
-    ["Shift + G", t("settings.shortcuts.ungroup")],
-    [t("settings.shortcuts.shiftLeftClickKey"), t("settings.shortcuts.toggleGroupIgnore")],
-  ];
-  const grid = document.createElement("div");
-  grid.className = "workspace2-settings-shortcut-grid";
-  grid.style.cssText = "display:grid;grid-auto-flow:column;grid-template-rows:repeat(4,auto);grid-template-columns:1fr 1fr;gap:6px 12px;margin:4px 0 10px;";
-  for (const [keys, label] of shortcuts) {
-    const item = document.createElement("div");
-    item.className = "workspace2-settings-shortcut-item";
-    item.style.cssText = "display:grid;grid-template-columns:72px minmax(0,1fr);gap:7px;align-items:center;min-width:0;font-size:12px;line-height:1.35;";
-    const key = document.createElement("span");
-    key.textContent = keys;
-    key.style.cssText = "color:var(--descrip-text,#aaa);font-weight:400;white-space:nowrap;";
-    const text = document.createElement("span");
-    text.textContent = label;
-    text.style.cssText = "color:var(--descrip-text,#aaa);font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
-    item.append(key, text);
-    grid.append(item);
-  }
-  return grid;
-}
-
-function settingsRange(label, value, { min, max, step = 1, snap, onChange, disabled = false }) {
-  const row = document.createElement("div");
-  row.className = "workspace2-settings-row";
-  const text = document.createElement("span");
-  text.textContent = label;
-  const control = document.createElement("label");
-  control.className = "workspace2-settings-range";
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = String(min);
-  slider.max = String(max);
-  slider.step = String(step);
-  slider.value = String(value);
-  slider.disabled = disabled;
-  row.classList.toggle("is-disabled", disabled);
-  isolateComfyKeys(slider);
-  const output = document.createElement("span");
-  output.textContent = String(value);
-  slider.addEventListener("input", () => {
-    const next = typeof snap === "function" ? snap(slider.value) : Number(slider.value);
-    slider.value = String(next);
-    output.textContent = String(next);
-    onChange?.(next);
-  });
-  control.append(slider, output);
-  row.append(text, control);
-  return row;
-}
-
-function settingsModeRange(label, mode, selected, value, { min, max, snap, onChange, onSelect }) {
-  const row = document.createElement("div");
-  row.className = "workspace2-settings-row workspace2-settings-mode-row";
-  row.dataset.mode = mode;
-
-  const choice = document.createElement("label");
-  choice.className = "workspace2-settings-mode-choice";
-  const radio = document.createElement("input");
-  radio.type = "radio";
-  radio.name = "workspace2-background-mode";
-  radio.value = mode;
-  radio.checked = selected;
-  const text = document.createElement("span");
-  text.textContent = label;
-  choice.append(radio, text);
-
-  const control = document.createElement("label");
-  control.className = "workspace2-settings-range";
-  const slider = document.createElement("input");
-  slider.type = "range";
-  slider.min = String(min);
-  slider.max = String(max);
-  slider.step = "1";
-  slider.value = String(value);
-  slider.disabled = !selected;
-  isolateComfyKeys(slider);
-  const output = document.createElement("span");
-  output.textContent = String(value);
-  control.append(slider, output);
-
-  row.classList.toggle("is-disabled", !selected);
-  radio.addEventListener("change", () => {
-    if (radio.checked) {
-      onSelect?.(mode);
-    }
-  });
-  slider.addEventListener("input", () => {
-    const next = typeof snap === "function" ? snap(slider.value) : Number(slider.value);
-    slider.value = String(next);
-    output.textContent = String(next);
-    onChange?.(next);
-  });
-
-  row.append(choice, control);
-  return row;
-}
-
-function updateSettingsModeRange(row, selected) {
-  const radio = row?.querySelector?.('input[type="radio"]');
-  const slider = row?.querySelector?.('input[type="range"]');
-  if (!radio || !slider) {
-    return;
-  }
-  radio.checked = selected;
-  slider.disabled = !selected;
-  row.classList.toggle("is-disabled", !selected);
-}
-
 function openWorkspaceSettings() {
   closeWorkspaceSettings();
+  const { backdrop, dialog, header } = buildSettingsDialogShell({ onClose: closeWorkspaceSettings });
 
-  const backdrop = document.createElement("div");
-  backdrop.className = "workspace2-settings-backdrop";
-  backdrop.addEventListener("pointerdown", (event) => {
-    if (event.target === backdrop) {
-      closeWorkspaceSettings();
-    }
-  });
-
-  const dialog = document.createElement("div");
-  dialog.className = "workspace2-settings-dialog";
-  dialog.addEventListener("pointerdown", (event) => event.stopPropagation());
-  dialog.addEventListener("click", (event) => event.stopPropagation());
-
-  const header = document.createElement("div");
-  header.className = "workspace2-settings-header";
-  const title = document.createElement("div");
-  title.className = "workspace2-settings-title";
-  title.textContent = t("settings.title");
-  const close = toolbarButton("x", t("settings.close"), closeWorkspaceSettings);
-  header.append(title, close);
-
-  const shortcuts = settingsSection(t("settings.shortcuts"), [
-    settingsShortcutGrid(),
-    settingsCheckbox(t("settings.ctrlG"), isWorkspace2CtrlGCreateEnabled(), (checked) => {
-      localStorage.setItem(CANVAS_GROUP_CTRL_G_KEY, checked ? "1" : "0");
-    }),
-    settingsHelp(t("settings.ctrlGHelp")),
-  ]);
-
-  const behavior = settingsSection(t("settings.behavior"), [
-    settingsCheckbox(t("settings.altCOpenTemplates"), isWorkspace2AltCOpenTemplatesEnabled(), (checked) => {
-      localStorage.setItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY, checked ? "1" : "0");
-    }),
-    settingsRange(t("settings.recentWorkflows"), workflowRecentLimit(), {
-      min: 2,
-      max: 20,
-      snap: snapWorkflowRecentLimit,
-      onChange: (value) => {
-        setWorkflowRecentLimit(value);
-      },
-    }),
-  ]);
-
-  let transparentModeRow;
-  let glassModeRow;
-  const selectBackgroundMode = (mode) => {
-    setPanelBackgroundMode(mode);
-    updateSettingsModeRange(transparentModeRow, mode === "transparent");
-    updateSettingsModeRange(glassModeRow, mode === "glass");
-  };
-  transparentModeRow = settingsModeRange(
-    t("settings.transparentBackground"),
-    "transparent",
-    panelBackgroundMode() === "transparent",
-    panelOpacity(),
-    {
-      min: 5,
-      max: 100,
-      snap: snapPanelOpacity,
-      onChange: setPanelOpacity,
-      onSelect: selectBackgroundMode,
-    },
-  );
-  glassModeRow = settingsModeRange(
-    t("settings.glassBackground"),
-    "glass",
-    panelBackgroundMode() === "glass",
-    glassTransparency(),
-    {
-      min: 5,
-      max: 95,
-      snap: snapGlassTransparency,
-      onChange: setGlassTransparency,
-      onSelect: selectBackgroundMode,
-    },
-  );
-  const backgroundEffect = settingsSection(t("settings.backgroundEffect"), [
-    transparentModeRow,
-    glassModeRow,
-  ]);
-
-  const cacheCount = nodesState.objectInfo ? Object.keys(nodesState.objectInfo).length : 0;
-  const cacheInfo = settingsHelp(cacheCount
-    ? `${t("settings.cacheCount", { count: cacheCount })}\n${t("settings.cacheUpdated", { time: formatTimestamp(nodesState.objectInfoCachedAt) })}`
-    : t("settings.cacheEmpty"));
-  const clearCache = toolbarButton("trash", t("settings.clearNodeCache"), async () => {
-    try {
-      await clearCachedObjectInfo();
-      cacheInfo.textContent = t("settings.nodeCacheCleared");
-    } catch (error) {
-      cacheInfo.textContent = error.message || String(error);
-    }
-  });
-  const cacheRow = document.createElement("div");
-  cacheRow.className = "workspace2-settings-row";
-  cacheRow.append(cacheInfo, clearCache);
-  const nodeCache = settingsSection(t("settings.nodeCache"), [cacheRow]);
-
-  const versionInfo = settingsHelp(t("settings.version", { version: t("settings.versionLoading") }));
-  const about = settingsSection(t("settings.about"), [
+  const {
+    shortcuts,
+    behavior,
+    backgroundEffect,
+    nodeCache,
+    about,
     versionInfo,
-    settingsHelp(t("settings.github")),
-  ]);
+  } = buildSettingsDialogSections();
 
   dialog.append(header, shortcuts, behavior, backgroundEffect, nodeCache, about);
   backdrop.append(dialog);
@@ -4542,249 +4663,6 @@ function trashSignature(items) {
     .join("|");
 }
 
-function parentPath(path) {
-  const index = path.lastIndexOf("/");
-  return index === -1 ? "" : path.slice(0, index);
-}
-
-function normalizeMetaPath(path) {
-  return String(path || "").replace(/\\/g, "/");
-}
-
-function isPrimeIconClass(icon) {
-  return /^pi(\s|$)/.test(String(icon || "").trim());
-}
-
-function applyDecoratedIcon(element, icon, color, fallbackClass) {
-  const value = String(icon || "").trim();
-  element.className = "";
-  element.textContent = "";
-  element.style.removeProperty("--workspace2-icon-color");
-  if (color) {
-    element.style.setProperty("--workspace2-icon-color", String(color));
-  }
-  if (value && !isPrimeIconClass(value)) {
-    element.className = "workspace2-emoji-icon";
-    element.textContent = value;
-    return;
-  }
-  element.className = `workspace2-prime-icon ${value || fallbackClass}`;
-}
-
-const PERSONALIZE_EMOJIS = ["📁", "⭐", "🔖", "🏷️", "🔥", "🖼️", "🎨", "🧩", "⚙️", "📦", "📝", "❤️", "💡", "🎬", "🧠", "✨"];
-const PERSONALIZE_COLORS = ["", "#0A84FF", "#30D158", "#FF9F0A", "#FF453A", "#BF5AF2", "#FF375F", "#FFD60A", "#8E8E93"];
-
-function closePersonalizationPanel() {
-  const panel = document.querySelector(".workspace2-personalize-panel");
-  if (panel?.workspace2CloseHandler) {
-    document.removeEventListener("pointerdown", panel.workspace2CloseHandler, true);
-    document.removeEventListener("keydown", panel.workspace2CloseHandler, true);
-  }
-  panel?.remove();
-}
-
-function clampFloatingPanel(left, top, width = 282, height = 360) {
-  const margin = 10;
-  return {
-    left: Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - width - margin)),
-    top: Math.min(Math.max(margin, top), Math.max(margin, window.innerHeight - height - margin)),
-  };
-}
-
-function openPersonalizationPanel(options) {
-  closePersonalizationPanel();
-  const {
-    title = t("folder.personalizeTitle"),
-    name = "",
-    icon = "",
-    color = "",
-    anchor = null,
-    onApply,
-    onReset,
-  } = options || {};
-  let selectedIcon = String(icon || "").trim();
-  let selectedColor = String(color || "").trim();
-
-  const panel = document.createElement("div");
-  panel.className = "workspace2-personalize-panel";
-  const anchorRect = anchor?.getBoundingClientRect?.();
-  const x = Number(anchor?.clientX ?? anchorRect?.left ?? window.innerWidth / 2);
-  const y = Number(anchor?.clientY ?? anchorRect?.bottom ?? window.innerHeight / 2);
-  const pos = clampFloatingPanel(x, y);
-  panel.style.left = `${pos.left}px`;
-  panel.style.top = `${pos.top}px`;
-  panel.addEventListener("pointerdown", (event) => event.stopPropagation(), true);
-  panel.addEventListener("click", (event) => event.stopPropagation());
-  panel.addEventListener("contextmenu", (event) => event.preventDefault());
-
-  const heading = document.createElement("div");
-  heading.className = "workspace2-personalize-title";
-  heading.textContent = title;
-
-  const preview = document.createElement("div");
-  preview.className = "workspace2-personalize-preview";
-  const previewIcon = document.createElement("span");
-  const previewName = document.createElement("div");
-  previewName.className = "workspace2-personalize-preview-name";
-  previewName.textContent = name || title;
-  preview.append(previewIcon, previewName);
-
-  const iconLabel = document.createElement("div");
-  iconLabel.className = "workspace2-personalize-label";
-  iconLabel.textContent = t("folder.personalizeIcon");
-  const iconGrid = document.createElement("div");
-  iconGrid.className = "workspace2-personalize-grid";
-
-  const colorLabel = document.createElement("div");
-  colorLabel.className = "workspace2-personalize-label";
-  colorLabel.textContent = t("folder.personalizeColor");
-  const colorGrid = document.createElement("div");
-  colorGrid.className = "workspace2-personalize-grid";
-
-  const colorRow = document.createElement("div");
-  colorRow.className = "workspace2-personalize-color-row";
-  const colorText = document.createElement("div");
-  colorText.className = "workspace2-personalize-label";
-  colorText.textContent = "Color";
-  const colorInput = document.createElement("input");
-  colorInput.type = "color";
-  colorInput.value = /^#[0-9a-f]{6}$/i.test(selectedColor) ? selectedColor : "#0A84FF";
-  colorRow.append(colorText, colorInput);
-
-  const refresh = () => {
-    applyDecoratedIcon(previewIcon, selectedIcon, selectedColor, DEFAULT_FOLDER_ICON_CLASS);
-    iconGrid.querySelectorAll("button").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.icon === selectedIcon);
-    });
-    colorGrid.querySelectorAll("button").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.color === selectedColor);
-    });
-  };
-
-  const defaultIcon = document.createElement("button");
-  defaultIcon.type = "button";
-  defaultIcon.className = "workspace2-personalize-choice";
-  defaultIcon.textContent = "∅";
-  defaultIcon.title = t("folder.personalizeDefault");
-  defaultIcon.dataset.icon = "";
-  defaultIcon.addEventListener("click", () => {
-    selectedIcon = "";
-    refresh();
-  });
-  iconGrid.append(defaultIcon);
-  for (const emoji of PERSONALIZE_EMOJIS) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "workspace2-personalize-choice";
-    button.textContent = emoji;
-    button.dataset.icon = emoji;
-    button.addEventListener("click", () => {
-      selectedIcon = emoji;
-      refresh();
-    });
-    iconGrid.append(button);
-  }
-
-  for (const swatch of PERSONALIZE_COLORS) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "workspace2-personalize-swatch";
-    button.title = swatch || t("folder.personalizeDefault");
-    button.dataset.color = swatch;
-    if (swatch) {
-      button.style.setProperty("--workspace2-swatch-color", swatch);
-    } else {
-      button.textContent = "∅";
-    }
-    button.addEventListener("click", () => {
-      selectedColor = swatch;
-      if (swatch) {
-        colorInput.value = swatch;
-      }
-      refresh();
-    });
-    colorGrid.append(button);
-  }
-  colorInput.addEventListener("input", () => {
-    selectedColor = colorInput.value;
-    refresh();
-  });
-
-  const actions = document.createElement("div");
-  actions.className = "workspace2-personalize-actions";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = t("folder.personalizeCancel");
-  cancel.addEventListener("click", closePersonalizationPanel);
-  const reset = document.createElement("button");
-  reset.type = "button";
-  reset.textContent = t("folder.personalizeReset");
-  reset.addEventListener("click", async () => {
-    try {
-      await onReset?.();
-      closePersonalizationPanel();
-    } catch (error) {
-      console.error("[Workspace2] personalize reset failed", error);
-    }
-  });
-  const apply = document.createElement("button");
-  apply.type = "button";
-  apply.className = "is-primary";
-  apply.textContent = t("folder.personalizeApply");
-  apply.addEventListener("click", async () => {
-    try {
-      await onApply?.({ icon: selectedIcon, color: selectedColor });
-      closePersonalizationPanel();
-    } catch (error) {
-      console.error("[Workspace2] personalize apply failed", error);
-    }
-  });
-  actions.append(cancel, reset, apply);
-
-  panel.append(heading, preview, iconLabel, iconGrid, colorLabel, colorGrid, colorRow, actions);
-  document.body.append(panel);
-  refresh();
-
-  panel.workspace2CloseHandler = (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      closePersonalizationPanel();
-      return;
-    }
-    if (event.type === "pointerdown" && !panel.contains(event.target)) {
-      closePersonalizationPanel();
-    }
-  };
-  setTimeout(() => {
-    document.addEventListener("pointerdown", panel.workspace2CloseHandler, true);
-    document.addEventListener("keydown", panel.workspace2CloseHandler, true);
-  }, 0);
-}
-
-function workflowFolderMeta(path) {
-  return state.folderMeta?.[normalizeMetaPath(path)] || {};
-}
-
-async function saveWorkflowFolderMeta(el, path, patch) {
-  const key = normalizeMetaPath(path);
-  const nextMeta = { ...(state.folderMeta || {}) };
-  const nextValue = { ...(nextMeta[key] || {}), ...patch };
-  for (const field of ["icon", "color"]) {
-    if (!String(nextValue[field] || "").trim()) {
-      delete nextValue[field];
-    }
-  }
-  if (nextValue.icon || nextValue.color) {
-    nextMeta[key] = nextValue;
-  } else {
-    delete nextMeta[key];
-  }
-  const data = await postJson("/workspace2/folder-meta", { folder_meta: nextMeta });
-  state.folderMeta = data.folder_meta || nextMeta;
-  renderPanel(el);
-}
-
 async function changeWorkflowFolderIcon(el, item) {
   const meta = workflowFolderMeta(item.path);
   const value = window.prompt(t("folder.promptIcon"), meta.icon || "");
@@ -4801,10 +4679,6 @@ async function changeWorkflowFolderColor(el, item) {
     return;
   }
   await saveWorkflowFolderMeta(el, item.path, { color: value.trim() });
-}
-
-async function resetWorkflowFolderStyle(el, item) {
-  await saveWorkflowFolderMeta(el, item.path, { icon: "", color: "" });
 }
 
 function personalizeWorkflowFolder(el, item, anchor = null) {
@@ -4827,112 +4701,8 @@ function personalizeWorkflowFolder(el, item, anchor = null) {
   });
 }
 
-function openNodeCacheDb() {
-  return new Promise((resolve, reject) => {
-    if (!globalThis.indexedDB) {
-      reject(new Error("IndexedDB is not available."));
-      return;
-    }
-    const request = indexedDB.open(NODE_OBJECT_INFO_CACHE_DB, 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore(NODE_OBJECT_INFO_CACHE_STORE, { keyPath: "key" });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("Failed to open IndexedDB."));
-  });
-}
-
-async function readCachedObjectInfo() {
-  let db;
-  try {
-    db = await openNodeCacheDb();
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(NODE_OBJECT_INFO_CACHE_STORE, "readonly");
-      const store = tx.objectStore(NODE_OBJECT_INFO_CACHE_STORE);
-      const request = store.get(NODE_OBJECT_INFO_CACHE_KEY);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => reject(request.error || new Error("Failed to read node cache."));
-    });
-  } finally {
-    db?.close?.();
-  }
-}
-
-async function writeCachedObjectInfo(objectInfo, signature = "") {
-  if (!objectInfo || typeof objectInfo !== "object" || Array.isArray(objectInfo)) {
-    return;
-  }
-  let db;
-  try {
-    db = await openNodeCacheDb();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(NODE_OBJECT_INFO_CACHE_STORE, "readwrite");
-      const store = tx.objectStore(NODE_OBJECT_INFO_CACHE_STORE);
-      store.put({
-        key: NODE_OBJECT_INFO_CACHE_KEY,
-        updatedAt: Date.now(),
-        count: Object.keys(objectInfo).length,
-        signature: String(signature || ""),
-        objectInfo,
-      });
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error("Failed to write node cache."));
-      tx.onabort = () => reject(tx.error || new Error("Node cache write was aborted."));
-    });
-  } finally {
-    db?.close?.();
-  }
-}
-
-async function clearCachedObjectInfo() {
-  let db;
-  try {
-    db = await openNodeCacheDb();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(NODE_OBJECT_INFO_CACHE_STORE, "readwrite");
-      tx.objectStore(NODE_OBJECT_INFO_CACHE_STORE).delete(NODE_OBJECT_INFO_CACHE_KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error("Failed to clear node cache."));
-      tx.onabort = () => reject(tx.error || new Error("Node cache clear was aborted."));
-    });
-    nodesState.objectInfoCachedAt = 0;
-    nodesState.objectInfoFromCache = false;
-    nodesState.objectInfo = null;
-    nodesState.library = null;
-    nodeObjectInfoState.clearDefinitionCaches();
-  } finally {
-    db?.close?.();
-  }
-}
-
-function readWorkflowCustomOrder() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(WORKFLOW_ORDER_KEY) || "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 function saveWorkflowCustomOrder() {
-  localStorage.setItem(WORKFLOW_ORDER_KEY, JSON.stringify(state.customOrder || {}));
-}
-
-function replaceWorkflowPathPrefix(value, oldPath, newPath) {
-  const text = String(value || "");
-  if (!text || !oldPath || text === newPath) {
-    return text;
-  }
-  if (text === oldPath) {
-    return newPath;
-  }
-  return text.startsWith(`${oldPath}/`) ? `${newPath}${text.slice(oldPath.length)}` : text;
-}
-
-function workflowPathIsWithin(path, parent) {
-  const value = String(path || "");
-  const prefix = String(parent || "");
-  return Boolean(prefix) && (value === prefix || value.startsWith(`${prefix}/`));
+  workflowCustomOrderStore.save(state.customOrder);
 }
 
 const commitWorkflowItemSnapshot = workflowItems.commitSnapshot;
@@ -4944,64 +4714,6 @@ const removeLocalWorkflowItems = workflowItems.removeLocal;
 const remapWorkflowPathState = workflowPathState.remap;
 const removeWorkflowPathState = workflowPathState.remove;
 
-
-function getTreeScrollTop(el) {
-  return el.querySelector(".workspace2-tree")?.scrollTop || 0;
-}
-
-function restoreTreeScrollTop(el, scrollTop) {
-  if (!Number.isFinite(scrollTop)) {
-    return;
-  }
-  requestAnimationFrame(() => {
-    const tree = el.querySelector(".workspace2-tree");
-    if (tree) {
-      tree.scrollTop = scrollTop;
-    }
-  });
-}
-
-function setExpandedRecursive(expandedSet, keys, shouldExpand) {
-  for (const key of keys) {
-    if (!key) {
-      continue;
-    }
-    if (shouldExpand) {
-      expandedSet.add(key);
-    } else {
-      expandedSet.delete(key);
-    }
-  }
-}
-
-function workflowFolderKeys(node) {
-  const keys = [];
-  if (!node || node.type !== "folder") {
-    return keys;
-  }
-  if (node.path) {
-    keys.push(node.path);
-  }
-  for (const child of node.children || []) {
-    keys.push(...workflowFolderKeys(child));
-  }
-  return keys;
-}
-
-function toggleWorkflowFolder(el, node, recursive = false) {
-  if (!node || node.type !== "folder") {
-    return;
-  }
-  const isOpen = state.expanded.has(node.path);
-  if (recursive) {
-    setExpandedRecursive(state.expanded, workflowFolderKeys(node), !isOpen);
-  } else if (isOpen) {
-    state.expanded.delete(node.path);
-  } else {
-    state.expanded.add(node.path);
-  }
-  renderPanel(el);
-}
 
 async function refreshPanel(el, options = {}) {
   await loadWorkflows();
@@ -5248,23 +4960,6 @@ async function createFolder(el, parent = "") {
 function selectedFolderPath() {
   const selected = state.items.find((item) => item.path === state.selectedPath);
   return selected?.type === "folder" ? selected.path : "";
-}
-
-function joinPath(parent, name) {
-  return parent ? `${parent}/${name}` : name;
-}
-
-function workflowRenameTargetPath(item, newName) {
-  const parent = parentPath(item.path);
-  let name = String(newName || "").trim();
-  if (item.type === "file" && !name.toLowerCase().endsWith(".json")) {
-    name = `${name}.json`;
-  }
-  return joinPath(parent, name);
-}
-
-function relativeWorkflowPathFromOfficial(path) {
-  return String(path || "").replace(/^workflows\/+/, "");
 }
 
 function uniqueWorkflowFolderName(parent, baseName = t("folder.defaultName")) {
@@ -5638,106 +5333,6 @@ function dangerIconButton(iconName, title, onClick) {
   const element = iconButton(iconName, title, onClick);
   element.classList.add("is-danger-action");
   return element;
-}
-
-async function refreshFullObjectInfoCoordinated(signature) {
-  return withNodeIndexRefreshLock(async () => {
-    const latestCache = await readCachedObjectInfo().catch(() => null);
-    if (signature && latestCache?.signature === signature && nodeObjectInfoState.applyCachedObjectInfo(latestCache)) {
-      nodesState.objectInfoLoading = false;
-      if (nodesState.renderTarget?.isConnected) {
-        renderNodesPanel(nodesState.renderTarget);
-      }
-      return;
-    }
-    await loadFullObjectInfo(signature);
-  });
-}
-
-function scheduleFullObjectInfoRefresh(signature) {
-  if (nodesState.objectInfoRefreshTimer) {
-    window.clearTimeout(nodesState.objectInfoRefreshTimer);
-  }
-  nodesState.objectInfoRefreshTimer = window.setTimeout(() => {
-    nodesState.objectInfoRefreshTimer = null;
-    if (workspaceState.activeModule === "templates") {
-      scheduleFullObjectInfoRefresh(signature);
-      return;
-    }
-    refreshFullObjectInfoCoordinated(signature).catch((error) => {
-      nodesState.objectInfoError = error.message || String(error);
-      nodesState.objectInfoLoading = false;
-    });
-  }, 1500);
-}
-
-async function loadFullObjectInfo(signature = "") {
-  const finish = startPerformanceSpan("nodes.object-info-refresh");
-  try {
-    const objectInfoData = await measurePromise(
-      "nodes.object-info-request",
-      () => fetchJsonWithTimeout("/object_info"),
-    );
-    nodeObjectInfoState.applyFreshObjectInfo(objectInfoData);
-    nodesState.objectInfoError = "";
-    await measurePromise(
-      "nodes.indexeddb-write",
-      () => writeCachedObjectInfo(nodesState.objectInfo, signature),
-    );
-    persistObjectInfoToServerCache(nodesState.objectInfo, signature).catch((error) => {
-      console.debug("[Workspace2] Server node cache write failed", error);
-    });
-    finish({ nodeCount: Object.keys(nodesState.objectInfo).length });
-  } catch (error) {
-    nodesState.objectInfoError = error.message || String(error);
-    finish({ error: nodesState.objectInfoError }, "error");
-  } finally {
-    nodesState.objectInfoLoading = false;
-    if (nodesState.renderTarget?.isConnected) {
-      renderNodesPanel(nodesState.renderTarget);
-    }
-  }
-}
-
-async function persistObjectInfoToServerCache(objectInfo, signature) {
-  if (!signature || !objectInfo || typeof objectInfo !== "object" || Array.isArray(objectInfo)) {
-    return;
-  }
-  if (typeof CompressionStream !== "function" || typeof Blob !== "function") {
-    console.debug("[Workspace2] CompressionStream is unavailable; server node cache write skipped");
-    return;
-  }
-  const started = await postJson("/workspace2/nodes/object-info-cache/upload", { signature });
-  const uploadId = String(started.upload_id || "");
-  const chunkBytes = Number(started.chunk_bytes || 0);
-  if (!uploadId || !Number.isInteger(chunkBytes) || chunkBytes <= 0) {
-    throw new Error("Invalid server node cache upload session.");
-  }
-  let uploadCompleted = false;
-  try {
-    const json = JSON.stringify(objectInfo);
-    const stream = new Blob([json], { type: "application/json" })
-      .stream()
-      .pipeThrough(new CompressionStream("gzip"));
-    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
-    for (let offset = 0, chunkIndex = 0; offset < compressed.byteLength; offset += chunkBytes, chunkIndex += 1) {
-      const chunk = compressed.slice(offset, Math.min(offset + chunkBytes, compressed.byteLength));
-      await fetchJson(
-        `/workspace2/nodes/object-info-cache/upload/${encodeURIComponent(uploadId)}/${chunkIndex}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: chunk,
-        },
-      );
-    }
-    await postJson(`/workspace2/nodes/object-info-cache/upload/${encodeURIComponent(uploadId)}/finish`, {});
-    uploadCompleted = true;
-  } finally {
-    if (!uploadCompleted) {
-      postJson(`/workspace2/nodes/object-info-cache/upload/${encodeURIComponent(uploadId)}/abort`, {}).catch(() => {});
-    }
-  }
 }
 
 async function saveNodeLibrary(el) {
@@ -6215,65 +5810,6 @@ async function saveSelectedNodesAsTemplateFromShortcut() {
   }
 }
 
-function templateSearchFields(template) {
-  const nodeFields = (template.nodes || []).flatMap((node) => [
-    node?.title,
-    node?.type,
-    splitCamelCase(node?.type || ""),
-  ]);
-  return compactSearchFields([
-    template.name,
-    ...nodeFields,
-  ], [
-    template.name,
-    ...nodeFields,
-  ]);
-}
-
-function templateMatchesQuery(template, query) {
-  if (!query) {
-    return true;
-  }
-  return genericSearchScores(templateSearchFields(template), query)[0] < 9;
-}
-
-function sortedVisibleTemplates() {
-  const query = templatesState.query.trim().toLocaleLowerCase();
-  const templates = [...(templatesState.library?.templates || [])]
-    .filter((template) => templateMatchesQuery(template, query));
-  if (query) {
-    templates.sort((a, b) => compareSearchScores(
-      genericSearchScores(templateSearchFields(a), query),
-      genericSearchScores(templateSearchFields(b), query),
-    ) || a.name.localeCompare(b.name));
-  } else {
-    templates.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
-  }
-  return templates;
-}
-
-function compareTemplatesBySort(a, b, query = "") {
-  if (query) {
-    return compareSearchScores(
-      genericSearchScores(templateSearchFields(a), query),
-      genericSearchScores(templateSearchFields(b), query),
-    ) || a.name.localeCompare(b.name);
-  }
-  if (templatesState.sort === "nameAsc") {
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-  }
-  if (templatesState.sort === "nameDesc") {
-    return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: "base" });
-  }
-  if (templatesState.sort === "updatedDesc") {
-    return Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0) || a.name.localeCompare(b.name);
-  }
-  if (templatesState.sort === "updatedAsc") {
-    return Number(a.updatedAt || a.createdAt || 0) - Number(b.updatedAt || b.createdAt || 0) || a.name.localeCompare(b.name);
-  }
-  return a.order - b.order || a.name.localeCompare(b.name);
-}
-
 function canvasCenterPosition() {
   const canvasElement = app.canvas?.canvas || app.canvasEl || document.querySelector("canvas");
   if (!canvasElement) {
@@ -6545,156 +6081,25 @@ async function copyText(value) {
 }
 
 function renderTemplateContextMenu(el) {
-  if (templatesState.contextMenuCloseHandler) {
-    window.removeEventListener("pointerdown", templatesState.contextMenuCloseHandler, true);
-    document.removeEventListener("pointerdown", templatesState.contextMenuCloseHandler, true);
-    window.removeEventListener("keydown", templatesState.contextMenuCloseHandler, true);
-    templatesState.contextMenuCloseHandler = null;
-  }
-  templatesState.contextMenuElement?.remove();
-  templatesState.contextMenuElement = null;
-  const context = templatesState.contextMenu;
-  if (!context) {
-    return;
-  }
-  const { template, x, y } = context;
-  const menu = document.createElement("div");
-  menu.className = "workspace2-context";
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-  menu.addEventListener("click", (event) => event.stopPropagation());
-  menu.addEventListener("contextmenu", (event) => event.preventDefault());
-
-  const addItem = (label, onClick) => {
-    const button = document.createElement("button");
-    button.className = "workspace2-menu-item";
-    button.type = "button";
-    button.textContent = label;
-    button.addEventListener("click", async () => {
-      closeTemplateContextMenu();
-      try {
-        await onClick();
-      } catch (error) {
-        templatesState.error = error.message;
-        renderTemplatesPanel(el);
-      }
-    });
-    menu.append(button);
-  };
-
-  addItem(t("templates.rename"), () => {
-    templatesState.editingTemplateId = template.id;
-    renderTemplatesPanel(el);
-  });
-  addItem(t("templates.placeCenter"), () => placeTemplateAtCanvasCenter(el, template));
-  addItem(t("templates.copyName"), () => copyText(template.name));
-  addItem(t("templates.delete"), () => requestDeleteTemplate(el, template));
-
-  document.body.append(menu);
-  templatesState.contextMenuElement = menu;
-
-  const closeHandler = (event) => {
-    if (event.type === "keydown" && event.key !== "Escape") {
-      return;
-    }
-    if (menu.contains(event.target)) {
-      return;
-    }
-    closeTemplateContextMenu();
-  };
-  templatesState.contextMenuCloseHandler = closeHandler;
-  setTimeout(() => {
-    if (templatesState.contextMenuCloseHandler !== closeHandler) {
-      return;
-    }
-    window.addEventListener("pointerdown", closeHandler, true);
-    document.addEventListener("pointerdown", closeHandler, true);
-    window.addEventListener("keydown", closeHandler, true);
-  }, 0);
-}
-
-function readDraggedTemplate(event) {
-  const raw = event.dataTransfer?.getData(TEMPLATE_DRAG_TYPE);
-  if (raw) {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return templatesState.draggingTemplate;
-    }
-  }
-  return templatesState.draggingTemplate;
-}
-
-function readDraggedTemplateGroup(event) {
-  const raw = event.dataTransfer?.getData(TEMPLATE_GROUP_DRAG_TYPE);
-  if (!raw) {
-    return templatesState.draggingGroupId ? { id: templatesState.draggingGroupId } : null;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return templatesState.draggingGroupId ? { id: templatesState.draggingGroupId } : null;
-  }
-}
-
-function makeTemplateGroupDragSource(row, group) {
-  row.draggable = true;
-  row.addEventListener("dragstart", (event) => {
-    if (event.target.closest("button,input,.workspace2-actions,.workspace2-disclosure")) {
-      event.preventDefault();
-      return;
-    }
-    templatesState.draggingGroupId = group.id;
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData(TEMPLATE_GROUP_DRAG_TYPE, JSON.stringify({ id: group.id }));
-    event.dataTransfer.setData("text/plain", group.name);
-    row.closest(".workspace2-panel")?.classList.add("is-dragging");
-  });
-  row.addEventListener("dragend", () => {
-    templatesState.draggingGroupId = "";
-    row.closest(".workspace2-panel")?.classList.remove("is-dragging");
-  });
-}
-
-function makeTemplateDropTarget(el, target, groupId = "", beforeTemplateId = "") {
-  target.dataset.workspace2TemplateTarget = groupId;
-  target.dataset.workspace2TemplateBefore = beforeTemplateId;
-  target.addEventListener("dragover", (event) => {
-    const template = readDraggedTemplate(event);
-    const group = readDraggedTemplateGroup(event);
-    if (!template?.id && !group?.id) {
-      return;
-    }
-    if (group?.id && (group.id === groupId || isTemplateGroupDescendant(groupId, group.id))) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = "move";
-    target.classList.add("is-drop");
-  });
-  target.addEventListener("dragleave", () => {
-    target.classList.remove("is-drop");
-  });
-  target.addEventListener("drop", async (event) => {
-    const template = readDraggedTemplate(event);
-    const group = readDraggedTemplateGroup(event);
-    target.classList.remove("is-drop");
-    if (!template?.id && !group?.id) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    try {
-      if (group?.id) {
-        await moveTemplateGroupToParent(el, group.id, groupId);
-      } else {
-        await moveTemplateToGroup(el, template.id, groupId, beforeTemplateId);
-      }
-    } catch (error) {
+  renderTemplateContextMenuRenderer({
+    document,
+    window,
+    state: templatesState,
+    t,
+    el,
+    closeMenu: closeTemplateContextMenu,
+    onError: (error) => {
       templatesState.error = error.message;
       renderTemplatesPanel(el);
-    }
+    },
+    onRename: (template) => {
+      templatesState.editingTemplateId = template.id;
+      renderTemplatesPanel(el);
+    },
+    onPlaceCenter: (template) => placeTemplateAtCanvasCenter(el, template),
+    onCopyName: (template) => copyText(template.name),
+    onDelete: (template) => requestDeleteTemplate(el, template),
+    schedule: (callback) => setTimeout(callback, 0),
   });
 }
 
@@ -6721,53 +6126,19 @@ function closeTemplateContextMenuFromEvent(event) {
 }
 
 function openTemplateGroupContextMenu(el, event, group) {
-  event.preventDefault();
-  event.stopPropagation();
-  closeTemplateContextMenu();
-  const menu = document.createElement("div");
-  menu.className = "workspace2-context";
-  menu.addEventListener("pointerdown", (menuEvent) => menuEvent.stopPropagation());
-  menu.addEventListener("click", (menuEvent) => menuEvent.stopPropagation());
-  menu.addEventListener("contextmenu", (menuEvent) => menuEvent.preventDefault());
-
-  const addItem = (label, handler) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "workspace2-menu-item";
-    button.textContent = label;
-    button.addEventListener("click", async (clickEvent) => {
-      clickEvent.stopPropagation();
-      closeTemplateContextMenu();
-      try {
-        await handler();
-      } catch (error) {
-        templatesState.error = error.message;
-        renderTemplatesPanel(el);
-      }
-    });
-    menu.append(button);
-  };
-
-  addItem(t("menu.newSubfolder"), () => createTemplateGroup(el, group.id));
-  addItem(t("templates.renameGroup"), () => {
-    templatesState.editingGroupId = group.id;
-    renderTemplatesPanel(el);
+  openTemplateGroupContextMenuRenderer({
+    document, window, state: templatesState, t, el, event, group,
+    // Closing an existing menu and reacting to a document event have different
+    // contracts: the latter needs the event to preserve Escape/inside-menu rules.
+    closeMenu: closeTemplateContextMenu,
+    closeOnEvent: closeTemplateContextMenuFromEvent,
+    onError: (error) => { templatesState.error = error.message; renderTemplatesPanel(el); },
+    onNewSubfolder: createTemplateGroup,
+    onRename: (target, id) => { templatesState.editingGroupId = id; renderTemplatesPanel(target); },
+    onPersonalize: personalizeTemplateGroup,
+    onResetStyle: resetTemplateGroupStyle,
+    onDelete: requestDeleteTemplateGroup,
   });
-  addItem(t("folder.personalize"), () => personalizeTemplateGroup(el, group, event));
-  addItem(t("folder.resetStyle"), () => resetTemplateGroupStyle(el, group));
-  addItem(t("templates.deleteGroup"), () => requestDeleteTemplateGroup(el, group));
-
-  document.body.append(menu);
-  const rect = menu.getBoundingClientRect();
-  const left = Math.min(event.clientX, window.innerWidth - rect.width - 8);
-  const top = Math.min(event.clientY, window.innerHeight - rect.height - 8);
-  menu.style.left = `${Math.max(8, left)}px`;
-  menu.style.top = `${Math.max(8, top)}px`;
-  templatesState.contextMenuElement = menu;
-  window.setTimeout(() => {
-    document.addEventListener("pointerdown", closeTemplateContextMenuFromEvent, { once: true, capture: true });
-    document.addEventListener("keydown", closeTemplateContextMenuFromEvent, { once: true, capture: true });
-  }, 0);
 }
 
 function backupNodeLibrary() {
@@ -7104,10 +6475,6 @@ function getNodeDefinitionMap() {
   return nodesState.nodeDefinitionMapCache;
 }
 
-function getFavorite(type) {
-  return nodesState.library?.favorites?.find((favorite) => favorite.type === type) || null;
-}
-
 function nodeMatchesQuery(node, query, groupName = "") {
   if (!query) {
     return true;
@@ -7356,32 +6723,16 @@ function favoriteDisplayNode(favorite, nodeMap) {
 
 async function createNodeGroup(el, parentId = "") {
   const normalizedParentId = parentId && parentId !== NODE_DEFAULT_GROUP_ID ? String(parentId) : "";
-  const id = `group-${Date.now().toString(36)}`;
-  const order = nodesState.library.groups.length;
-  nodesState.library.groups.push({
-    id,
-    name: uniqueNodeGroupName(),
-    parentId: normalizedParentId,
-    order,
-    collapsed: false,
-  });
+  const group = createFavoriteGroup(uniqueNodeGroupName(t("nodes.defaultGroupName")), normalizedParentId);
+  if (!group) {
+    return;
+  }
   if (normalizedParentId) {
     nodesState.expanded.add(normalizedParentId);
   }
-  nodesState.expanded.add(id);
-  nodesState.editingGroupId = id;
+  nodesState.expanded.add(group.id);
+  nodesState.editingGroupId = group.id;
   await saveNodeLibrary(el);
-}
-
-function uniqueNodeGroupName(baseName = t("nodes.defaultGroupName")) {
-  const existing = new Set((nodesState.library?.groups || []).map((group) => String(group.name || "").toLowerCase()));
-  let name = baseName;
-  let index = 2;
-  while (existing.has(name.toLowerCase())) {
-    name = `${baseName} ${index}`;
-    index += 1;
-  }
-  return name;
 }
 
 async function changeNodeGroupIcon(el, group) {
@@ -7444,15 +6795,9 @@ async function commitNodeGroupRename(el, group, value) {
 }
 
 async function deleteNodeGroup(el, group) {
-  if (group.id === NODE_DEFAULT_GROUP_ID) {
+  if (!deleteFavoriteGroup(group.id)) {
     return;
   }
-  for (const favorite of nodesState.library.favorites) {
-    if (favorite.groupId === group.id) {
-      favorite.groupId = NODE_DEFAULT_GROUP_ID;
-    }
-  }
-  nodesState.library.groups = nodesState.library.groups.filter((item) => item.id !== group.id);
   normalizeFavoriteOrders(NODE_DEFAULT_GROUP_ID);
   await saveNodeLibrary(el);
 }
@@ -7472,39 +6817,15 @@ function requestDeleteNodeGroup(el, group, anchor = null) {
 }
 
 async function addFavoriteNode(el, node, groupId = NODE_DEFAULT_GROUP_ID, beforeType = "") {
-  if (getFavorite(node.type)) {
-    await moveFavoriteToGroup(el, node.type, groupId, beforeType);
-    return;
+  if (addFavoriteNodeToStore(node, groupId, beforeType)) {
+    await saveNodeLibrary(el);
   }
-  const favorite = {
-    type: node.type,
-    title: node.title || node.type,
-    alias: "",
-    groupId,
-    order: 0,
-    rating: 0,
-    useCount: 0,
-    lastUsed: 0,
-    addedAt: Date.now(),
-    invalid: false,
-    source: "manual",
-  };
-  nodesState.library.favorites.push(favorite);
-  const targetItems = nodesState.library.favorites
-    .filter((item) => item.groupId === groupId && item.type !== node.type)
-    .sort((a, b) => a.order - b.order);
-  const beforeIndex = beforeType ? targetItems.findIndex((item) => item.type === beforeType) : -1;
-  const insertIndex = beforeIndex >= 0 ? beforeIndex : targetItems.length;
-  targetItems.splice(insertIndex, 0, favorite);
-  targetItems.forEach((item, index) => {
-    item.order = index;
-  });
-  await saveNodeLibrary(el);
 }
 
 async function removeFavoriteNode(el, type) {
-  nodesState.library.favorites = nodesState.library.favorites.filter((favorite) => favorite.type !== type);
-  await saveNodeLibrary(el);
+  if (removeFavoriteNodeFromStore(type)) {
+    await saveNodeLibrary(el);
+  }
 }
 
 async function editFavoriteAlias(el, favorite) {
@@ -7513,85 +6834,24 @@ async function editFavoriteAlias(el, favorite) {
   if (alias === null) {
     return;
   }
-  const item = getFavorite(favorite.type);
-  if (!item) {
-    return;
+  if (setFavoriteAlias(favorite.type, alias)) {
+    await saveNodeLibrary(el);
   }
-  item.alias = alias.trim();
-  await saveNodeLibrary(el);
-}
-
-function normalizeFavoriteOrders(groupId) {
-  nodesState.library.favorites
-    .filter((favorite) => favorite.groupId === groupId)
-    .sort((a, b) => a.order - b.order)
-    .forEach((favorite, index) => {
-      favorite.order = index;
-    });
 }
 
 async function moveFavoriteToGroup(el, type, targetGroupId, beforeType = "") {
-  const favorite = getFavorite(type);
-  if (!favorite) {
-    return;
+  if (moveFavoriteToStoreGroup(type, targetGroupId, beforeType)) {
+    await saveNodeLibrary(el);
   }
-  const sourceGroupId = favorite.groupId;
-  if (sourceGroupId === targetGroupId && beforeType === type) {
-    return;
-  }
-  favorite.groupId = targetGroupId;
-  normalizeFavoriteOrders(sourceGroupId);
-  const targetItems = nodesState.library.favorites
-    .filter((item) => item.groupId === targetGroupId && item.type !== type)
-    .sort((a, b) => a.order - b.order);
-  const beforeIndex = beforeType ? targetItems.findIndex((item) => item.type === beforeType) : -1;
-  const insertIndex = beforeIndex >= 0 ? beforeIndex : targetItems.length;
-  targetItems.splice(insertIndex, 0, favorite);
-  targetItems.forEach((item, index) => {
-    item.order = index;
-  });
-  await saveNodeLibrary(el);
-}
-
-function getNodeGroup(groupId) {
-  return (nodesState.library?.groups || []).find((group) => group.id === groupId) || null;
-}
-
-function isNodeGroupDescendant(groupId, possibleAncestorId) {
-  let current = getNodeGroup(groupId);
-  const visited = new Set();
-  while (current?.parentId) {
-    if (current.parentId === possibleAncestorId) {
-      return true;
-    }
-    if (visited.has(current.parentId)) {
-      return false;
-    }
-    visited.add(current.parentId);
-    current = getNodeGroup(current.parentId);
-  }
-  return false;
 }
 
 async function moveNodeGroupToParent(el, groupId, targetParentId = "") {
-  const group = getNodeGroup(groupId);
-  if (!group || group.id === NODE_DEFAULT_GROUP_ID) {
+  const group = moveFavoriteGroupToParent(groupId, targetParentId);
+  if (!group) {
     return;
   }
-  const normalizedParentId = targetParentId && targetParentId !== NODE_DEFAULT_GROUP_ID ? String(targetParentId) : "";
-  if (normalizedParentId === group.id || isNodeGroupDescendant(normalizedParentId, group.id)) {
-    return;
-  }
-  if (group.parentId === normalizedParentId) {
-    return;
-  }
-  group.parentId = normalizedParentId;
-  const siblings = (nodesState.library.groups || [])
-    .filter((item) => item.id !== group.id && item.id !== NODE_DEFAULT_GROUP_ID && (item.parentId || "") === normalizedParentId)
-    .sort((a, b) => a.order - b.order);
-  group.order = siblings.length ? Math.max(...siblings.map((item) => Number(item.order) || 0)) + 1 : 0;
-  if (normalizedParentId) {
-    nodesState.expanded.add(normalizedParentId);
+  if (group.parentId) {
+    nodesState.expanded.add(group.parentId);
   }
   await saveNodeLibrary(el);
 }
@@ -7711,163 +6971,6 @@ function officialNodeCategoryParts(node) {
   const root = parts[0].toLowerCase();
   const key = COMFY_CATEGORY_LABEL_KEYS.get(root);
   return [key ? t(key) : parts[0], ...parts.slice(1)];
-}
-
-function createNodeTreeFolder(key, label) {
-  return {
-    key,
-    label,
-    type: "folder",
-    children: [],
-    childMap: new Map(),
-    totalLeaves: 0,
-  };
-}
-
-function nodeTreePartLabel(part) {
-  return typeof part === "object" && part ? String(part.label || part.key || "") : String(part || "");
-}
-
-function nodeTreePartKey(part) {
-  return typeof part === "object" && part ? String(part.key || part.label || "") : String(part || "");
-}
-
-function buildOfficialNodeTree(sectionId, nodes) {
-  const root = createNodeTreeFolder(sectionId, "");
-  for (const node of nodes) {
-    let current = root;
-    for (const part of officialNodeCategoryParts(node)) {
-      const partKey = nodeTreePartKey(part);
-      const partLabel = nodeTreePartLabel(part);
-      if (!partKey) {
-        continue;
-      }
-      const folderKey = `${current.key}/${partKey}`;
-      if (!current.childMap.has(partKey)) {
-        const folder = createNodeTreeFolder(folderKey, partLabel);
-        current.childMap.set(partKey, folder);
-        current.children.push(folder);
-      }
-      current = current.childMap.get(partKey);
-    }
-    current.children.push({
-      key: `${current.key}/${node.type}`,
-      label: node.title || node.type,
-      type: "node",
-      node,
-      totalLeaves: 1,
-    });
-  }
-  finalizeOfficialNodeTree(root);
-  sortOfficialNodeTree(root);
-  return root;
-}
-
-function finalizeOfficialNodeTree(node) {
-  if (node.type === "node") {
-    node.totalLeaves = 1;
-    return 1;
-  }
-  node.totalLeaves = node.children.reduce((sum, child) => sum + finalizeOfficialNodeTree(child), 0);
-  delete node.childMap;
-  return node.totalLeaves;
-}
-
-function isUnknownNodeFolder(child) {
-  return child?.type === "folder" && String(child.label || "") === t("nodes.uncategorized");
-}
-
-function sortOfficialNodeTree(node) {
-  if (node.type === "node" || !node.children) {
-    return;
-  }
-  node.children.sort((a, b) => {
-    const unknownA = isUnknownNodeFolder(a);
-    const unknownB = isUnknownNodeFolder(b);
-    if (unknownA !== unknownB) {
-      return unknownA ? -1 : 1;
-    }
-    if (a.type !== b.type) {
-      return a.type === "folder" ? -1 : 1;
-    }
-    const rankA = comfyCategorySortRank(a.label);
-    const rankB = comfyCategorySortRank(b.label);
-    if (rankA !== rankB) {
-      return rankA - rankB;
-    }
-    if (nodesState.customOrderEnabled) {
-      const order = Array.isArray(nodesState.customOrder?.[node.key]) ? nodesState.customOrder[node.key] : [];
-      const orderKeyA = a.type === "node" ? a.node?.type : a.key;
-      const orderKeyB = b.type === "node" ? b.node?.type : b.key;
-      const indexA = order.indexOf(orderKeyA);
-      const indexB = order.indexOf(orderKeyB);
-      if (indexA !== -1 || indexB !== -1) {
-        if (indexA === -1) {
-          return 1;
-        }
-        if (indexB === -1) {
-          return -1;
-        }
-        return indexA - indexB;
-      }
-    }
-    if (nodesState.sort !== "alphabetical") {
-      return 0;
-    }
-    return String(a.label || "").localeCompare(String(b.label || ""));
-  });
-  for (const child of node.children) {
-    sortOfficialNodeTree(child);
-  }
-}
-
-function renderOfficialNodeTree(el, section, tree, favoriteTypes, depth = 0) {
-  for (const child of tree.children || []) {
-    if (child.type === "node") {
-      section.append(renderAllNodeRow(el, child.node, favoriteTypes.has(child.node.type), depth, tree.key));
-    } else {
-      renderOfficialNodeFolder(el, section, child, favoriteTypes, depth);
-    }
-  }
-}
-
-function renderOfficialNodeFolder(el, section, folder, favoriteTypes, depth) {
-  const query = nodesState.query.trim();
-  const groupOpen = nodesState.expanded.has(folder.key) || Boolean(query);
-  const categoryHeader = document.createElement("div");
-  categoryHeader.className = "workspace2-node-folder-header";
-  categoryHeader.style.paddingLeft = `${8 + depth * 24}px`;
-  categoryHeader.addEventListener("click", (event) => {
-    if (event.target.closest("button,input")) {
-      return;
-    }
-    event.stopPropagation();
-    toggleOfficialTreeFolder(el, folder, event.ctrlKey || event.metaKey);
-  });
-
-  const disclosure = document.createElement("button");
-  disclosure.className = `workspace2-disclosure ${groupOpen ? "is-open" : ""}`;
-  disclosure.type = "button";
-  disclosure.title = groupOpen ? t("folder.collapse") : t("folder.expand");
-  disclosure.addEventListener("click", (event) => {
-    event.stopPropagation();
-    toggleOfficialTreeFolder(el, folder, event.ctrlKey || event.metaKey);
-  });
-
-  const icon = document.createElement("span");
-  applyDecoratedIcon(icon, "", "", groupOpen ? DEFAULT_FOLDER_OPEN_ICON_CLASS : DEFAULT_FOLDER_ICON_CLASS);
-  const name = document.createElement("div");
-  name.className = "workspace2-name";
-  name.textContent = folder.label;
-  const meta = document.createElement("div");
-  meta.className = "workspace2-meta";
-  meta.textContent = String(folder.totalLeaves);
-  categoryHeader.append(disclosure, icon, name, meta);
-  section.append(categoryHeader);
-
-  if (groupOpen) {
-    renderOfficialNodeTree(el, section, folder, favoriteTypes, depth + 1);
-  }
 }
 
 function setSectionHeaderExpanded(header, expanded) {
@@ -9489,92 +8592,6 @@ function prepareWorkspaceModuleMount(el) {
   el.style.minHeight = "0";
 }
 
-function createPanelHeader(titleText, statusText, options = {}) {
-  const header = document.createElement("div");
-  header.className = "workspace2-header";
-
-  const title = document.createElement("div");
-  title.className = "workspace2-title";
-  title.textContent = titleText;
-
-  const status = document.createElement("div");
-  status.className = "workspace2-status";
-  status.textContent = statusText;
-  if (options.statusDataset) {
-    status.dataset[options.statusDataset] = "1";
-  }
-
-  header.append(title, status);
-  return header;
-}
-
-function createSearchToolbar({ focusKey, placeholder, value, onInput, buttons = [] }) {
-  const toolbar = document.createElement("div");
-  toolbar.className = "workspace2-toolbar";
-  toolbar.style.setProperty("--workspace2-toolbar-actions", String(buttons.length));
-
-  const searchWrap = document.createElement("div");
-  searchWrap.className = "workspace2-search-wrap";
-
-  const search = document.createElement("input");
-  search.className = "workspace2-input";
-  search.dataset.workspace2Focus = focusKey;
-  search.placeholder = placeholder;
-  search.value = value;
-  isolateComfyKeys(search);
-  search.addEventListener("click", (event) => event.stopPropagation());
-
-  const clear = document.createElement("button");
-  clear.type = "button";
-  clear.className = "workspace2-search-clear";
-  clear.title = t("search.clear");
-  clear.setAttribute("aria-label", t("search.clear"));
-  clear.append(iconSvg("x"));
-
-  const updateClear = () => {
-    clear.hidden = !search.value;
-  };
-  const emitInput = () => {
-    updateClear();
-    onInput(search.value);
-  };
-  let isComposing = false;
-  search.addEventListener("compositionstart", () => {
-    isComposing = true;
-  });
-  search.addEventListener("compositionend", () => {
-    isComposing = false;
-    emitInput();
-  });
-  search.addEventListener("input", (event) => {
-    updateClear();
-    if (isComposing || event.isComposing) {
-      return;
-    }
-    emitInput();
-  });
-  clear.addEventListener("pointerdown", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-  });
-  clear.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (!search.value) {
-      search.focus();
-      return;
-    }
-    search.value = "";
-    emitInput();
-    search.focus();
-  });
-  updateClear();
-
-  searchWrap.append(search, clear);
-  toolbar.append(searchWrap, ...buttons);
-  return toolbar;
-}
-
 function createRootActionRow({ className = "", title, icon, text, control, setupDrop, onClick }) {
   const row = document.createElement("div");
   row.className = `workspace2-root-row ${className}`.trim();
@@ -10073,65 +9090,20 @@ function beginWorkflowRename(el, path, surface) {
 }
 
 function createWorkflowRenameInput(el, item, surface) {
-  const input = document.createElement("input");
-  input.className = "workspace2-rename-input";
-  input.value = workflowDisplayName(item);
-  isolateComfyKeys(input);
-
-  // Enter and blur can arrive back-to-back. They must share one in-flight
-  // request rather than each trying to submit (or leaving the UI halfway
-  // through a rename). A rejected request remains editable after re-render.
-  let renamePromise = null;
-  const commitRename = () => {
-    if (!renamePromise) {
-      input.disabled = true;
-      renamePromise = renameItem(el, item, input.value.trim());
-    }
-    return renamePromise;
-  };
-  const handleCommitError = (error) => {
-    handleError(el, error);
-  };
-
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("keydown", async (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      event.stopPropagation();
-      try {
-        await commitRename();
-      } catch (error) {
-        handleCommitError(error);
-      }
-      return;
-    }
-    if (event.key === "Escape" && !renamePromise) {
-      event.preventDefault();
-      event.stopPropagation();
+  return createWorkflowRenameInputRenderer({
+    item,
+    surface,
+    displayName: workflowDisplayName,
+    prepareInput: isolateComfyKeys,
+    onCommit: (name) => renameItem(el, item, name),
+    onError: (error) => handleError(el, error),
+    onCancel: () => {
       state.editingPath = "";
       state.editingSurface = "";
       renderPanel(el);
-    }
+    },
+    isStillEditing: (path, targetSurface) => state.editingPath === path && state.editingSurface === targetSurface,
   });
-  input.addEventListener("blur", async () => {
-    // Enter has already started the same promise. Its key handler owns the
-    // result/error, so blur must not report a duplicate failure.
-    if (renamePromise) {
-      return;
-    }
-    try {
-      await commitRename();
-    } catch (error) {
-      handleCommitError(error);
-    }
-  });
-  setTimeout(() => {
-    if (state.editingPath === item.path && state.editingSurface === surface) {
-      input.focus();
-      input.select();
-    }
-  }, 0);
-  return input;
 }
 
 function renderNode(el, list, node, depth) {
@@ -10211,136 +9183,53 @@ function recentWorkflowRows(el) {
       .map((entry) => ({ ...entry, item: existing.get(entry.path) }))
       .filter((entry) => entry.item)
       .slice(0, workflowRecentLimit());
-  const section = document.createElement("div");
-  section.className = "workspace2-recent-workflows";
-  const label = document.createElement("div");
-  label.className = "workspace2-current-workflow-label";
-  label.textContent = t("workflows.recent");
-  section.append(label);
-
-  if (!recent.length) {
-    const empty = document.createElement("div");
-    empty.className = "workspace2-current-workflow-name is-empty";
-    empty.textContent = t("workflows.currentEmpty");
-    section.append(empty);
-    return section;
-  }
-
-  for (const entry of recent) {
+  const entries = recent.map((entry) => {
     const isOfficialWorkflow = Boolean(entry.officialWorkflow);
     const isActive = isOfficialWorkflow
       ? entry.officialWorkflow === activeOfficialWorkflow
       : entry.path === state.selectedPath;
-    const isDirty = isOfficialWorkflow
-      ? workflowOpenState.isOfficialWorkflowDirty(entry.officialWorkflow)
-      : isActive && state.workflowDirty;
-    const row = document.createElement("div");
-    row.className = "workspace2-current-workflow";
-    if (isActive) {
-      row.classList.add("is-selected");
-    }
-    const isRenaming = state.editingPath === entry.path && state.editingSurface === "open";
-    const info = document.createElement(isRenaming ? "div" : "button");
-    if (!isRenaming) {
-      info.type = "button";
-    }
-    info.className = "workspace2-current-workflow-info";
-    info.title = entry.path;
-    if (isDirty) {
-      const dirtyDot = document.createElement("span");
-      dirtyDot.className = "workspace2-current-workflow-dirty-dot";
-      dirtyDot.title = t("workflows.unsavedChanges");
-      dirtyDot.setAttribute("aria-label", t("workflows.unsavedChanges"));
-      info.append(dirtyDot);
-    }
-    if (isRenaming) {
-      info.append(createWorkflowRenameInput(el, entry.item, "open"));
-    } else {
-      const name = document.createElement("div");
-      name.className = "workspace2-current-workflow-name";
-      name.textContent = workflowDisplayName(entry.item) || entry.name || entry.path;
-      info.append(name);
-      info.addEventListener("click", async (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        try {
-          state.selectedPath = entry.path;
-          await openWorkflow(entry.path);
-          renderPanel(el);
-        } catch (error) {
-          handleError(el, error);
+    return {
+      ...entry,
+      isOfficialWorkflow,
+      isActive,
+      isDirty: isOfficialWorkflow
+        ? workflowOpenState.isOfficialWorkflowDirty(entry.officialWorkflow)
+        : isActive && state.workflowDirty,
+      isRenaming: state.editingPath === entry.path && state.editingSurface === "open",
+      displayName: workflowDisplayName(entry.item) || entry.name || entry.path,
+    };
+  });
+  return renderOpenWorkflowList({
+    entries,
+    createRenameInput: (entry) => createWorkflowRenameInput(el, entry.item, "open"),
+    onOpen: async (entry) => {
+      state.selectedPath = entry.path;
+      await openWorkflow(entry.path);
+      renderPanel(el);
+    },
+    onSave: (entry) => saveCurrentWorkflowToPath(el, entry.path),
+    onStartRename: (entry) => beginWorkflowRename(el, entry.path, "open"),
+    onCloseOfficial: async (entry) => {
+      if (entry.isDirty) {
+        const choice = await workspace2ConfirmDirtyWorkflowClose(entry.displayName);
+        if (!choice) return;
+        if (choice === "save") {
+          const saved = await saveOfficialWorkflow(entry.officialWorkflow);
+          if (!saved) return;
         }
-      });
-    }
-
-    const actions = document.createElement("div");
-    actions.className = "workspace2-actions";
-    // A dirty marker belongs to every unsaved workflow, but only the workflow
-    // currently shown on the canvas can be saved from this list.
-    if (isDirty && isActive) {
-      actions.append(
-        iconButton("save", t("workflows.saveCurrent"), async (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          try {
-            await saveCurrentWorkflowToPath(el, entry.path);
-          } catch (error) {
-            handleError(el, error);
-          }
-        }),
-      );
-    }
-    if (isOfficialWorkflow) {
-      actions.append(
-        iconButton("edit", t("row.rename"), (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          beginWorkflowRename(el, entry.path, "open");
-        }),
-      );
-      actions.append(
-        iconButton("x", t("workflows.close"), async (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          try {
-            if (isDirty) {
-              const choice = await workspace2ConfirmDirtyWorkflowClose(
-                workflowDisplayName(entry.item) || entry.name || entry.path,
-              );
-              if (!choice) {
-                return;
-              }
-              if (choice === "save") {
-                const saved = await saveOfficialWorkflow(entry.officialWorkflow);
-                if (!saved) {
-                  return;
-                }
-              }
-            }
-            const closed = await closeOfficialWorkflow(app, entry.officialWorkflow);
-            if (closed) {
-              workflowOpenState.removeOfficialWorkflowPathState(entry.path);
-              renderPanel(el);
-            }
-          } catch (error) {
-            handleError(el, error);
-          }
-        }),
-      );
-    } else {
-      actions.append(
-        iconButton("x", t("workflows.removeRecent"), (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          removeRecentWorkflow(entry.path);
-          renderPanel(el);
-        }),
-      );
-    }
-    row.append(info, actions);
-    section.append(row);
-  }
-  return section;
+      }
+      const closed = await closeOfficialWorkflow(app, entry.officialWorkflow);
+      if (closed) {
+        workflowOpenState.removeOfficialWorkflowPathState(entry.path);
+        renderPanel(el);
+      }
+    },
+    onRemoveRecent: (entry) => {
+      removeRecentWorkflow(entry.path);
+      renderPanel(el);
+    },
+    onError: (error) => handleError(el, error),
+  });
 }
 
 function renderPanel(el) {
@@ -10651,314 +9540,124 @@ function renderCanvasGroupsPanel(el) {
 }
 
 function renderTemplateRow(el, template) {
-  const row = document.createElement("div");
-  row.className = "workspace2-template-row";
   const isEditing = templatesState.editingTemplateId === template.id;
-  if (templatesState.pendingTemplate?.id === template.id) {
-    row.classList.add("is-selected");
-  }
-  row.draggable = !isEditing;
-  row.title = t("templates.dropHint");
-  row.dataset.workspace2TemplateId = template.id;
-  makeTemplateDropTarget(el, row, template.groupId || "", template.id);
-
-  const icon = iconSvg("template");
-  const info = document.createElement("div");
-  info.className = "workspace2-template-info";
-  const name = document.createElement("div");
-  name.className = "workspace2-template-name";
-  if (isEditing) {
-    const input = document.createElement("input");
-    input.className = "workspace2-rename-input";
-    input.value = template.name;
-    isolateComfyKeys(input);
-    input.addEventListener("click", (event) => event.stopPropagation());
-    input.addEventListener("keydown", async (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        event.stopPropagation();
-        try {
-          await renameTemplate(el, template, input.value);
-        } catch (error) {
-          templatesState.error = error.message;
-          renderTemplatesPanel(el);
-        }
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        templatesState.editingTemplateId = "";
-        renderTemplatesPanel(el);
-      }
-    });
-    input.addEventListener("blur", async () => {
-      try {
-        await renameTemplate(el, template, input.value);
-      } catch (error) {
-        templatesState.error = error.message;
-        renderTemplatesPanel(el);
-      }
-    });
-    name.append(input);
-    setTimeout(() => {
-      input.focus();
-      input.select();
-    }, 0);
-  } else {
-    name.textContent = template.name;
-  }
-  const meta = document.createElement("div");
-  meta.className = "workspace2-template-meta";
-  meta.textContent = t("templates.meta", {
-    nodes: template.nodes?.length || 0,
-    links: template.links?.length || 0,
-  });
-  info.append(name, meta);
-  const actions = document.createElement("div");
-  actions.className = "workspace2-actions";
-  actions.addEventListener("pointerenter", hideNodePreview);
-  actions.append(
-    dangerIconButton("trash", t("templates.delete"), (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      requestDeleteTemplate(el, template, event.currentTarget);
-    }),
-  );
-  row.append(icon, info, actions);
-
-  row.addEventListener("dragstart", (event) => {
-    if (event.target?.closest?.("button,input,.workspace2-actions")) {
-      event.preventDefault();
-      return;
-    }
-    hideNodePreview();
-    templatesState.draggingTemplate = template;
-    event.dataTransfer.effectAllowed = "copyMove";
-    event.dataTransfer.setData(TEMPLATE_DRAG_TYPE, JSON.stringify(template));
-    event.dataTransfer.setData("text/plain", template.name);
-  });
-  row.addEventListener("dragend", () => {
-    templatesState.draggingTemplate = null;
-  });
-  row.addEventListener("contextmenu", (event) => openTemplateContextMenu(el, event, template));
-  row.addEventListener("click", (event) => {
-    if (isEditing || event.target?.closest?.("button,input,.workspace2-actions")) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    setPendingTemplate(templatesState.pendingTemplate?.id === template.id ? null : template);
-  });
-  row.addEventListener("pointerenter", (event) => {
-    if (!isEditing && !templatesState.draggingTemplate && !event.target?.closest?.(".workspace2-actions")) {
-      showTemplatePreview(template, event, { panelElement: el });
-    }
-  });
-  row.addEventListener("pointermove", (event) => {
-    if (event.target?.closest?.(".workspace2-actions")) {
-      hideNodePreview();
-      return;
-    }
-    if (!isEditing && !templatesState.draggingTemplate && nodesState.previewPopover && !nodesState.previewPopover.hidden) {
-      positionNodePreviewPopover(nodesState.previewPopover, event, { panelElement: el });
-    }
-  });
-  row.addEventListener("pointerleave", () => {
-    if (nodesState.previewPopover && !nodesState.previewPopover.hidden) {
-      hideNodePreview();
-    }
-  });
-  row.addEventListener("dblclick", async (event) => {
-    if (event.target?.closest?.("button,input,.workspace2-actions")) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    hideNodePreview();
-    try {
-      await addTemplateToCanvas(template, canvasCenterPosition());
-      await recordTemplateUse(el, template.id);
-    } catch (error) {
+  return renderTemplateRowRenderer({
+    el,
+    template,
+    isEditing,
+    isSelected: templatesState.pendingTemplate?.id === template.id,
+    makeDropTarget: makeTemplateDropTarget,
+    prepareRenameInput: isolateComfyKeys,
+    onRename: (value) => renameTemplate(el, template, value),
+    onRenameError: (error) => {
       templatesState.error = error.message;
       renderTemplatesPanel(el);
-    }
+    },
+    onCancelRename: () => {
+      templatesState.editingTemplateId = "";
+      renderTemplatesPanel(el);
+    },
+    onDelete: (anchor) => requestDeleteTemplate(el, template, anchor),
+    onActionsPointerEnter: hideNodePreview,
+    onDragStart: (event) => {
+      hideNodePreview();
+      templatesState.draggingTemplate = template;
+      event.dataTransfer.effectAllowed = "copyMove";
+      event.dataTransfer.setData(TEMPLATE_DRAG_TYPE, JSON.stringify(template));
+      event.dataTransfer.setData("text/plain", template.name);
+    },
+    onDragEnd: () => {
+      templatesState.draggingTemplate = null;
+    },
+    onOpenMenu: (event) => openTemplateContextMenu(el, event, template),
+    onSelect: () => setPendingTemplate(templatesState.pendingTemplate?.id === template.id ? null : template),
+    onPreviewEnter: (event) => {
+      if (!templatesState.draggingTemplate) showTemplatePreview(template, event, { panelElement: el });
+    },
+    onPreviewMove: (event) => {
+      if (!templatesState.draggingTemplate && nodesState.previewPopover && !nodesState.previewPopover.hidden) {
+        positionNodePreviewPopover(nodesState.previewPopover, event, { panelElement: el });
+      }
+    },
+    onPreviewLeave: () => {
+      if (nodesState.previewPopover && !nodesState.previewPopover.hidden) hideNodePreview();
+    },
+    onOpenTemplate: async () => {
+      hideNodePreview();
+      await addTemplateToCanvas(template, canvasCenterPosition());
+      await recordTemplateUse(el, template.id);
+    },
+    onOpenTemplateError: (error) => {
+      templatesState.error = error.message;
+      renderTemplatesPanel(el);
+    },
   });
-  return row;
-}
-
-function templateMatchesGroup(group, query) {
-  const directTemplates = (templatesState.library?.templates || [])
-    .filter((template) => template.groupId === group.id)
-    .some((template) => templateMatchesQuery(template, query));
-  if (directTemplates) {
-    return true;
-  }
-  if (query && group.name.toLocaleLowerCase().includes(query.toLocaleLowerCase())) {
-    return true;
-  }
-  return childTemplateGroups(group.id).some((child) => templateMatchesGroup(child, query));
 }
 
 function renderTemplateGroupFolder(el, section, group, query, depth = 0) {
-  const groupTemplates = (templatesState.library?.templates || [])
-    .filter((template) => template.groupId === group.id)
-    .filter((template) => templateMatchesQuery(template, query))
-    .sort((a, b) => compareTemplatesBySort(a, b, query));
-  const childGroups = childTemplateGroups(group.id)
-    .filter((childGroup) => !query || templateMatchesGroup(childGroup, query));
+  const { groupTemplates, childGroups } = projectTemplateGroupResults({
+    group,
+    query,
+    templates: templatesState.library?.templates || [],
+  });
   if (query && !groupTemplates.length && !childGroups.length) {
     return;
   }
   const groupOpen = templatesState.expanded.has(group.id) || Boolean(query);
 
-  const header = document.createElement("div");
-  header.className = "workspace2-node-folder-header";
-  header.style.setProperty("--indent", `${depth * 16 + 4}px`);
-  header.dataset.workspace2TemplateGroupId = group.id;
-  makeTemplateDropTarget(el, header, group.id);
-  makeTemplateGroupDragSource(header, group);
-  header.addEventListener("click", (event) => {
-    if (event.target.closest("button,input")) {
-      return;
-    }
-    event.stopPropagation();
-    toggleTemplateGroup(el, group.id, event.ctrlKey || event.metaKey);
-  });
-  header.addEventListener("contextmenu", (event) => openTemplateGroupContextMenu(el, event, group));
-
-  const disclosure = document.createElement("button");
-  disclosure.className = `workspace2-disclosure ${groupOpen ? "is-open" : ""}`;
-  disclosure.type = "button";
-  disclosure.title = groupOpen ? t("folder.collapse") : t("folder.expand");
-  disclosure.addEventListener("click", (event) => {
-    event.stopPropagation();
-    toggleTemplateGroup(el, group.id, event.ctrlKey || event.metaKey);
-  });
-
-  const icon = document.createElement("span");
-  applyDecoratedIcon(icon, group.icon, group.color, groupOpen ? DEFAULT_FOLDER_OPEN_ICON_CLASS : DEFAULT_FOLDER_ICON_CLASS);
-
-  const name = document.createElement("div");
-  name.className = "workspace2-name";
-  if (templatesState.editingGroupId === group.id) {
-    const input = document.createElement("input");
-    input.className = "workspace2-rename-input";
-    input.value = group.name;
-    isolateComfyKeys(input);
-    input.addEventListener("click", (event) => event.stopPropagation());
-    input.addEventListener("keydown", async (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        try {
-          await commitTemplateGroupRename(el, group, input.value);
-        } catch (error) {
-          templatesState.error = error.message;
-          renderTemplatesPanel(el);
-        }
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        templatesState.editingGroupId = "";
-        renderTemplatesPanel(el);
-      }
-    });
-    input.addEventListener("blur", async () => {
-      try {
-        await commitTemplateGroupRename(el, group, input.value);
-      } catch (error) {
-        templatesState.error = error.message;
-        renderTemplatesPanel(el);
-      }
-    });
-    name.append(input);
-    setTimeout(() => {
-      input.focus();
-      input.select();
-    }, 0);
-  } else {
-    name.textContent = group.name;
-  }
-
-  const actions = document.createElement("div");
-  actions.className = "workspace2-actions";
-  actions.append(
-    iconButton("folderPlus", t("menu.newSubfolder"), async () => createTemplateGroup(el, group.id)),
-    iconButton("edit", t("templates.renameGroup"), () => {
+  renderTemplateGroupHeader({
+    el,
+    section,
+    group,
+    depth,
+    groupOpen,
+    isEditing: templatesState.editingGroupId === group.id,
+    makeDropTarget: makeTemplateDropTarget,
+    makeDragSource: makeTemplateGroupDragSource,
+    onToggle: (event) => toggleTemplateGroup(el, group.id, event.ctrlKey || event.metaKey),
+    onOpenMenu: (event) => openTemplateGroupContextMenu(el, event, group),
+    prepareRenameInput: isolateComfyKeys,
+    onCommitRename: (value) => commitTemplateGroupRename(el, group, value),
+    onRenameError: (error) => {
+      templatesState.error = error.message;
+      renderTemplatesPanel(el);
+    },
+    onCancelRename: () => {
+      templatesState.editingGroupId = "";
+      renderTemplatesPanel(el);
+    },
+    onNewSubfolder: () => createTemplateGroup(el, group.id),
+    onStartRename: () => {
       templatesState.editingGroupId = group.id;
       renderTemplatesPanel(el);
-    }),
-    dangerIconButton("trash", t("templates.deleteGroupTitle"), (event) => {
+    },
+    onDelete: (event) => {
       event.preventDefault();
       event.stopPropagation();
       requestDeleteTemplateGroup(el, group, event.currentTarget);
-    }),
-  );
-
-  header.append(disclosure, icon, name, actions);
-  section.append(header);
-  if (!groupOpen) {
-    return;
-  }
-  for (const childGroup of childGroups) {
-    renderTemplateGroupFolder(el, section, childGroup, query, depth + 1);
-  }
-  const list = document.createElement("div");
-  list.className = "workspace2-node-list workspace2-template-list";
-  list.style.setProperty("--indent", `${(depth + 1) * 16 + 4}px`);
-  makeTemplateDropTarget(el, list, group.id);
-  for (const template of groupTemplates) {
-    list.append(renderTemplateRow(el, template));
-  }
-  section.append(list);
+    },
+  });
+  renderTemplateGroupContents({
+    el,
+    section,
+    group,
+    query,
+    depth,
+    groupOpen,
+    childGroups,
+    groupTemplates,
+  });
 }
 
 function renderTemplatesBody(el, body) {
   if (!templatesState.library && !templatesState.loading) {
     loadTemplateLibrary().then(() => renderTemplatesPanel(el));
   }
-  if (templatesState.loading) {
-    const loading = document.createElement("div");
-    loading.className = "workspace2-empty";
-    loading.textContent = t("status.loading");
-    body.append(loading);
-    return;
-  }
-  if (templatesState.error) {
-    const error = document.createElement("div");
-    error.className = "workspace2-empty";
-    error.textContent = t("status.error", { message: templatesState.error });
-    body.append(error);
-    return;
-  }
+  if (renderTemplateBodyState({ body, loading: templatesState.loading, error: templatesState.error })) return;
   const query = templatesState.query.trim();
   const allTemplates = templatesState.library?.templates || [];
-  const rootTemplates = allTemplates
-    .filter((template) => !template.groupId)
-    .filter((template) => templateMatchesQuery(template, query))
-    .sort((a, b) => compareTemplatesBySort(a, b, query));
-  const rootGroups = childTemplateGroups("")
-    .filter((group) => !query || templateMatchesGroup(group, query));
-  if (!rootTemplates.length && !rootGroups.length) {
-    const empty = document.createElement("div");
-    empty.className = "workspace2-empty";
-    empty.textContent = query ? t("templates.noMatches") : t("templates.empty");
-    body.append(empty);
-    return;
-  }
-
-  const section = document.createElement("div");
-  section.className = "workspace2-node-section";
-  const rootList = document.createElement("div");
-  rootList.className = "workspace2-node-list workspace2-template-list";
-  makeTemplateDropTarget(el, rootList, "");
-  for (const template of rootTemplates) {
-    rootList.append(renderTemplateRow(el, template));
-  }
-  section.append(rootList);
-  for (const group of rootGroups) {
-    renderTemplateGroupFolder(el, section, group, query, 0);
-  }
-  body.append(section);
+  const { rootTemplates, rootGroups } = projectTemplateRootResults({ query, templates: allTemplates });
+  renderTemplateRootResults({ el, body, query, rootTemplates, rootGroups });
 }
 
 function closeTemplateSortMenu() {
@@ -11239,69 +9938,6 @@ function ensureNodePreviewPopover() {
   return preview;
 }
 
-function sidebarLocation() {
-  const value = app.ui?.settings?.getSettingValue?.("Comfy.Sidebar.Location")
-    ?? app.extensionManager?.setting?.get?.("Comfy.Sidebar.Location")
-    ?? localStorage.getItem("Comfy.Sidebar.Location");
-  return String(value || "left").toLowerCase() === "right" ? "right" : "left";
-}
-
-function positionNodePreviewAtCursor(preview, event) {
-  const gap = 16;
-  const rect = preview.getBoundingClientRect();
-  let left = event.clientX + gap;
-  let top = event.clientY + gap;
-  if (left + rect.width > window.innerWidth - 8) {
-    left = Math.max(8, event.clientX - rect.width - gap);
-  }
-  if (top + rect.height > window.innerHeight - 8) {
-    top = Math.max(8, event.clientY - rect.height - gap);
-  }
-  preview.style.left = `${left}px`;
-  preview.style.top = `${top}px`;
-}
-
-function positionNodePreviewPopover(preview, event, options = {}) {
-  if (options.followCursor) {
-    positionNodePreviewAtCursor(preview, event);
-    return;
-  }
-  const gap = 16;
-  const previewWidth = Math.min(248, window.innerWidth - 24);
-  const targetRect = event?.currentTarget?.getBoundingClientRect?.();
-  const localPanel = event?.currentTarget?.closest?.(".workspace2-panel,.workspace2-shell");
-  const panelRect = options.panelElement?.getBoundingClientRect?.()
-    || localPanel?.getBoundingClientRect?.()
-    || nodesState.renderTarget?.getBoundingClientRect?.()
-    || targetRect;
-  const clientX = event?.clientX || 0;
-  const clientY = event?.clientY || 0;
-  preview.style.left = "0px";
-  preview.style.top = "0px";
-  preview.style.width = `${previewWidth}px`;
-  const rect = preview.getBoundingClientRect();
-  let left;
-  if (sidebarLocation() === "left") {
-    left = (panelRect?.right ?? clientX) + gap;
-    if (left + previewWidth > window.innerWidth - 8) {
-      left = Math.max(8, (panelRect?.left ?? clientX) - previewWidth - gap);
-    }
-  } else {
-    left = (panelRect?.left ?? clientX) - previewWidth - gap;
-    if (left < 8) {
-      left = Math.min(window.innerWidth - previewWidth - 8, (panelRect?.right ?? clientX) + gap);
-    }
-  }
-  const anchorY = targetRect ? targetRect.top + targetRect.height / 2 : clientY;
-  let top = anchorY - rect.height * 0.3;
-  if (top + rect.height > window.innerHeight - gap) {
-    top = window.innerHeight - rect.height - gap;
-  }
-  top = Math.max(gap, top);
-  preview.style.left = `${left}px`;
-  preview.style.top = `${top}px`;
-}
-
 function showNodePreview(node, event, options = {}) {
   if (!node || !event) {
     hideNodePreview();
@@ -11346,160 +9982,6 @@ function showNodePreview(node, event, options = {}) {
   }
   preview.append(body);
   positionNodePreviewPopover(preview, event, options);
-}
-
-function templatePreviewNodes(template) {
-  return (Array.isArray(template?.nodes) ? template.nodes : [])
-    .map((node) => {
-      const relPos = Array.isArray(node?.relPos) ? node.relPos : null;
-      const pos = relPos || (Array.isArray(node?.pos) ? node.pos : [0, 0]);
-      const size = vectorPair(node?.size, [180, 80]);
-      return {
-        id: String(node?.id ?? ""),
-        type: String(node?.type || ""),
-        title: String(node?.title || node?.type || ""),
-        x: Number(pos?.[0] || 0),
-        y: Number(pos?.[1] || 0),
-        width: Math.max(40, Number(size[0] || 180)),
-        height: Math.max(24, Number(size[1] || 80)),
-        color: String(node?.color || ""),
-        bgcolor: String(node?.bgcolor || ""),
-        mode: Number(node?.mode || 0),
-      };
-    })
-    .filter((node) => node.type || node.id);
-}
-
-function templatePreviewBounds(nodes) {
-  if (!nodes.length) {
-    return { minX: 0, minY: 0, width: 100, height: 100 };
-  }
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const node of nodes) {
-    minX = Math.min(minX, node.x);
-    minY = Math.min(minY, node.y);
-    maxX = Math.max(maxX, node.x + node.width);
-    maxY = Math.max(maxY, node.y + node.height);
-  }
-  const width = Math.max(100, maxX - minX);
-  const height = Math.max(100, maxY - minY);
-  return { minX, minY, width, height };
-}
-
-function templatePreviewNodeFill(node) {
-  if (node.mode === 4) {
-    return "#45424d";
-  }
-  if (node.bgcolor && /^(#|rgb|hsl)/i.test(node.bgcolor)) {
-    return node.bgcolor;
-  }
-  if (node.color && /^(#|rgb|hsl)/i.test(node.color)) {
-    return node.color;
-  }
-  const normalized = node.type.toLowerCase();
-  if (normalized.includes("image")) return "#335f87";
-  if (normalized.includes("latent")) return "#6f4a82";
-  if (normalized.includes("model")) return "#615384";
-  if (normalized.includes("clip") || normalized.includes("text")) return "#70623e";
-  if (normalized.includes("vae")) return "#804b4b";
-  return "#4f5663";
-}
-
-function drawRoundedRect(ctx, x, y, width, height, radius) {
-  const r = Math.min(radius, width / 2, height / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + width - r, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
-  ctx.lineTo(x + width, y + height - r);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-  ctx.lineTo(x + r, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-function renderTemplateMinimap(template, options = {}) {
-  const width = Number(options.width || 320);
-  const height = Number(options.height || 190);
-  const padding = 18;
-  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-  const canvas = document.createElement("canvas");
-  canvas.className = "workspace2-template-minimap";
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
-  canvas.style.width = "100%";
-  canvas.style.aspectRatio = `${width} / ${height}`;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    return canvas;
-  }
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#181a1f";
-  ctx.fillRect(0, 0, width, height);
-
-  const nodes = templatePreviewNodes(template);
-  if (!nodes.length) {
-    ctx.fillStyle = "#7e828c";
-    ctx.font = "12px sans-serif";
-    ctx.fillText(t("templates.empty"), padding, height / 2);
-    return canvas;
-  }
-
-  const bounds = templatePreviewBounds(nodes);
-  const scale = Math.min(
-    (width - padding * 2) / bounds.width,
-    (height - padding * 2) / bounds.height,
-  );
-  const offsetX = (width - bounds.width * scale) / 2 - bounds.minX * scale;
-  const offsetY = (height - bounds.height * scale) / 2 - bounds.minY * scale;
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const project = (x, y) => [x * scale + offsetX, y * scale + offsetY];
-
-  ctx.save();
-  ctx.lineWidth = 1.2;
-  ctx.strokeStyle = "rgba(178, 184, 196, 0.32)";
-  for (const link of Array.isArray(template?.links) ? template.links : []) {
-    const origin = nodeById.get(String(link?.origin_id ?? ""));
-    const target = nodeById.get(String(link?.target_id ?? ""));
-    if (!origin || !target) {
-      continue;
-    }
-    const [x1, y1] = project(origin.x + origin.width, origin.y + origin.height * 0.5);
-    const [x2, y2] = project(target.x, target.y + target.height * 0.5);
-    const dx = Math.max(16, Math.abs(x2 - x1) * 0.45);
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.bezierCurveTo(x1 + dx, y1, x2 - dx, y2, x2, y2);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  for (const node of nodes) {
-    const [x, y] = project(node.x, node.y);
-    const nodeWidth = Math.max(12, node.width * scale);
-    const nodeHeight = Math.max(8, node.height * scale);
-    const radius = Math.min(5, Math.max(2, nodeHeight * 0.16));
-    ctx.fillStyle = templatePreviewNodeFill(node);
-    ctx.strokeStyle = "rgba(226, 229, 235, 0.42)";
-    ctx.lineWidth = 1;
-    drawRoundedRect(ctx, x, y, nodeWidth, nodeHeight, radius);
-    ctx.fill();
-    ctx.stroke();
-
-    if (nodeWidth > 28 && nodeHeight > 12) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
-      ctx.fillRect(x + 5, y + 5, Math.max(8, nodeWidth * 0.36), 2);
-    }
-  }
-
-  return canvas;
 }
 
 function templateNodePreviewModel(templateNode) {
@@ -12336,7 +10818,7 @@ function renderEssentialsNodeSection(el, body, nodes, favoriteTypes) {
       const list = document.createElement("div");
       list.className = "workspace2-node-list";
       for (const node of categoryNodes) {
-        list.append(renderAllNodeRow(el, node, favoriteTypes.has(node.type)));
+        list.append(renderNodeRow(el, node, favoriteTypes.has(node.type)));
       }
       section.append(list);
     }
@@ -12344,44 +10826,19 @@ function renderEssentialsNodeSection(el, body, nodes, favoriteTypes) {
 }
 
 function renderNodeCategorySections(el, body) {
-  const query = nodesState.query.trim().toLowerCase();
-  const allNodes = getNodeDefinitions();
-  const matchingNodes = allNodes.filter((node) => nodeMatchesQuery(node, query));
-  const filtered = query ? sortNodeSearchResults(matchingNodes, query) : matchingNodes;
-  const favoriteTypes = new Set(nodesState.library.favorites.map((favorite) => favorite.type));
-  const comfyNodes = [];
-  const extensionNodes = [];
-  const unknownNodes = [];
-  const visibleNodes = [];
-  let visibleTotal = 0;
-  for (const node of filtered) {
-    if (isHiddenOfficialNodeSection(node)) {
-      continue;
-    }
-    visibleTotal += 1;
-    if (query && visibleNodes.length >= NODE_SEARCH_RESULT_LIMIT) {
-      continue;
-    }
-    visibleNodes.push(node);
-  }
-
-  for (const node of query ? visibleNodes : filtered) {
-    if (isHiddenOfficialNodeSection(node)) {
-      continue;
-    }
-    if (isComfyCoreNode(node)) {
-      comfyNodes.push(node);
-    } else if (node.source === NODE_SOURCE.CUSTOM) {
-      extensionNodes.push(node);
-    } else {
-      unknownNodes.push(node);
-    }
-  }
-
-  const visibleSections = { ...nodePanelState.defaultVisibleSections(), ...(nodesState.visibleSections || {}) };
-  if (!Object.values(visibleSections).some(Boolean)) {
-    Object.assign(visibleSections, nodePanelState.defaultVisibleSections());
-  }
+  const {
+    favoriteTypes,
+    comfyNodes,
+    extensionNodes,
+    unknownNodes,
+    visibleTotal,
+    visibleSections,
+  } = projectNodeCategories({
+    allNodes: getNodeDefinitions(),
+    query: nodesState.query,
+    favorites: nodesState.library.favorites,
+    visibleSections: nodesState.visibleSections,
+  });
 
   if (visibleSections.bookmarked) {
     renderFavoriteNodeSections(el, body);
@@ -12395,111 +10852,6 @@ function renderNodeCategorySections(el, body) {
   if (unknownNodes.length) {
     renderNodeTopSection(el, body, "__unknown__", t("nodes.categoryUnknown"), unknownNodes, visibleTotal, favoriteTypes);
   }
-}
-
-function renderNodeTopSection(el, body, sectionId, titleText, nodes, totalCount, favoriteTypes) {
-  const section = document.createElement("div");
-  section.className = "workspace2-node-section";
-  const sectionExpanded = renderTopSectionHeader(el, section, sectionId, titleText, `${nodes.length}/${totalCount}`);
-  body.append(section);
-
-  if (!sectionExpanded && !nodesState.query.trim()) {
-    return;
-  }
-
-  if (!nodes.length) {
-    const empty = document.createElement("div");
-    empty.className = "workspace2-empty";
-    empty.textContent = t("nodes.noNodeMatches");
-    section.append(empty);
-    return;
-  }
-
-  if (nodesState.query.trim()) {
-    const list = document.createElement("div");
-    list.className = "workspace2-node-list";
-    for (const node of nodes) {
-      list.append(renderAllNodeRow(el, node, favoriteTypes.has(node.type)));
-    }
-    section.append(list);
-    return;
-  }
-
-  renderOfficialNodeTree(el, section, buildOfficialNodeTree(sectionId, nodes), favoriteTypes);
-}
-function renderAllNodeRow(el, node, isFavorite, depth = 0, parentKey = "") {
-  const row = document.createElement("div");
-  row.className = "workspace2-node-row";
-  row.style.paddingLeft = `${8 + depth * 24}px`;
-  row.dataset.workspace2NodeType = node.type;
-  row.dataset.workspace2NodeParentKey = parentKey;
-  if (nodesState.pendingNode?.type === node.type) {
-    row.classList.add("is-selected");
-  }
-  row.title = node.type;
-  makeNodeCanvasDragSource(row, node);
-  row.addEventListener("mouseenter", (event) => showNodePreview(node, event));
-  row.addEventListener("mousemove", moveNodePreview);
-  row.addEventListener("mouseleave", hideNodePreview);
-  row.addEventListener("contextmenu", (event) => {
-    showNodePreview(node, event);
-    openNodeContextMenu(el, event, node);
-  });
-  row.addEventListener("click", (event) => {
-    if (nodesState.suppressClick) {
-      nodesState.suppressClick = false;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    if (event.target.closest("button,input")) {
-      return;
-    }
-    event.stopPropagation();
-    showNodePreview(node, event);
-    setPendingNode(nodesState.pendingNode?.type === node.type ? null : node);
-  });
-
-  const reorderHandle = document.createElement("span");
-  if (nodesState.customOrderEnabled) {
-    reorderHandle.className = "workspace2-reorder-handle";
-    reorderHandle.title = t("nodes.reorderHandle");
-    beginNodeReorderDrag(el, reorderHandle, row, {
-      kind: "global",
-      type: node.type,
-      title: node.title,
-      parentKey,
-    });
-  } else {
-    reorderHandle.className = "workspace2-reorder-spacer";
-  }
-
-  const dot = document.createElement("span");
-  dot.className = "workspace2-node-dot";
-
-  const info = document.createElement("div");
-  info.className = "workspace2-name";
-  const name = document.createElement("div");
-  name.className = "workspace2-name";
-  name.textContent = node.title;
-  info.append(name);
-
-  const actions = document.createElement("div");
-  actions.className = "workspace2-actions";
-  const favoriteButton = iconButton(isFavorite ? "starFilled" : "star", isFavorite ? t("nodes.removeFavorite") : t("nodes.addFavorite"), async () => {
-    if (isFavorite) {
-      await removeFavoriteNode(el, node.type);
-    } else {
-      await addFavoriteNode(el, node);
-    }
-  });
-  if (isFavorite) {
-    favoriteButton.classList.add("is-favorite-active");
-  }
-  actions.append(favoriteButton);
-
-  row.append(reorderHandle, dot, info, actions);
-  return row;
 }
 
 function showFallbackPanel() {

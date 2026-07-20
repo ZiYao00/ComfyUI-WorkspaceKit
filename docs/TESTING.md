@@ -2,6 +2,144 @@
 
 This document records reproducible test evidence and unresolved errors found while validating WorkspaceKit. Historical endpoint, storage, and implementation names such as `Workspace2` remain in individual records where they identify the compatibility layer. A recorded error is not treated as a confirmed WorkspaceKit root cause until the owning call chain is isolated.
 
+## 2026-07-20 - Shared panel-chrome extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-panel-chrome-20260720-124317.zip`.
+- Extracted `entry/ui/panel-chrome.js`: panel header/status DOM and search-toolbar DOM, including clear-button visibility, clear/focus behavior, IME composition suppression, and callback delivery.
+- Every caller retains query state, search scheduling/result updates, toolbar business actions, persistence, and panel lifecycle. This extraction intentionally does not change search semantics or styling.
+- The reproducible `scripts/test-panel-chrome.mjs` contract covers status dataset attachment, action-count CSS variable, input preparation, IME composition deduplication, clear behavior, and focus restoration.
+- `node --check` passed for the entry and module; all existing `scripts/test-*.mjs` contracts, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Fresh test-package browser check at `http://127.0.0.1:8180`: Workflows, Nodes, and Templates each rendered exactly one header, one search input, and one clear button through the shared module. WorkspaceKit console errors remained zero and no query or data mutation was made.
+
+## 2026-07-20 - Workflow Open-list renderer extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-workflow-open-list-20260720-123747.zip`.
+- Extracted `entry/workflows/open-list-renderer.js`: Open-section DOM, empty state, row state presentation, dirty marker, save-button visibility, and action callback binding.
+- The entry retains official/local list discovery and transient-official-item filtering, active/dirty/rename state calculation, rename/open/save/close/remove operations, confirmation behavior, error rendering, persistence, and all official Store/file APIs.
+- The reproducible `scripts/test-workflow-open-list-renderer.mjs` contract covers selected/dirty presentation, active-only save button, official rename/close controls, local remove control, empty structural ownership, and callback delivery.
+- `node --check` passed for the entry and module; all existing `scripts/test-*.mjs` contracts, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Fresh test-package browser check at `http://127.0.0.1:8180`: Workflows Open rendered one current selected workflow row with its close action. The canvas was clean, so zero dirty dots and zero save buttons was the expected state. WorkspaceKit console errors remained zero. No workflow action ran and no data changed.
+
+## 2026-07-20 - Workflow rename-input extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-workflow-rename-input-20260720-113224.zip`.
+- Extracted `entry/workflows/rename-input.js`: input DOM, deferred focus/select, Escape cancellation, and the shared single-flight promise used by Enter and blur.
+- The entry retains the actual rename request, workflow editing state, error handling, panel rerendering, and all official Store/file APIs.
+- The reproducible `scripts/test-workflow-rename-input.mjs` contract covers focus eligibility, Enter commit, blur deduplication after Enter, disabled state, and Escape cancellation before a request begins.
+- `node --check` passed for the entry and module; all existing `scripts/test-*.mjs` contracts, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Fresh test-package browser check at `http://127.0.0.1:8180`: opened the current workflow's rename input, pressed Esc, confirmed the input closed and the active workflow row remained. WorkspaceKit console errors remained zero before and after. No rename request or file write was made.
+
+## 2026-07-20 - Shared preview-positioner extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-preview-positioner-20260720-112739.zip`.
+- Extracted `entry/ui/preview-positioner.js`: cursor-following and sidebar-anchored preview geometry, viewport clamping, preview width, and sidebar-side selection.
+- Nodes/Templates retain popover creation, visibility/state, content, hover timing, and all data behavior. The module receives only viewport/sidebar/render-target queries from the entry.
+- The reproducible `scripts/test-preview-positioner.mjs` contract covers right/bottom cursor fallback, left and right sidebar placement, vertical clamping, width initialization, and follow-cursor routing.
+- `node --check` passed for the entry and module; all existing `scripts/test-*.mjs` contracts, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Fresh test-package browser regression at `http://127.0.0.1:8180`: WorkspaceKit Templates rendered two groups and three rows with zero WorkspaceKit console errors. The isolated browser's pointer-move API did not generate the page's native `pointerenter` event, so real hover-preview acceptance remains explicitly pending rather than claimed; no template or canvas data changed.
+
+## 2026-07-20 - Template context-menu renderer extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-context-menu-20260720-112301.zip`.
+- Extracted `entry/templates/context-menu-renderer.js`: menu DOM, previous-menu replacement cleanup, window/document close-listener lifecycle, and four action callback delegates.
+- The entry retains template state, rename/delete persistence, clipboard access, canvas placement, error state, and panel rerendering. The renderer deliberately preserves the existing coordinate behavior rather than introducing a visual-positioning change during a split.
+- The reproducible `scripts/test-template-context-menu-renderer.mjs` contract covers four actions, coordinates, stored menu state, close-listener registration, and close-before-action ordering.
+- `node --check` passed for the entry and module; all existing `scripts/test-*.mjs` contracts, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Fresh test-package browser check at `http://127.0.0.1:8180`: opened a template row context menu showing Rename, Place at canvas center, Copy template name, and Delete template; Esc closed it. WorkspaceKit console errors remained zero before and after. No menu action ran, so template data and canvas content were unchanged.
+
+## 2026-07-20 - Template row-renderer extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-row-renderer-20260720-093752.zip`.
+- Extracted `entry/templates/row-renderer.js`: template-row DOM, rename input, metadata/action elements, and event-to-callback forwarding.
+- The entry retains all mutable behavior: expanded/editing/selection/drag state, rename/delete mutations and persistence, preview lifecycle, template drag payload, context menu, canvas placement, error state, and rerendering.
+- The reproducible `scripts/test-template-row-renderer.mjs` contract covers row metadata and selected state, drag/menu/select/preview/open/delete callback delivery, and the editing rename/focus/Escape path.
+- `node --check` passed for the entry and module; all existing `scripts/test-*.mjs` contracts, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Fresh test-package browser check at `http://127.0.0.1:8180`: WorkspaceKit opened, Templates rendered two groups and three rows after expansion, selecting one row produced exactly one selected row, and its metadata, drag hint, and action button rendered. WorkspaceKit console errors remained zero before and after the interaction. No template was deleted or placed on the canvas.
+
+## 2026-07-20 - Template group-header renderer extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-group-header-20260720-092331.zip`.
+- Extracted `entry/templates/group-header-renderer.js`: template-group header DOM, indentation, disclosure/icon/actions, inline rename input, and injected callback delivery.
+- The entry retains group projection, expanded/editing/error state, all template/group mutations and persistence, rerender orchestration, drag/drop implementation, and panel lifecycle.
+- The first real-page run caught an interface mismatch immediately: the factory returned a function while the entry destructured an object. The module now returns `{ renderTemplateGroupHeader }`, matching the entry and its contract. This is recorded because static syntax alone did not exercise the factory-to-entry assembly path.
+- `node --check` passed for the entry and module; all `scripts/test-*.mjs` contracts, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Fresh test-package browser check at `http://127.0.0.1:8180`: WorkspaceKit opened, the Templates tab rendered two existing groups, and expanding the first group rendered three templates. The pre-fix console errors remain in that browser session history, but the repaired reload and expansion completed without rethrowing `renderTemplateGroupHeader is not a function`; no template data was changed.
+
+## 2026-07-20 - Template drag/drop extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-drag-drop-20260720-090421.zip`.
+- Extracted `entry/templates/drag-drop.js`: template/group transfer parsing, group drag-source events, target eligibility feedback, and drop callback delegation.
+- The entry retains every mutation and side effect: group/template moves, saves, error-state update, rerender, template-library ownership, and canvas drops.
+- Contract coverage verifies template drops, group source data, drag-end cleanup, recursive-group rejection, and drop-target feedback. A first test run exposed an incomplete DOM test double; only the test double was corrected, then the full contract suite passed.
+- Test package at `http://127.0.0.1:8180` was listening and returned HTTP 200 for both `entry.js` and `templates/drag-drop.js` through the `comfyui-workspace2` junction.
+- An isolated real test page loaded the WorkspaceKit Templates panel with the existing two groups and four templates; both groups expanded successfully and no WorkspaceKit console error was reported. The test browser does not expose native drag-event dispatch, so it cannot synthesize a faithful HTML5 `DataTransfer` drop. A normal pointer drag therefore made no move, and the server API confirmed the template still belonged to its original group; no template data was created or changed during this verification.
+
+## 2026-07-20 - Template group context-menu extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-group-context-menu-20260719-233817.zip`.
+- Extracted `entry/templates/group-context-menu.js`: group-menu DOM, boundary-aware positioning, close-listener registration, and five callback delegates.
+- The entry retains all data mutations: create subgroup, rename state/render, personalize, reset style, and delete.
+- Contract coverage verifies five menu rows, edge positioning, close-before-action behavior, and callback delegation.
+- The user manually tested the real template-group menu and reported no issue; this is accepted as the real-page regression result.
+- Follow-up source review separated the no-argument "close existing menu" callback from the document-event close handler; the latter alone receives keyboard/pointer events. The focused contract now verifies both listeners are registered with the event handler.
+
+## 2026-07-19 - Shared decorated-icon extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-decorated-icon-utils-20260719-230709.zip`.
+- Extracted `entry/ui/decorated-icon.js`: Prime-icon detection plus emoji/default icon class, text, and color-variable presentation.
+- The helper only writes to the supplied element. Feature data, icon choice, persistence, and panel behavior remain in callers.
+- Contract coverage verifies emoji, Prime icon, default fallback, and color-variable cleanup/application.
+- The user tested the affected panel behavior after the extraction and reported no issue. This is accepted as the panel regression check; no feature data was intentionally changed.
+
+## 2026-07-19 - Shared tree-expansion extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-tree-expansion-utils-20260719-224704.zip`.
+- Extracted `entry/ui/tree-expansion.js`: the shared expanded-key Set helper used by Workflows, Templates, and Nodes.
+- The helper only mutates the Set passed by its caller. Tree shape, persistence, rendering, feature state, and all endpoint/Store behavior remain in the respective callers.
+- Contract coverage verifies ignoring empty keys and correct add/remove behavior.
+- Test package at `http://127.0.0.1:8180` returned the new module with HTTP 200. An isolated page registered the WorkspaceKit sidebar entry with no WorkspaceKit console error; no feature data was changed.
+
+## 2026-07-19 - Workflow tree-interaction extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-workflow-tree-interaction-20260719-224230.zip`.
+- Extracted `entry/workflows/tree-interaction.js`: tree scroll snapshot/restore, workflow-folder descendant-key collection, and folder expand/collapse.
+- The generic recursive Set helper remains in `entry.js`, because Templates and Nodes also use it. File operations, sorting, polling, persistence, and official Store APIs remain outside the module.
+- Contract coverage verifies scroll restoration scheduling, recursive folder-key filtering, ordinary and recursive toggles, and render intent.
+- Test package at `http://127.0.0.1:8180` returned the new module with HTTP 200. An isolated Workflows page expanded then collapsed the API folder, returning the disclosure to its original state with no WorkspaceKit console error. No workflow data was changed.
+
+## 2026-07-19 - Workflow custom-order store extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-workflow-custom-order-store-20260719-221357.zip`.
+- Extracted `entry/workflows/custom-order-store.js`: defensive custom-order JSON read and write under the existing workflow order key.
+- Entry initialization reads the Store before creating workflow state. Existing reorder and path-state callbacks still call the existing save bridge, so the former mutation and render order is preserved.
+- Contract coverage verifies missing, valid, array, malformed JSON, explicit object save, and null-save fallback behavior.
+- Test package at `http://127.0.0.1:8180` returned the new module with HTTP 200. An isolated page opened WorkspaceKit and its Workflows tab, showing Browse and its sort button with no WorkspaceKit console error. No sort preference or workflow data was changed.
+
+## 2026-07-19 - Shared personalization-panel extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-personalization-panel-20260719-220501.zip`.
+- Extracted `entry/ui/personalization-panel.js`: shared icon/color dialog DOM, viewport clamping, emoji/color selection, Escape/outside dismissal, and callback delivery.
+- Workflow folder, Template group, and Node group callers retain their own apply/reset callbacks and all data mutations. The shared dialog performs no endpoint, persistence, workflow, template, or node-group operation itself.
+- Contract coverage verifies viewport clamping, initial preview rendering, apply callback values, and successful close behavior.
+- Test package at `http://127.0.0.1:8180` returned the new module with HTTP 200. An isolated page registered WorkspaceKit and opened its base panel with no WorkspaceKit console error; the dialog remained closed and no business data was changed.
+- A real Workflows-folder context menu opened the personalization dialog for API; pressing Escape closed it. No Apply/Reset action was invoked, so no folder metadata or workflow content was changed. No WorkspaceKit console error was recorded.
+
+## 2026-07-19 - Workflow folder-meta extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-workflow-folder-meta-20260719-215916.zip`.
+- Extracted `entry/workflows/folder-meta.js`: folder icon/color lookup, empty-value cleanup, `/workspace2/folder-meta` save, response replacement, and existing post-save render intent.
+- The generic personalization dialog stays in `entry.js`; this module has no workflow-file mutation, official Store, poll, or sidebar dependency.
+- Contract coverage verifies Windows-style path normalization, preserving the other style field, removing an empty style record, server-response precedence, and one render intent after each successful save.
+- Test package at `http://127.0.0.1:8180` returned the new module with HTTP 200. An isolated page opened WorkspaceKit and its Workflows tab, showing both Open/Browse regions and the item count with no WorkspaceKit console error. No folder metadata or workflow content was changed.
+
+## 2026-07-19 - Workflow path-utils extraction
+
+- Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-workflow-path-utils-20260719-214457.zip`.
+- Extracted `entry/workflows/path-utils.js`: pure path normalization, parent and prefix relations, path joining, file rename target calculation, and official `workflows/` root removal.
+- The module deliberately has no state, endpoint, filesystem, or official ComfyUI Store dependency. Rename, move, restore, and Browse-state commit order remain in `entry.js`.
+- Contract coverage checks root/nested parents, Windows slash normalization, exact/descendant/unrelated prefix replacement, containment boundaries, file/folder rename targets, and official-root conversion.
+- Test package at `http://127.0.0.1:8180` returned the new module with HTTP 200. An isolated page loaded the WorkspaceKit sidebar and opened the Workflows tab without a WorkspaceKit console error. No workflow mutation was performed.
+
 ## 2026-07-09 - Node cache coordination
 
 Environment:
@@ -444,6 +582,156 @@ Run this checklist in the test package before accepting a main-package release. 
 - **Node-cache independent-profile check:** large-install capacity, stale-signature rejection, one controlled fill, cache-hit reuse, page refresh, and ComfyUI-restart persistence have passed in the 202-plugin / 6,345-node main package. The remaining optional coverage is one independent browser profile/private-window read of the server snapshot; it is not a reason to change the verified cache implementation.
 - **Main-package visual regression:** Open/Browse spacing, shared section headers, transparent mode, and frosted-glass mode passed recent test-package acceptance. Recheck these together in the main package rather than reopening separate CSS work without a reproduced defect.
 - **Engineering and release readiness:** continue `entry.js` extraction after node-cache acceptance (remaining Workflows UI, Nodes UI/state, then Settings), add minimal CI, implement full WorkspaceKit data export/import with backup, and add screenshots plus Registry/Manager metadata. Issue/PR templates, contribution guidance, security policy, backend-owned version display, the first Templates/official-workflow module extractions, and the Workflows section shell are complete.
+
+## 2026-07-19 - Templates group-contents renderer extraction (nested-fixture UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-group-contents-renderer-20260719-210757.zip`.
+- Extracted `entry/templates/group-contents-renderer.js`: after a group header has been created in `entry.js`, it renders only the expanded group’s child groups and template list. Header creation, inline rename, context menu, drag-source wiring, expand-state mutation, data projection, persistence, and Alt+C remain in the entry.
+- The reproducible `scripts/test-template-group-contents-renderer.mjs` contract passed. It covers collapsed no-op behavior, recursive child-group callback/depth/query forwarding, list indentation, group drop-target hookup, and template-row placement.
+- `node --check` passed for the entry and module; all existing Nodes and Templates contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- Fresh-page browser regression on the test package at `8180`: WorkspaceKit appeared once and opened; Templates rendered its three existing templates with no WorkspaceKit warning/error. The current library has no nested template group fixture, so a real nested expand/edit/drag interaction remains explicitly pending rather than claimed.
+
+## 2026-07-19 - Templates minimap extraction (test-package hover-preview check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-minimap-20260719-213319.zip`.
+- Extracted `entry/templates/minimap.js`: saved-template node projection, bounds, fill-color fallback, rounded-node/link drawing, DPR-aware canvas setup, and empty-template hint. Template details, live node-definition lookup, popover lifecycle, template mutations, Alt+C, drag/drop, and persistence remain in `entry.js`.
+- The reproducible `scripts/test-template-minimap.mjs` contract passed. It covers relative-position projection, bounds, explicit/mode/type color selection, DPR clamping, empty-template hint, and linked-node canvas drawing.
+- Test-package partial UI check at `8180`: WorkspaceKit opened and the Templates panel rendered its existing `Workspace2Title` item with no WorkspaceKit console warning/error. The in-app browser sandbox cannot construct the `pointerenter` event used by this preview, while local Chrome navigation is currently blocked by `ERR_BLOCKED_BY_CLIENT`; therefore real hover-preview acceptance remains pending and is not claimed as passed.
+
+## 2026-07-19 - Settings dialog-shell extraction (test-package dialog acceptance passed)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-settings-dialog-shell-20260719-212837.zip`.
+- Extracted `entry/settings/dialog-shell.js`: backdrop, dialog/header DOM, and close-intent callback only. `entry.js` still attaches/removes the dialog, requests version data, owns Escape and global listener cleanup, and owns all setting behavior.
+- The reproducible `scripts/test-settings-dialog-shell.mjs` contract passed. It covers translated title/close button, event propagation isolation, and the distinction between backdrop and dialog pointer events.
+- Fresh-page browser acceptance on the test package at `8180`: after ComfyUI initialization completed, WorkspaceKit appeared once and opened; Settings rendered its background section and the title-bar close button removed the dialog. WorkspaceKit console warnings/errors were empty. The backdrop-versus-dialog pointer behavior is covered by the shell contract; no setting or cache was changed during the test.
+
+## 2026-07-19 - Settings dialog-sections extraction (test-package dialog acceptance passed)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-settings-dialog-sections-20260719-211955.zip`.
+- Extracted `entry/settings/dialog-sections.js`: the existing five content sections—shortcuts, behavior, background mode, node cache, and about/version placeholders. All values and mutations are injected by `entry.js`.
+- The reproducible `scripts/test-settings-dialog-sections.mjs` contract passed. It covers the section set, enabled states, Ctrl+G/Alt+C/recent-limit delegation, background-mode row synchronization, cache metadata and clear feedback, and the version placeholder.
+- Entry composition, glass-overlay behavior, setting persistence, cache implementation, version request, and dialog close/Escape lifecycle remain in `entry.js`.
+- Fresh-page browser acceptance on the test package at `8180`: WorkspaceKit appeared once and opened; Settings rendered all five sections, the transparent-opacity slider at `100`, and the disabled glass-transparency slider at `70`. The close button removed the dialog and WorkspaceKit console warnings/errors were empty. No setting or cache was changed during the test.
+
+## 2026-07-19 - Settings controls extraction (test-package dialog acceptance passed)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-settings-controls-20260719-211401.zip`.
+- Extracted `entry/settings/controls.js`: settings-section/help/checkbox DOM, shortcut-grid DOM, generic range controls, two-mode background controls, and their visual disabled-state update. The entry retains localStorage, setting values, background and glass-overlay behavior, dialog lifecycle, version request, and Escape handling.
+- The reproducible `scripts/test-settings-controls.mjs` contract passed. It covers section/help content, localized shortcut entries, range snapping/change callback/disabled appearance, mode selection, mode enabled-state update, and keyboard isolation wiring.
+- `node --check` passed for the entry and all extracted modules; all Nodes/Templates contracts, the Settings-controls contract, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Fresh-page browser acceptance on the test package at `8180`: WorkspaceKit appeared once and opened; its Settings dialog rendered both background-mode radio controls, the transparent-opacity slider at `100`, and the disabled glass-transparency slider at `70`. The close button removed the dialog and WorkspaceKit console warnings/errors were empty. The test did not change either background mode or persisted setting.
+
+## 2026-07-19 - Sidebar registration TDZ regression recovery (test-package browser acceptance passed)
+
+- Backup created before the repair: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-sidebar-entry-tdz-fix-20260719-210321.zip`.
+- Root cause confirmed from exact source order: `createTemplateResultsProjection()` was constructed before the later `const childTemplateGroups` binding from `createTemplateLibraryStore()`. Passing that binding directly evaluated it inside the temporal dead zone, stopped `entry.js` evaluation, and therefore prevented `app.registerExtension()` from registering the WorkspaceKit sidebar tab.
+- Repaired the dependency injection to use `getChildGroups: (parentId) => childTemplateGroups(parentId)`. The callback is evaluated only after the template library factory has initialized; data behavior is unchanged.
+- All Nodes/Templates contracts, JavaScript syntax checks, Python compilation for `__init__.py`, and `git diff --check` passed.
+- Real browser acceptance on the test package at `8180`: a fresh page displayed the `WorkspaceKit` sidebar button; opening it rendered the Workflows panel; its Templates tab rendered three templates; searching `Workspace2Title` reduced the visible result to that one template. Captured WorkspaceKit console warnings/errors were empty.
+
+## 2026-07-19 - Templates body-state renderer extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-body-state-renderer-20260719-203002.zip`.
+- Extracted `entry/templates/body-state-renderer.js`: loading/error notice DOM plus an explicit handled/not-handled return value. `entry.js` retains the first-load request trigger, state writes, follow-up rerender, result projection, all other Templates UI, and Alt+C lifecycle routing.
+- The reproducible `scripts/test-template-body-state-renderer.mjs` contract passed. It covers loading precedence, error interpolation, and the ready state that leaves the body untouched.
+- `node --check` passed for the entry and module; all existing Nodes and Templates contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, and `templates/body-state-renderer.js` with HTTP 200; the served entry imports the module. Fresh-page Templates loading/error interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Templates root-renderer extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-root-renderer-20260719-202036.zip`.
+- Extracted `entry/templates/root-renderer.js`: root-level empty state, root list container, root template-row placement, root folder placement, and root drop-target hookup. `entry.js` retains loading/error states, result projection, actual row/folder DOM and interactions, template mutations/persistence, Alt+C, preview, drag/drop behavior, and panel lifecycle.
+- The reproducible `scripts/test-template-root-renderer.mjs` contract passed. It covers root list and row placement, root folder callback/depth/query forwarding, root drop target, and distinct empty-library/no-match messaging.
+- `node --check` passed for the entry and module; all existing Nodes and Templates contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, and `templates/root-renderer.js` with HTTP 200; the served entry imports the module. Fresh-page Templates root interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Templates results-projection extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-results-projection-20260719-200751.zip`.
+- Extracted `entry/templates/results-projection.js`: root and nested template/group result projection, including the shared recursive rule that keeps a parent group visible when a descendant template or group matches a query. `entry.js` retains group hierarchy retrieval, all DOM rendering, expand/edit state, Alt+C, persistence, preview, drag/drop, context menus, and lifecycle work.
+- The reproducible `scripts/test-template-results-projection.mjs` contract passed. It covers root templates/groups, direct and descendant template matches, group-name matches, nested group results, sorting delegation, and no-match behavior.
+- `node --check` passed for the entry and module; all existing Nodes and Templates contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, and `templates/results-projection.js` with HTTP 200; the served entry imports the module. Fresh-page Templates results interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Templates search extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-template-search-20260719-195713.zip`.
+- Extracted `entry/templates/search.js`: template search-field construction, matching, visible-result sorting, and manual/name/update sort comparisons. The entry retains all template mutation and persistence paths, Alt+C activation/focus timing, preview, drag/drop, context menus, inline rename, and Templates panel DOM/lifecycle.
+- The reproducible `scripts/test-template-search.mjs` contract passed. It covers node-type camel-case search, no-match behavior, manual ordering, name ascending/descending, and update-time ascending/descending ordering.
+- `node --check` passed for the entry and module; all existing Nodes contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, and `templates/search.js` with HTTP 200; the served entry imports the module. Fresh-page Templates search interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Nodes category-projection extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-category-projection-20260719-195144.zip`.
+- Extracted `entry/nodes/category-projection.js`: read-only Nodes query matching/sorting orchestration, hidden-node exclusion, result-limit handling, Comfy/Extension/Unknown source buckets, favorite-type lookup, visible totals, and fallback when every section is disabled. `entry.js` retains actual query predicates and source classification, definition retrieval, all rendering, favorites UI, section-state persistence/mutation, and cache/network/sidebar lifecycle work.
+- The reproducible `scripts/test-node-category-projection.mjs` contract passed. It covers source buckets, hidden nodes, favorite types, visible totals, search sorting/limit behavior, and default-section recovery.
+- `node --check` passed for the entry and module; all existing Nodes contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, and `nodes/category-projection.js` with HTTP 200; the served entry imports the module. Fresh-page category interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Nodes top-section renderer extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-top-section-renderer-20260719-194314.zip`.
+- Extracted `entry/nodes/top-section-renderer.js`: top-level Comfy, Extensions, and Unknown section shell rendering, including the established choice between empty state, flat search results, and category tree. `entry.js` retains search filtering, visible-section policy, favorites collection, top-header collapse mutation, node rows, category-tree behavior, and all cache/network/sidebar lifecycle work.
+- The reproducible `scripts/test-node-top-section-renderer.mjs` contract passed. It covers header count, expanded and collapsed behavior, empty output, flat search result rows with favorite state, and the non-search category-tree route.
+- `node --check` passed for the entry and module; all existing Nodes contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, and `nodes/top-section-renderer.js` with HTTP 200; the served entry imports the module. Fresh-page section interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Nodes row-renderer extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-row-renderer-20260719-193647.zip`.
+- Extracted `entry/nodes/row-renderer.js`: ordinary official-node row DOM, local pointer/context/click listener wiring, reorder-handle presentation, and favorite-button presentation. `entry.js` retains the canvas-drag implementation, preview/context-menu behavior, selected-node state policy, custom-order mutation, favorite persistence, and all global/sidebar lifecycle work.
+- The reproducible `scripts/test-node-row-renderer.mjs` contract passed. It covers selected state, depth and data attributes, custom-order handle versus spacer, preview/menu event delegation, suppress-click clearing, pending-node delegation, and favorite add/remove presentation and callbacks.
+- `node --check` passed for the entry and module; all existing Nodes contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, and `nodes/row-renderer.js` with HTTP 200; the served entry imports the renderer. Fresh-page row interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Nodes official-tree renderer extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-official-tree-renderer-20260719-192158.zip`.
+- Extracted `entry/nodes/official-tree-renderer.js`: DOM creation for official category-folder headers and recursive placement of the projected tree. `entry.js` retains node-row rendering/actions, expanded-state mutation and recursive-folder policy, translations, icon decoration, cache/network lifecycle, and every sidebar/global listener.
+- The reproducible `scripts/test-node-official-tree-renderer.mjs` contract passed. It covers open and query-forced folder rendering, depth propagation, favorite forwarding, label/count/icon output, and normal plus Ctrl/Meta click delegation.
+- `node --check` passed for the entry and module; all existing Nodes contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, `nodes/official-tree.js`, and `nodes/official-tree-renderer.js` with HTTP 200; the served entry imports the renderer. Fresh-page tree interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Nodes official-tree projection extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-official-tree-20260719-173600.zip`.
+- Extracted `entry/nodes/official-tree.js`: category-path insertion, leaf totals, unknown-category precedence, rank/custom/alphabetical ordering, and removal of temporary `childMap` data. `entry.js` still owns category classification and translation, Nodes preference state, all tree rendering, row actions, drag/drop, menus, persistence, cache, and network lifecycle.
+- The reproducible `scripts/test-node-official-tree.mjs` contract passed. It covers nested path construction, leaf counts, removal of the build-only map, unknown-folder precedence, category ranks, custom ordering, and original-order mode.
+- `node --check` passed for the entry and module; all existing Nodes contract scripts, Python compilation for `__init__.py`, and `git diff --check` also passed.
+- The running test package at `8180` served `/system_stats`, the updated entry, and `nodes/official-tree.js` with HTTP 200; the served entry imports the new module. A fresh Nodes-tree interaction remains a separate UI acceptance case.
+
+## 2026-07-19 - Nodes favorite-group-store extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-favorite-group-store-20260719-172219.zip`.
+- Extracted `entry/nodes/favorite-group-store.js`: local group lookup, unique naming, hierarchy validation, creation, deletion, and movement. Entry code retains expanded/editor state, save/render timing, drag/drop handlers, style dialogs, inline delete confirmation, and all official-favorites synchronization.
+- The reproducible `scripts/test-node-favorite-group-store.mjs` contract passed. It covers unique names, base-36 group identifiers, parent/child validation, rejection of a cyclic parent move, root normalization, reassignment of a deleted group's favorites to the default group, and the established compatibility behavior that child groups retain their old parent id after that parent is deleted.
+- Two initial contract assertions were corrected without changing plugin behavior: IDs are intentionally base-36, and independent move/delete scenarios must not share the same child fixture.
+- The test package on `8180` served the updated entry and `nodes/favorite-group-store.js` with HTTP 200, and the entry imports the module. Fresh-page group interaction remains pending under the known client-side local-navigation limitation.
+
+## 2026-07-19 - Nodes favorite-store extraction (fresh-page UI check pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-favorite-store-20260719-171159.zip`.
+- Extracted `entry/nodes/favorite-store.js`: local favorite lookup, addition, removal, alias mutation, per-group ordering, and cross-group movement. Entry code still owns persistence timing, row rendering, drag listeners, dialog UI, favorite-group operations, and official-favorites import/export.
+- The reproducible `scripts/test-node-favorite-store.mjs` contract passed. It covers root insertion, ordering, cross-group moves, moving an existing favorite through the add path, alias normalization/no-op behavior, and deletion. The first test failure found a test-only mistake: the persisted array keeps its physical order while the existing renderer uses each item's `order` field. The implementation was not changed; the assertion now validates the established order-field contract.
+- The running test package on `8180` served the updated entry and `nodes/favorite-store.js` with HTTP 200, and the entry imports the new module.
+- A new Chrome automation tab cannot currently navigate directly to `127.0.0.1:8180` because the client returns `ERR_BLOCKED_BY_CLIENT`; an already user-opened `8180` tab remains controllable and opened the Nodes panel without WorkspaceKit console errors. Therefore this batch does not yet claim a fresh-page favorite interaction result. Do not modify user favorites merely to force this test; rerun it in a normal user-opened page or after the local-navigation policy is fixed.
+
+## 2026-07-19 - Nodes object-info refresh coordinator extraction (browser UI acceptance pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-object-info-refresh-20260719-154407.zip`.
+- Extracted `entry/nodes/object-info-refresh.js`: the 1,500 ms deferred refresh timer, Templates-panel deferral, cross-tab lock and browser-cache recheck, `/object_info` request, IndexedDB write, and optional compressed server-snapshot upload. The entry injects all network, browser, state, render, and lock dependencies; the cache protocol and endpoint paths are unchanged.
+- The new reproducible `scripts/test-node-object-info-refresh.mjs` contract passed. It verifies that a current locked cache recheck avoids `/object_info`, a stale cache fetches once and writes once, and an active Templates panel reschedules rather than starting the expensive fetch.
+- The running test package on `8180` served both the updated entry and the new refresh module with HTTP 200, and the served entry imports the module. No `/object_info` request was made for this source/resource check.
+- **2026-07-19 browser-access recovery:** the current Chrome extension control path opened the `http://127.0.0.1:8180/` test page and the WorkspaceKit Nodes tab without a WorkspaceKit warning/error. This verifies sidebar registration and Nodes panel opening after the extraction. Cache reuse and the deferred-refresh sequence remain separate acceptance cases.
+
+## 2026-07-19 - Nodes IndexedDB object-info cache extraction (browser UI acceptance pending)
+
+- Backup created before this split: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-object-info-cache-20260719-153749.zip`.
+- Extracted `entry/nodes/object-info-cache.js`: opening the browser cache database and the single object-info record's read, write, and delete lifecycle. It receives keys, IndexedDB, a clock, and an explicit clear callback; `/object_info` requests, server-cache upload, refresh scheduling, rendering, and Nodes state transitions remain in `entry.js`.
+- The new reproducible `scripts/test-node-object-info-cache.mjs` contract passed: empty read, write metadata/count/signature, read-back, delete, and the one-time clear callback.
+- Test package verification used the repository directory link and a visible CMD launch on port `8180`. `/system_stats`, `/workspace2/nodes/index-signature`, `/extensions/comfyui-workspace2/entry.js`, and `/extensions/comfyui-workspace2/nodes/object-info-cache.js` all returned HTTP 200; the served entry imports the served cache module.
+- **2026-07-19 browser-access recovery:** the current Chrome extension control path opened the same `8180` test page. WorkspaceKit's sidebar entry rendered and opened normally; the Nodes tab opened with its search control present and no WorkspaceKit warning/error in the captured browser console. The earlier `ERR_BLOCKED_BY_CLIENT` came from a different temporary local-page control path, not from WorkspaceKit or ComfyUI. Cache-clear/reload behavior is still a separate acceptance case.
 
 ## 2026-07-16 - Published-state reconciliation and node-cache baseline
 

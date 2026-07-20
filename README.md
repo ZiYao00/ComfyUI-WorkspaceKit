@@ -2,6 +2,8 @@
 
 English | [中文说明](README.zh-CN.md)
 
+> **Maintenance notice:** I will be travelling and unable to update the plugin for the next 2–3 weeks. Please use the current public beta with appropriate backups; issues and pull requests may receive a delayed response.
+
 ComfyUI-WorkspaceKit is a workspace enhancement extension for ComfyUI. It focuses on practical organization for large workflow libraries, large custom-node setups, node favorites, reusable node templates, and complex canvas layouts.
 
 It does not try to replace the official ComfyUI UI. Instead, it adds a focused workspace layer for users who need faster organization, safer file operations, better node reuse, and clearer visual structure.

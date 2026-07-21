@@ -28,13 +28,14 @@ if (Test-Path -LiteralPath $archivePath) {
 }
 
 $excludedDirectories = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-foreach ($name in @(".git", ".codex-backups", "__pycache__", "node_modules")) {
+foreach ($name in @(".git", ".codex-backups", "__pycache__", "node_modules", ".venv", "venv", "env")) {
   [void]$excludedDirectories.Add($name)
 }
 
 $files = Get-ChildItem -LiteralPath $repoRoot -Force -Recurse -File | Where-Object {
   $relative = [System.IO.Path]::GetRelativePath($repoRoot, $_.FullName)
-  -not (($relative -split "[\\/]") | Where-Object { $excludedDirectories.Contains($_) })
+  -not (($relative -split "[\\/]") | Where-Object { $excludedDirectories.Contains($_) }) -and
+  $_.Extension -notin @(".zip", ".7z", ".rar", ".tar", ".gz")
 }
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -56,7 +57,8 @@ try {
 $inspection = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
 try {
   $forbidden = @($inspection.Entries | Where-Object {
-    $_.FullName -match "(^|/)(\\.git|\\.codex-backups|__pycache__|node_modules)(/|$)"
+    $_.FullName -match "(^|/)(\\.git|\\.codex-backups|__pycache__|node_modules|\\.venv|venv|env)(/|$)" -or
+    $_.FullName -match "\\.(zip|7z|rar|tar|gz)$"
   })
   if ($forbidden.Count) {
     throw "Backup contains excluded paths; retain this file for inspection and do not use it as a rollback point: $archivePath"

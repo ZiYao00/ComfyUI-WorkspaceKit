@@ -2,6 +2,11 @@ name: Publish to Comfy Registry
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Exact pyproject.toml version to publish
+        required: true
+        type: string
   push:
     branches:
       - main
@@ -12,8 +17,63 @@ permissions:
   contents: read
 
 jobs:
-  publish-node:
+  detect_release:
+    name: Detect release-version change
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.version_gate.outputs.should_publish }}
+    steps:
+      - name: Check out release history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Set up Python for metadata validation
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate release metadata
+        run: python scripts/release_version.py --check
+      - name: Gate publishing on an actual version change
+        id: version_gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          current_version="$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+          print(tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])
+          PY
+          )"
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ "$REQUESTED_VERSION" != "$current_version" ]]; then
+              echo "Manual publish requires the current pyproject version: $current_version"
+              exit 1
+            fi
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse HEAD^ >/dev/null 2>&1; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          previous_version="$(git show HEAD^:pyproject.toml | python -c "import sys, tomllib; print(tomllib.loads(sys.stdin.read())['project']['version'])")"
+          if [[ "$previous_version" == "$current_version" ]]; then
+            echo "pyproject.toml changed without a version change; Registry publish skipped."
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Release version changed: $previous_version -> $current_version"
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish_node:
     name: Publish Custom Node to Registry
+    needs: detect_release
+    if: needs.detect_release.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code

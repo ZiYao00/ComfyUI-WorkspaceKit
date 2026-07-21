@@ -1,6 +1,7 @@
 [project]
 name = "comfyui-workspacekit"
 description = "A modular workspace, sidebar, and panel system for organizing workflows, nodes, favorites, templates, and canvas groups in ComfyUI."
+# Release through scripts/release_version.py so this semantic version remains authoritative.
 version = "0.2.2"
 readme = "README.md"
 requires-python = ">=3.9"

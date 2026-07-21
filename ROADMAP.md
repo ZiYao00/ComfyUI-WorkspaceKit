@@ -31,7 +31,7 @@ This roadmap is for public GitHub readers. It tracks broad product direction, no
 - Final visual acceptance for section headers across dark, light, transparent, and frosted-glass backgrounds.
 - Safer template deletion with undo or a template trash mechanism.
 - Data backup and restore entry for WorkspaceKit settings, Nodes2 favorites, Templates, and folder metadata.
-- Comfy Registry / ComfyUI Manager metadata and public release packaging.
+- Registry visual identity and public release assets: icon, banner, screenshots, and GIF tutorials.
 
 ## Stabilization Batches
 
@@ -65,8 +65,8 @@ These batches are ordered from large-install and main-package feedback. Each bat
    - Continue splitting `entry.js` into workflows, nodes, templates, and settings modules.
    - Add minimal CI for Python, JavaScript, JSON, and service-level tests.
    - Add data export/import, schema versioning, and automatic pre-import backup.
-   - Complete screenshots and Registry / Manager metadata.
-- Current: API, constants, performance logging, node-cache coordination, the Nodes panel-state preferences, library normalizer, initial-library loader, and object-info state helpers, the Templates data library, the official workflow adapter, the Workflows recent-history, open-state, item, and path-state stores, plus the Open/Browse section shell, tree builder, read-only Browse search, Browse-results refresh lifecycle, Browse context-menu renderer, trash-list renderer, Browse row renderer, and sort-menu renderer have been extracted. Issue/PR templates, contribution guidance, and security policy are complete. The sort-menu renderer has passed its menu/open-action UI check; one normal test-package Escape-key acceptance remains. The next extraction order is remaining Nodes cache lifecycle, Nodes UI, Templates UI, then Settings; preserve regression checks between each batch.
+   - Complete screenshots, GIF tutorials, and Registry visual identity (icon and banner).
+- Current: API, constants, performance logging, node-cache coordination, the Nodes panel-state preferences, library normalizer, initial-library loader, and object-info state helpers, the Templates data library, the official workflow adapter, the Workflows recent-history, open-state, item, and path-state stores, plus the Open/Browse section shell, tree builder, read-only Browse search, Browse-results refresh lifecycle, Browse context-menu renderer, trash-list renderer, Browse row renderer, and sort-menu renderer have been extracted. Issue/PR templates, contribution guidance, security policy, and the Registry release gate are complete. WorkspaceKit 0.2.2 is published to Comfy Registry. The sort-menu renderer has passed its menu/open-action UI check; one normal test-package Escape-key acceptance remains. The next extraction order is remaining Nodes cache lifecycle, Nodes UI, Templates UI, then Settings; preserve regression checks between each batch.
 
 Test evidence, performance measurements, and errors without a confirmed root cause are recorded in `docs/TESTING.md`.
 

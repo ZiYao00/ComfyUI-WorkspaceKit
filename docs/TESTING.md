@@ -780,5 +780,6 @@ Run this checklist in the test package before accepting a main-package release. 
 - **2026-07-18 live test-package acceptance:** the clean `小红书 → 99 → 小红书` sequence passed with no dirty dot or Save button on either Open row. The separate dirty-tab reactivation regression is repaired and passed the real-node-move test above; main-package release acceptance remains outstanding.
 # Current release baseline
 
+- **2026-07-21:** WorkspaceKit `0.2.2` is published to Comfy Registry. The GitHub Actions release gate was verified on a non-version push: version detection passed and the Registry publishing job was skipped, so ordinary documentation or source changes do not republish the package.
 - **2026-07-20:** The published Comfy Registry release is `0.2.1` for `comfyui-workspacekit`. `pyproject.toml` is the authoritative release-version source; the backend reads it for `/workspace2/info`, and the Settings dialog reads that endpoint.
 - Historical entries below retain their original `0.2.1b0` observations and must not be rewritten as though they were recorded against a later release.

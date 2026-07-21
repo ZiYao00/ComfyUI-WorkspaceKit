@@ -13,7 +13,7 @@ Release-version governance and documentation synchronization.
 
 ### Notes
 
-- This GitHub release is `0.2.2`; the Comfy Registry listing remains on `0.2.1` until the next explicit Registry publication.
+- GitHub and Comfy Registry both publish version `0.2.2`; subsequent version changes are published automatically after the release gate passes.
 
 ## 0.2.1 - 2026-07-20
 

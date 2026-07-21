@@ -184,7 +184,7 @@ WorkspaceKit moves, renames, and organizes workflow files. Before using it in a 
 - This is still a public beta, not a stable 1.0 release.
 - Screenshots and GIF tutorials are not included yet.
 - Very large workflow directories may take longer to scan and refresh.
-- Comfy Registry / ComfyUI Manager metadata is not finalized yet.
+- The Registry listing is published; visual metadata such as an icon, banner, screenshots, and GIF tutorials can still be improved.
 - Template deletion currently uses inline confirmation; undo or template trash can be improved in a future version.
 - Nodes 2 search speed, ranking quality, and pinyin matching still need more testing in very large node libraries.
 

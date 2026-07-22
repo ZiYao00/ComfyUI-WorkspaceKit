@@ -22,6 +22,7 @@ import { createOfficialNodeTreeRenderer } from "./nodes/official-tree-renderer.j
 import { createNodeRowRenderer } from "./nodes/row-renderer.js";
 import { createNodeTopSectionRenderer } from "./nodes/top-section-renderer.js";
 import { createNodeCategoryProjection } from "./nodes/category-projection.js";
+import { mergeNodeDefinitionSources } from "./nodes/definition-merge.js";
 import { createTemplateLibraryStore } from "./templates/library.js";
 import { createTemplateSearch } from "./templates/search.js";
 import { createTemplateResultsProjection } from "./templates/results-projection.js";
@@ -1590,6 +1591,12 @@ function setupWorkspaceKeyIsolation() {
   setupWorkspaceKeyIsolation.ready = true;
   const stop = (event) => {
     if (!event.target?.closest?.(".workspace2-host .workspace2-input")) {
+      return;
+    }
+    const clearSearch = event.target?.workspace2ClearSearch;
+    if (event.key === "Escape" && typeof clearSearch === "function" && clearSearch()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
       return;
     }
     event.stopImmediatePropagation();
@@ -3190,14 +3197,19 @@ function styles() {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: nowrap;
       gap: 8px;
       min-height: 28px;
     }
     .workspace2-title {
       font-size: 14px;
       font-weight: 700;
+      flex: 0 0 auto;
+      white-space: nowrap;
     }
     .workspace2-status {
+      min-width: 0;
+      flex: 1 1 auto;
       opacity: 0.72;
       text-align: right;
       overflow: hidden;
@@ -3263,6 +3275,13 @@ function styles() {
     .workspace2-search-clear:hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
       background: var(--workspace2-hover);
+    }
+    .workspace2-search-clear svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
     }
     .workspace2-search-clear[hidden] {
       display: none;
@@ -6684,7 +6703,7 @@ function wrapObjectInfoNode(type, definition) {
 }
 
 function wrapRegisteredNode(type, definition) {
-  const categoryParts = normalizeNodeCategory(definition?.category || "");
+  const categoryParts = normalizeNodeCategory(definition?.category || definition?._category || "");
   return {
     type,
     title: definition?.title || definition?.name || type,
@@ -6702,7 +6721,11 @@ function wrapRegisteredNode(type, definition) {
     essentialsCategory: "",
     apiNode: false,
     isGlobal: false,
-    source: NODE_SOURCE.UNKNOWN,
+    // A type that exists only in the browser registry is normally a virtual
+    // custom-node implementation. It has no python_module to classify from,
+    // but presenting it in Extensions is materially more useful than silently
+    // leaving it outside every visible node section.
+    source: NODE_SOURCE.CUSTOM,
     definition,
   };
 }
@@ -6710,22 +6733,27 @@ function wrapRegisteredNode(type, definition) {
 function getNodeDefinitions() {
   const objectInfoSource = nodesState.objectInfo && Object.keys(nodesState.objectInfo).length
     ? nodesState.objectInfo
-    : globalThis.LiteGraph?.registered_node_types || {};
-  if (nodesState.nodeDefinitionsCache && nodesState.nodeDefinitionsSource === objectInfoSource) {
+    : null;
+  const registeredNodeTypes = globalThis.LiteGraph?.registered_node_types || {};
+  const registeredNodeCount = Object.keys(registeredNodeTypes).length;
+  if (
+    nodesState.nodeDefinitionsCache
+    && nodesState.nodeDefinitionsSource === objectInfoSource
+    && nodesState.registeredNodeTypesSource === registeredNodeTypes
+    && nodesState.registeredNodeTypesCount === registeredNodeCount
+  ) {
     return nodesState.nodeDefinitionsCache;
   }
 
-  let definitions;
-  if (nodesState.objectInfo && Object.keys(nodesState.objectInfo).length) {
-    definitions = Object.entries(nodesState.objectInfo)
-      .map(([type, definition]) => wrapObjectInfoNode(type, definition))
-      .sort((a, b) => a.title.localeCompare(b.title));
-  } else {
-    definitions = Object.entries(objectInfoSource)
-      .map(([type, definition]) => wrapRegisteredNode(type, definition))
-      .sort((a, b) => a.title.localeCompare(b.title));
-  }
+  const definitions = mergeNodeDefinitionSources({
+    objectInfo: objectInfoSource || {},
+    registeredNodeTypes,
+    wrapObjectInfoNode,
+    wrapRegisteredNode,
+  });
   nodesState.nodeDefinitionsSource = objectInfoSource;
+  nodesState.registeredNodeTypesSource = registeredNodeTypes;
+  nodesState.registeredNodeTypesCount = registeredNodeCount;
   nodesState.nodeDefinitionsCache = definitions;
   nodesState.nodeDefinitionMapCache = null;
   return definitions;
@@ -8170,9 +8198,11 @@ function updatePendingNodeUi() {
   const status = target.querySelector("[data-workspace2-nodes-status]");
   if (status) {
     const nodeTypes = getNodeDefinitions();
-    status.textContent = nodesState.pendingNode
+    const statusText = nodesState.pendingNode
       ? t("nodes.pendingPlace", { name: nodesState.pendingNode.title })
       : t("nodes.status", { count: nodeTypes.length });
+    status.textContent = statusText;
+    status.title = statusText;
   }
   target.querySelectorAll(".workspace2-node-row.is-selected").forEach((row) => {
     row.classList.remove("is-selected");
@@ -9959,12 +9989,17 @@ function templatesSortButton(el) {
 function openSortMenu(el, anchor) {
   closeTemplateSortMenu();
   const panel = anchor?.closest?.(".workspace2-panel") || el.querySelector(".workspace2-panel");
+  if (!panel) {
+    return;
+  }
   const menu = document.createElement("div");
   menu.className = "workspace2-context";
   const rect = anchor.getBoundingClientRect();
-  const panelRect = panel?.getBoundingClientRect();
-  menu.style.left = `${Math.max(8, rect.left - (panelRect?.left || 0))}px`;
-  menu.style.top = `${rect.bottom - (panelRect?.top || 0) + 4}px`;
+  // .workspace2-context is position:fixed, so use the anchor's viewport
+  // coordinates exactly like the Nodes and Workflows sort menus. Mixing in
+  // panel-relative offsets made this menu jump above/away from its button.
+  menu.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 180))}px`;
+  menu.style.top = `${rect.bottom + 4}px`;
   menu.addEventListener("click", (event) => event.stopPropagation());
   menu.addEventListener("contextmenu", (event) => event.preventDefault());
 

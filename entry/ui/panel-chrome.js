@@ -11,6 +11,10 @@ export function createPanelChrome({ document, translate, iconSvg, prepareInput }
     const status = document.createElement("div");
     status.className = "workspace2-status";
     status.textContent = statusText;
+    // Header status is deliberately visually compact. Keep the full transient
+    // message available without allowing a long node/template name to change
+    // the shared header height and shift the panel content below it.
+    status.title = statusText || "";
     if (options.statusDataset) status.dataset[options.statusDataset] = "1";
     header.append(title, status);
     return header;
@@ -41,6 +45,18 @@ export function createPanelChrome({ document, translate, iconSvg, prepareInput }
       updateClear();
       onInput(search.value);
     };
+    const clearSearch = () => {
+      if (!search.value) return false;
+      search.value = "";
+      emitInput();
+      search.focus();
+      return true;
+    };
+    // WorkspaceKit's global capture-phase key isolation runs before an input's
+    // own keydown listener. Expose this narrowly-scoped callback so that layer
+    // can consume Escape without allowing ComfyUI's global Escape handling to
+    // close the panel before the local clear action runs.
+    search.workspace2ClearSearch = () => (isComposing ? false : clearSearch());
     let isComposing = false;
     search.addEventListener("compositionstart", () => { isComposing = true; });
     search.addEventListener("compositionend", () => {
@@ -52,6 +68,13 @@ export function createPanelChrome({ document, translate, iconSvg, prepareInput }
       if (isComposing || event.isComposing) return;
       emitInput();
     });
+    search.addEventListener("keydown", (event) => {
+      // Let an active IME own Escape. Otherwise Escape is the keyboard
+      // equivalent of the visible clear button and must not reach ComfyUI.
+      if (event.key !== "Escape" || isComposing || !clearSearch()) return;
+      event.preventDefault();
+      event.stopPropagation();
+    });
     clear.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -59,12 +82,7 @@ export function createPanelChrome({ document, translate, iconSvg, prepareInput }
     clear.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      if (!search.value) {
-        search.focus();
-        return;
-      }
-      search.value = "";
-      emitInput();
+      clearSearch();
       search.focus();
     });
     updateClear();

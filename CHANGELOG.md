@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.4 - 2026-07-22
+
+### Fixed
+
+- Merge browser-registered virtual nodes with the cached official node library, so rgthree Bypass nodes remain searchable and can be used in favorites.
+- Keep panel headers at a stable height when a long node-placement status is shown, with the full message available on hover.
+- Restore visible search clear buttons across Workflows, Nodes, and Templates; `Esc` now clears a populated search box without closing the WorkspaceKit sidebar.
+- Align the Templates sort menu with its toolbar button using the same fixed-position rule as Workflows and Nodes.
+
 ## 0.2.3 - 2026-07-22
 
 ### Added

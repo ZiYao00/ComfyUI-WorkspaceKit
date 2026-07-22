@@ -8,7 +8,7 @@ ComfyUI-WorkspaceKit is a workspace enhancement extension for ComfyUI. It focuse
 
 It does not try to replace the official ComfyUI UI. Instead, it adds a focused workspace layer for users who need faster organization, safer file operations, better node reuse, and clearer visual structure.
 
-Current status: **public beta, 0.2.3**. It is usable for daily testing, but it is not a stable 1.0 release yet. Before using it in a main ComfyUI environment, back up your workflows, user settings, important node favorites, and important template data.
+Current status: **public beta, 0.2.4**. It is usable for daily testing, but it is not a stable 1.0 release yet. Before using it in a main ComfyUI environment, back up your workflows, user settings, important node favorites, and important template data.
 
 ## When WorkspaceKit Helps
 

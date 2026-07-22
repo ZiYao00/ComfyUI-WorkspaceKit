@@ -19,6 +19,7 @@ const { createPanelHeader, createSearchToolbar } = createPanelChrome({
 const header = createPanelHeader("Title", "Status", { statusDataset: "workspace2Status" });
 assert.equal(header.children[0].textContent, "Title");
 assert.equal(header.children[1].textContent, "Status");
+assert.equal(header.children[1].title, "Status");
 assert.equal(header.children[1].dataset.workspace2Status, "1");
 
 const action = new Element();
@@ -39,4 +40,16 @@ assert.equal(search.value, "");
 assert.equal(clear.hidden, true);
 assert.equal(search.focused, true);
 assert.equal(calls.includes("input:"), true);
+search.value = "again";
+let escapePrevented = false;
+let escapeStopped = false;
+search.listeners.get("keydown")({
+  key: "Escape",
+  preventDefault() { escapePrevented = true; },
+  stopPropagation() { escapeStopped = true; },
+});
+assert.equal(search.value, "");
+assert.equal(clear.hidden, true);
+assert.equal(escapePrevented, true);
+assert.equal(escapeStopped, true);
 console.log("panel chrome contract passed");

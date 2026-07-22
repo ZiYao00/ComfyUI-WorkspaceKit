@@ -2,6 +2,85 @@
 
 This document records reproducible test evidence and unresolved errors found while validating WorkspaceKit. Historical endpoint, storage, and implementation names such as `Workspace2` remain in individual records where they identify the compatibility layer. A recorded error is not treated as a confirmed WorkspaceKit root cause until the owning call chain is isolated.
 
+## 2026-07-22 - Browse workflow copy and import label
+
+- Backup created before the bounded change: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-workflow-import-copy-and-group-title-20260722-20260722-210012.zip`.
+- The toolbar file-picker action is now labeled `Import / 导入`; behavior remains opening a local workflow JSON into the canvas.
+- Browse-only workflow copy uses `/workspace2/workflow/copy`. The service accepts a safe relative JSON path, creates locale-aware numbered names such as `name (Copy 1).json` or `name（副本 1）.json`, and strips a prior WorkspaceKit copy suffix before choosing the next number. Copying a copy therefore continues one series instead of nesting suffixes. Exclusive target creation prevents concurrent tabs from overwriting one another. The Browse row places the copy icon directly before Rename and does not activate the copied workflow.
+- Real test-package endpoint acceptance at `http://127.0.0.1:8190`: copied `002.json` to `002 (copy).json`, verified byte-equivalent workflow JSON and list visibility, then sent only that generated copy to the system recycle bin. The original `002.json` remained present and unchanged.
+- `scripts/test-workflow-copy.py` covers collision naming, exact content copy, and traversal rejection. `scripts/test-workflow-row-renderer.mjs` covers Browse action ordering and copy callback delivery. All frontend contract scripts, Python compilation, locale JSON parsing, and `git diff --check` passed.
+- Follow-up UI feedback exposed two unwanted side effects in the first implementation: it selected the new Browse row and called official workflow synchronization, which could add the un-opened copy to Open. The repair preserves the existing selection and performs no official sync; `scripts/test-workflow-copy-ui-policy.mjs` locks both boundaries. Copies manually created before this repair remain untouched.
+- Backup created before localized numbering: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-before-localized-workflow-copy-numbering-20260722-212531.zip`. The copy route now receives only the normalized UI locale and creates `name（副本 N）.json` in Chinese or `name (Copy N).json` in English. The service removes both current and legacy nested copy suffixes before calculating the next available number. The service contract covers English and Chinese numbering, copying a numbered copy, and a legacy `(copy) (copy)` source. Real test-package endpoint acceptance copied `002 (copy) (copy).json` to `002（副本 1）.json`; only that generated acceptance file was moved to the WorkspaceKit recycle bin afterward.
+- Backup created before Browse-only rename handling: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-before-browse-rename-open-state-fix-20260722-213335.zip`. `getWorkflowByPath()` is a catalog lookup, not an Open-tab check. Workflow rename now calls ComfyUI's `renameWorkflow()` only when the matching object is already in `openWorkflows`; an unopened Browse file uses the filesystem rename route and performs no official Store sync. `scripts/test-workflow-rename-open-state-policy.mjs` locks this boundary.
+- Backup created before rename cancellation/no-op handling: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-before-rename-cancel-noop-localization-fix-20260722-213954.zip`. Rename now compares normalized target and source paths, so the display-name omission of `.json` cannot issue a self-rename. Esc marks the input settled before removal, preventing its subsequent blur from submitting a stale path. Known rename conflict/source errors now use localized status messages; unknown errors retain the generic error status. `scripts/test-workflow-rename-input.mjs` covers Enter-plus-blur de-duplication and Esc-plus-blur cancellation.
+- Backup created before group-header action icon refinement: `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-before-group-header-action-icons-scale-20260722-221043.zip`. Execute retains the solid play icon; Bypass uses a simplified detour arrow and Disable uses a bolder ban mark. Action button dimensions, SVG dimensions, gaps, margins, and the delete glyph now derive from the scaled group-title font size rather than independent minimum pixel sizes. `scripts/test-canvas-group-action-icons.mjs` locks the shared scaling contract and icon geometry.
+- Backup created before header eye-off/balance refinement: `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-before-group-header-eye-off-icon-balance-20260722-222228.zip`. The Bypass/Ignore control now uses an eye-off mark, while Disable keeps the ban mark. Header controls derive from scaled `headerHeight`, ensuring they fit large custom title fonts as well as normal zoom levels. Active Bypass and Disable backgrounds were softened to preserve state feedback without outweighing the title.
+- Backup created before header-icon stroke/centering refinement: `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-before-group-header-icon-stroke-centering-20260722-223044.zip`. Eye-off and Disable strokes were reduced to `1.9` and `2.1` respectively. All three action buttons now use an inline-flex center with zero line height, removing browser baseline drift inside active color tiles.
+- Canvas-group default-title fallback now prevents the literal `groups.defaultTitle` i18n key from becoming a user-visible title when a locale asset is unavailable. During restore, previously saved literal keys and empty titles are normalized to the current default title; existing custom titles are not rewritten.
+
+## 2026-07-22 - Template recycle-bin contract coverage
+
+- Backup created before the bounded data-layer extraction: `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-template-trash-contract-extraction-20260722-20260722-184024.zip`.
+- Template deletion remains JSON-library based; it does not reuse the workflow filesystem/system-trash service. The library already persists `trash` entries through the existing `/workspace2/templates/library` endpoint.
+- Added the pure `entry/templates/trash-store.js` contract layer and `scripts/test-template-trash-store.mjs`. The test verifies delete-to-trash with preserved nodes/links and original group, restore to the original group, restore-to-root after the group was removed, permanent delete, and empty trash. It uses only in-memory objects and does not alter saved templates.
+- Test-package endpoint evidence at `http://127.0.0.1:8190`: template library returned HTTP 200 with schema version 2, three stored templates, and an empty trash list. JavaScript syntax checks, Python compilation, locale JSON parsing, and `git diff --check` passed.
+- Real delete/restore UI acceptance remains pending. The isolated browser page in this run hit ComfyUI's unrelated `vite:preloadError` before WorkspaceKit mounted, so no existing template was deleted merely to force an acceptance claim.
+
+## 2026-07-22 - Node snapshot cache across browser sessions
+
+- Reproduced and fixed a test/main isolation defect: the test package shares an embedded Python distribution with the main package, so `folder_paths.__file__` could identify the shared import source instead of the active instance. Node-library/cache data then followed the main package and a valid 2,858-node test snapshot was rejected against the wrong location.
+- `__init__.py` now derives the active package root from ComfyUI's public `folder_paths.get_user_directory()` and falls back to the module path only for older ComfyUI releases. Python compilation passed.
+- After a test-package restart, the node cache endpoint returned `cache_hit=true`; its signature matched the live signature and its snapshot contained 2,858 nodes. A new isolated browser session opened the Nodes panel in about 3 seconds and rendered the same 2,858-node count.
+- Stale-signature acceptance used a fully reversible test: the test package's `ComfyUI-Manager` directory timestamp was temporarily changed, producing a different signature and `cache_hit=false`. Its exact original timestamp was restored; the original signature and `cache_hit=true` returned. No plugin file was added, removed, or modified.
+- `scripts/test-node-object-info-cache.mjs` and `scripts/test-node-object-info-refresh.mjs` both passed.
+
+## 2026-07-22 - Nodes and Templates real interaction acceptance
+
+- Test package real-page check at `http://127.0.0.1:8190`: expanding an existing Nodes favorite subgroup immediately rendered its contained favorite nodes; no favorite membership, alias, or group data was changed.
+- Templates panel check: both existing template groups were expanded in turn. The second group rendered all three stored templates (`123`, `23`, and `Workspace2Title`) with their saved node/link metadata. Both groups were returned to their original collapsed state after the check.
+- WorkspaceKit console warnings/errors were zero throughout the Nodes/Templates checks.
+- Hover-preview acceptance remains pending, not failed: the renderer binds the expected native `pointerenter`, `pointermove`, and `pointerleave` handlers, but this automated browser surface did not dispatch a native `pointerenter` when moving its pointer over an existing template row. The screenshot consequently did not show a popover. No source change is justified until it is verified with a normal physical mouse event.
+
+## 2026-07-22 - Main-package visual regression
+
+- Main package confirmed running at `http://127.0.0.1:8188`; its `ComfyUI-WorkspaceKit` custom-node directory is a junction to the repository.
+- The real main-page check covered the Workflows panel in the original `Dark_ZY` theme: Open and Browse rendered as distinct, expanded sections with an active open-workflow row, close/rename controls, the move-to-root target, and the Browse folder/file list. No residual separator or position defect was seen.
+- WorkspaceKit Settings was exercised in transparent mode and glass mode. Selecting glass applied `is-glass-background` to the existing sidebar host, kept the host inside the sidebar layout, and showed the expected translucent/blurred surface. Transparent mode was then restored.
+- The official ComfyUI theme was temporarily switched from `Dark_ZY` to `Light`; the Workflows panel retained legible text, icons, controls, selection state, Open/Browse sections, and the tree layout. The official theme was restored to `Dark_ZY` after the check.
+- Main node cache endpoint returned `cache_hit=true` with a signature matching `/workspace2/nodes/index-signature` for 202 detected plugins. Nodes rendered 6,345 nodes after the main-page load. WorkspaceKit console warnings/errors were zero.
+
+## 2026-07-22 - Workspace data export/import with automatic backup
+
+- Source snapshot created before implementation: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-data-export-import-20260722-121700.zip`.
+- The portable bundle deliberately includes WorkspaceKit-owned node favorites, templates, workflow-folder metadata, server settings, and browser keys beginning with `workspace2.`. Workflow JSON files and the derived node object-info cache are deliberately excluded.
+- `scripts/test-workspace-data-bundle.py` passed: it exports a temporary library, imports changed data, verifies that the new data was written, and verifies that the automatic backup retained the original favorite and browser preference.
+- Real test-package endpoint acceptance at `http://127.0.0.1:8190`: `GET /workspace2/data-bundle` returned schema version 1 with all four server data sections. Re-importing that same exported bundle created `user/default/comfyui-workspace2/data_backups/workspacekit-before-import-20260722-042534.json` before writing. This test intentionally used the exact current data, so it did not replace user content with an external file.
+- Real Settings-page check: the localized `Data backup and transfer / 数据备份与迁移` section rendered its explanatory text and both Export/Import buttons. The import path uses the existing themed confirmation and notice dialogs, rather than native browser confirm/alert, then reloads after a successful import so state is reloaded consistently.
+
+## 2026-07-21 - Open workflow move state (Workflows P0)
+
+- Reproduced in the test package: moving an open official workflow through `/workspace2/move` changed the file path, but left the ComfyUI workflow-store object on its old path. The Browse tree showed the new location while the Open section lost the tab after the official refresh.
+- `moveItem()` now uses ComfyUI's existing `workflowStore.renameWorkflow(workflow, "workflows/<target>")` transaction for an open file under the official workflows root, matching the already-proven rename path. Folder moves and non-official roots continue to use `/workspace2/move`.
+- Real acceptance at `http://127.0.0.1:8190`: the same `P0 Workflow 20260721.json` completed a folder-to-root move and then a root-to-folder move. After each move, Browse contained exactly the new path, the Open section still contained the workflow, and it remained present after a 4.8-second official-sync wait.
+- Recycle-bin acceptance at `http://127.0.0.1:8190`: an active, unsaved test workflow was moved to the WorkspaceKit recycle bin. Browse and Open both removed it, the panel remained mounted after a 4.8-second sync, and the recycle bin showed exactly one item. Restoring it cleared the recycle bin; switching back to files showed the restored Browse and Open rows, which both remained after another 4.8-second sync. No WorkspaceKit warning or error was recorded.
+- Restart recovery at `http://127.0.0.1:8190`: after a full test-package restart, the service recovered normally (the large custom-node package took longer than the initial 55-second readiness window). The workflow endpoint returned 186 items including the restored test workflow and P0 folder. A fresh browser page opened WorkspaceKit successfully; both Browse rows rendered and no WorkspaceKit warning/error was recorded.
+- This validates the open-tab path transition only. A one-time `Source not found` status observed while creating a test folder was not reproduced and is deliberately not classified as a confirmed defect or patched here.
+
+## 2026-07-21 - External rename polling boundary (Workflows P0, pending design)
+
+- Reproduced with a test workflow renamed directly through the WorkspaceKit backend endpoint, simulating another browser/client. The 4-second poll correctly updated Browse from the old file name to the new one, but the official ComfyUI Store retained the old Open-tab identity.
+- A scoped experiment that called official `syncWorkflows()` after the detected signature change removed the stale Open row, but left the old workflow canvas/title active. This is a worse state and was reverted; it is not part of the current source.
+- Automatic reopening/remapping is intentionally not implemented: an external rename has no reliable identity mapping and reopening can discard or overwrite an unsaved active canvas. A future product decision must define an explicit user-visible conflict/reopen flow before this is changed.
+
+## 2026-07-21 - Sidebar shortcut toggle regression
+
+- Backup created before the repair: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-shortcut-toggle-and-link-rename-20260721-222057.zip`.
+- Reproduced in the test package: pressing Shift+1, Shift+2, or Shift+3 twice left the corresponding WorkspaceKit module open. The shortcut handlers always followed the non-toggling `openWorkspace2Module()` route.
+- Added `entry/ui/module-toggle.js`, a pure policy helper. Shift+1/2/3 now request `closeIfActive`; Alt+C continues to use the default non-toggling path so a successful template save cannot close the Templates panel.
+- The reproducible `scripts/test-workspace-shortcut-toggle.mjs` contract covers active-module close eligibility, cross-module switching, closed-panel behavior, the non-toggling template route, and the three shortcut call sites.
+- Test-package directory junctions were renamed from `comfyui-workspace2` to `ComfyUI-WorkspaceKit` for both the test and main packages; both point to the same repository. After a visible-CMD restart at `http://127.0.0.1:8190`, `/extensions/ComfyUI-WorkspaceKit/entry.js` returned HTTP 200 and the old extension path returned HTTP 404.
+- Real browser acceptance on the test package: each of Shift+1/2/3 completed `open -> close -> reopen`. Closing removes the WorkspaceKit panel and deactivates its sidebar entry; ComfyUI retains an empty sidebar host. WorkspaceKit console warnings/errors were zero.
+
 ## 2026-07-20 - Shared panel-chrome extraction
 
 - Backup created before extraction: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-panel-chrome-20260720-124317.zip`.

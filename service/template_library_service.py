@@ -5,9 +5,10 @@ from pathlib import Path
 
 def default_template_library():
     return {
-        "version": 1,
+        "version": 2,
         "groups": [],
         "templates": [],
+        "trash": [],
         "settings": {},
     }
 
@@ -56,6 +57,23 @@ def _normalize_template(template, index, group_ids):
     }
 
 
+def _normalize_trash_entry(entry, index, group_ids):
+    if not isinstance(entry, dict):
+        return None
+    template_data = entry.get("template")
+    if not isinstance(template_data, dict):
+        return None
+    template = _normalize_template(template_data, index, group_ids)
+    if not template.get("id"):
+        return None
+    return {
+        "id": str(entry.get("id") or template["id"]).strip(),
+        "template": template,
+        "originalGroupId": str(entry.get("originalGroupId") or template.get("groupId") or "").strip(),
+        "deletedAt": int(entry.get("deletedAt") or int(time.time() * 1000)),
+    }
+
+
 def normalize_template_library(data):
     library = default_template_library()
     if not isinstance(data, dict):
@@ -93,6 +111,18 @@ def normalize_template_library(data):
             seen.add(normalized["id"])
             normalized_templates.append(normalized)
         library["templates"] = normalized_templates
+
+    trash = data.get("trash")
+    if isinstance(trash, list):
+        normalized_trash = []
+        seen = set()
+        for index, entry in enumerate(trash):
+            normalized = _normalize_trash_entry(entry, index, group_ids)
+            if normalized is None or normalized["id"] in seen:
+                continue
+            seen.add(normalized["id"])
+            normalized_trash.append(normalized)
+        library["trash"] = normalized_trash
 
     if isinstance(data.get("settings"), dict):
         library["settings"].update(data["settings"])

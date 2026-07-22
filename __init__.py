@@ -29,6 +29,8 @@ from .service.official_favorites_probe import probe_official_favorites
 from .service.official_favorites_sync import write_workspace2_favorites_to_official
 from .service.safe_path import safe_join, safe_relative_path
 from .service.template_library_service import read_template_library, write_template_library
+from .service.workflow_copy_service import copy_workflow_file
+from .service.workspace_data_bundle import build_workspace_data_bundle, import_workspace_data_bundle
 from .service.trash_service import (
     empty_trash_to_system_trash,
     list_trash,
@@ -92,7 +94,30 @@ VERSION = _read_package_version()
 PLUGIN_NAME = "comfyui-workspacekit"
 
 workspace_path = Path(__file__).resolve().parent
-comfy_path = Path(folder_paths.__file__).resolve().parent
+
+
+def _runtime_comfy_path():
+    """Resolve the active ComfyUI package root, not Python's import source.
+
+    Test installations can share an embedded Python distribution with another
+    ComfyUI package.  In that layout ``folder_paths.__file__`` may point at the
+    shared package even while its configured user directory belongs to the
+    active test instance.  Cache/library data must follow the latter, or a
+    valid test snapshot is read from the main package and is always rejected
+    by its node signature.
+    """
+    try:
+        user_directory = folder_paths.get_user_directory()
+        if user_directory:
+            return Path(user_directory).resolve().parent
+    except (AttributeError, OSError):
+        pass
+    # Compatibility fallback for older ComfyUI releases without the public
+    # user-directory accessor.
+    return Path(folder_paths.__file__).resolve().parent
+
+
+comfy_path = _runtime_comfy_path()
 
 print(f"Loading: WorkspaceKit ({VERSION})")
 
@@ -414,6 +439,20 @@ async def workspace2_save_workflow(request):
         return _json_error(str(exc), status=400)
 
 
+@server.PromptServer.instance.routes.post("/workspace2/workflow/copy")
+async def workspace2_copy_workflow(request):
+    try:
+        data = await request.json()
+        rel_path = _require_relative_path(data.get("path", ""))
+        locale = "zh-CN" if str(data.get("locale", "")).lower().startswith("zh") else "en-US"
+        path = await asyncio.to_thread(copy_workflow_file, get_workflows_root(), rel_path, locale)
+        return _json_response({"ok": True, "path": path})
+    except FileNotFoundError as exc:
+        return _json_error(str(exc), status=404)
+    except Exception as exc:
+        return _json_error(str(exc), status=400)
+
+
 @server.PromptServer.instance.routes.post("/workspace2/folder/create")
 async def workspace2_create_folder(request):
     try:
@@ -725,6 +764,35 @@ async def workspace2_templates_library_save(request):
             return _json_error("Template library must be a JSON object")
         saved = await asyncio.to_thread(write_template_library, comfy_path, library)
         return _json_response({"ok": True, "library": saved})
+    except Exception as exc:
+        return _json_error(str(exc), status=400)
+
+
+@server.PromptServer.instance.routes.get("/workspace2/data-bundle")
+async def workspace2_data_bundle(_request):
+    try:
+        bundle = await asyncio.to_thread(
+            build_workspace_data_bundle,
+            comfy_path,
+            _read_workspace2_settings(),
+        )
+        return _json_response({"ok": True, "bundle": bundle})
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.post("/workspace2/data-bundle/import")
+async def workspace2_data_bundle_import(request):
+    try:
+        data = await request.json()
+        result = await asyncio.to_thread(
+            import_workspace_data_bundle,
+            comfy_path,
+            _settings_path(),
+            data.get("bundle"),
+            data.get("current_browser_preferences"),
+        )
+        return _json_response({"ok": True, **result})
     except Exception as exc:
         return _json_error(str(exc), status=400)
 

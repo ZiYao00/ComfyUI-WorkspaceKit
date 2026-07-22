@@ -28,6 +28,7 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
     onReorderDrag,
     onNewSubfolder,
     onOpenWorkflowLocation,
+    onCopyWorkflow,
     onRename,
     onMoveToTrash,
     onError,
@@ -144,6 +145,13 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
     actions.append(iconButton("folderOpen", t("row.openLocation"), async () => {
       try {
         await onOpenWorkflowLocation(node.path);
+      } catch (error) {
+        onError(el, error);
+      }
+    }));
+    actions.append(iconButton("copy", t("row.copy"), async () => {
+      try {
+        await onCopyWorkflow(el, node);
       } catch (error) {
         onError(el, error);
       }

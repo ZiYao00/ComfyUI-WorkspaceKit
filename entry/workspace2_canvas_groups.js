@@ -15,6 +15,21 @@ const ACTIVE_PRESET_KEY = 'workspace2.canvasGroups.activePreset';
 const PRESET_COUNT = 4;
 const DEFAULT_CONTENT_PADDING = 12;
 const DEFAULT_SHADOW_COLOR = '#000000';
+const DEFAULT_GROUP_TITLE_KEY = 'groups.defaultTitle';
+
+function defaultGroupTitle() {
+    const translated = String(t(DEFAULT_GROUP_TITLE_KEY) || '').trim();
+    // A raw i18n key is never a valid user-facing group title. This fallback
+    // protects group creation/recovery if a locale asset has not loaded yet.
+    return translated && translated !== DEFAULT_GROUP_TITLE_KEY
+        ? translated
+        : 'Group (right-click to edit)';
+}
+
+function normalizeGroupTitle(value) {
+    const title = String(value || '').trim();
+    return title && title !== DEFAULT_GROUP_TITLE_KEY ? title : defaultGroupTitle();
+}
 
 const finiteNumber = (value, fallback) => {
     const n = Number(value);
@@ -271,21 +286,44 @@ const Workspace2CanvasGroups = {
             }
             const delBtn = el.querySelector('.xzg-delete-btn');
             if (delBtn) {
-                delBtn.style.fontSize = (18 * scale) + 'px';
-                delBtn.style.marginLeft = (4 * scale) + 'px';
+                // Header controls are intentionally proportional to the
+                // title size, rather than clamped screen pixels. The DOM
+                // overlay must visually follow both title settings and zoom.
+                delBtn.style.fontSize = `${headerHeight * 0.72}px`;
+                delBtn.style.marginLeft = `${headerHeight * 0.1}px`;
+            }
+            const actions = el.querySelector('.xzg-group-header-actions');
+            if (actions) {
+                actions.style.fontSize = `${headerHeight * 0.78}px`;
+                actions.style.gap = `${headerHeight * 0.07}px`;
+                actions.style.marginLeft = `${headerHeight * 0.12}px`;
             }
             const modeButtons = el.querySelectorAll('.xzg-group-mode-btn');
             modeButtons.forEach(btn => {
-                const size = Math.max(14, 19 * scale);
-                const iconSize = Math.max(12, Math.round(size * 0.9));
-                btn.style.width = `${size}px`;
-                btn.style.height = `${size}px`;
-                btn.style.fontSize = `${Math.max(12, 16 * scale)}px`;
-                // SVG 不会像字体图标那样自动继承 font-size，必须与按钮一起缩放。
+                // Use headerHeight rather than raw font size: controls stay
+                // inside the title bar for large custom fonts while still
+                // following title settings and canvas zoom proportionally.
+                const buttonSize = headerHeight * 0.78;
+                const iconSize = buttonSize * 0.72;
+                btn.style.width = `${buttonSize}px`;
+                btn.style.height = `${buttonSize}px`;
+                btn.style.fontSize = `${headerHeight * 0.78}px`;
+                btn.style.borderRadius = `${headerHeight * 0.12}px`;
+                // Buttons previously relied on inline baseline layout.  SVG
+                // glyphs therefore looked optically high/low inside a colored
+                // active tile. Flex centering makes every action share the
+                // same visual center regardless of its path geometry.
+                btn.style.display = 'inline-flex';
+                btn.style.alignItems = 'center';
+                btn.style.justifyContent = 'center';
+                btn.style.lineHeight = '0';
+                // SVG has explicit dimensions so it tracks the same title
+                // metric as the DOM text at every canvas zoom level.
                 const icon = btn.querySelector('svg');
                 if (icon) {
-                    icon.setAttribute('width', String(iconSize));
-                    icon.setAttribute('height', String(iconSize));
+                    icon.style.width = `${iconSize}px`;
+                    icon.style.height = `${iconSize}px`;
+                    icon.style.display = 'block';
                 }
                 // 图标色与标题色同步；激活状态仅通过背景区分，避免破坏编组配色。
                 btn.style.color = g.titleColor || '#FFD700';
@@ -551,7 +589,7 @@ const Workspace2CanvasGroups = {
     },
 
     uniqueGroupTitle(base = null, excludeId = null) {
-        base = String(base || t('groups.defaultTitle'));
+        base = String(base || defaultGroupTitle());
         const used = new Set(
             Object.values(this.groups)
                 .filter(group => group?.id !== excludeId)
@@ -836,13 +874,13 @@ const Workspace2CanvasGroups = {
                 </div>
                 <div class="xzg-group-header-actions" style="display:flex;align-items:center;gap:3px;flex:0 0 auto;margin-left:4px;">
                     <button class="xzg-group-mode-btn xzg-group-queue-btn" data-group-action="queue" title="${t('groups.actionQueue')}" aria-label="${t('groups.actionQueue')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;">
-                        <svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><path d="M6 3.8 16 10 6 16.2Z" fill="currentColor"/></svg>
+                        <svg class="xzg-group-action-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.2 3.5 16.3 10 5.2 16.5Z" fill="currentColor"/></svg>
                     </button>
                     <button class="xzg-group-mode-btn" data-group-mode="bypass" title="${t('groups.actionBypass')}" aria-label="${t('groups.actionBypass')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;">
-                        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 10h3.2c2.1 0 2.1-5.3 4.8-5.3h2.8c2.1 0 2.1 5.3 4.2 5.3"/><path d="m15.6 7.1 2.4 2.9-2.4 2.9"/></svg>
+                        <svg class="xzg-group-action-icon" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2.4 10s2.7-4.5 7.6-4.5 7.6 4.5 7.6 4.5-2.7 4.5-7.6 4.5S2.4 10 2.4 10Z"/><circle cx="10" cy="10" r="2.15"/><path d="m4.1 4.1 11.8 11.8"/></svg>
                     </button>
                     <button class="xzg-group-mode-btn" data-group-mode="mute" title="${t('groups.actionMute')}" aria-label="${t('groups.actionMute')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;">
-                        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><path d="m5.3 5.3 9.4 9.4"/></svg>
+                        <svg class="xzg-group-action-icon" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="10" cy="10" r="7.05"/><path d="m5 5 10 10"/></svg>
                     </button>
                     <button class="xzg-delete-btn" title="${t('groups.delete')}" style="border:none;background:none;cursor:pointer;padding:0;flex-shrink:0;font-size:18px;color:hsla(48,100%,55%,0.5);line-height:1;">×</button>
                 </div>
@@ -2000,7 +2038,7 @@ const Workspace2CanvasGroups = {
             const active = group.executionMode === btn.dataset.groupMode;
             const muted = btn.dataset.groupMode === 'mute';
             btn.style.background = active
-                ? (muted ? 'rgba(220,82,94,.7)' : 'rgba(130,82,200,.7)')
+                ? (muted ? 'rgba(220,82,94,.55)' : 'rgba(130,82,200,.48)')
                 : 'transparent';
             btn.style.borderColor = active
                 ? (muted ? 'rgba(255,156,166,.95)' : 'rgba(214,180,255,.95)')
@@ -2065,29 +2103,44 @@ const Workspace2CanvasGroups = {
             return;
         }
 
-        const canvas = app?.canvas;
-        const command = app?.extensionManager?.command;
-        if (!canvas?.selectItems || typeof command?.execute !== 'function') {
-            // 宁可明确拒绝，也不能退化为 app.queuePrompt() 后误执行整个工作流。
-            await this.showNotice(t('groups.queueUnavailable'));
-            return;
-        }
-
-        const previousNodes = Object.values(canvas.selected_nodes || {}).filter(Boolean);
-        const previousGroup = canvas.selected_group;
         try {
-            // 使用 ComfyUI 官方的“选中输出节点并执行”命令；队列完成后恢复用户的选中状态。
-            canvas.deselectAllNodes?.();
-            canvas.selectItems(outputNodes);
-            await command.execute('Comfy.QueueSelectedOutputNodes');
+            // rgthree exposes this public queue helper on window. It performs
+            // the complete app.queuePrompt() lifecycle (including randomized
+            // seed controls), then limits prompt.output to the selected output
+            // nodes and their dependencies. Reusing it keeps the WorkspaceKit
+            // button behaviour identical to rgthree's proven context-menu item.
+            const rgthreeQueue = window.rgthree?.queueOutputNodes;
+            if (typeof rgthreeQueue === 'function') {
+                await rgthreeQueue.call(window.rgthree, outputNodes);
+                return;
+            }
+
+            // rgthree is optional. Without it, use ComfyUI's own command
+            // rather than submitting a hand-built API request. The command
+            // preserves the native queue lifecycle and sends only selected
+            // output nodes. Restore selection immediately after queueing so
+            // the group button does not disturb the user's canvas state.
+            const canvas = app?.canvas;
+            const command = app?.extensionManager?.command;
+            if (!canvas?.selectItems || typeof command?.execute !== 'function') {
+                await this.showNotice(t('groups.queueUnavailable'));
+                return;
+            }
+            const previousNodes = Object.values(canvas.selected_nodes || {}).filter(Boolean);
+            const previousGroup = canvas.selected_group;
+            try {
+                canvas.deselectAllNodes?.();
+                canvas.selectItems(outputNodes);
+                await command.execute('Comfy.QueueSelectedOutputNodes');
+            } finally {
+                canvas.deselectAllNodes?.();
+                if (previousNodes.length) canvas.selectItems(previousNodes);
+                canvas.selected_group = previousGroup;
+                canvas.setDirty?.(true, true);
+            }
         } catch (error) {
             console.error('[WorkspaceKit Canvas Groups] Queue group output nodes failed:', error);
             await this.showNotice(t('groups.queueFailed'));
-        } finally {
-            canvas.deselectAllNodes?.();
-            if (previousNodes.length) canvas.selectItems(previousNodes);
-            canvas.selected_group = previousGroup;
-            canvas.setDirty?.(true, true);
         }
     },
 
@@ -2632,7 +2685,7 @@ const Workspace2CanvasGroups = {
         // 优先从工作流保存的完整编组数据恢复（包含动画、颜色、标题等）
         if (this._pendingGroups) {
             for (const [id, g] of Object.entries(this._pendingGroups)) {
-                this.groups[id] = { ...g };
+                this.groups[id] = { ...g, title: normalizeGroupTitle(g?.title) };
             }
             this._pendingGroups = null;
         }
@@ -2670,7 +2723,7 @@ const Workspace2CanvasGroups = {
         // 将从节点收集到的编组数据合并到groups
         for (const [gid, gd] of Object.entries(groupDataMap)) {
             if (!this.groups[gid]) {
-                this.groups[gid] = { ...gd };
+                this.groups[gid] = { ...gd, title: normalizeGroupTitle(gd?.title) };
             } else {
                 // 如果已有顶层数据，保留顶层数据，只补充缺失字段
                 for (const key of Object.keys(gd)) {
@@ -2689,7 +2742,7 @@ const Workspace2CanvasGroups = {
                 // 优先从 extra 恢复完整数据（含用户自定义颜色等），仅作兜底才用默认值
                 const fromExtra = app?.graph?.extra?.xzgGroups?.[gid];
                 const bounds = this.calcBounds(nids) || { x: 0, y: 0, w: 300, h: 200 };
-                this.groups[gid] = fromExtra ? { ...fromExtra } : {
+                this.groups[gid] = fromExtra ? { ...fromExtra, title: normalizeGroupTitle(fromExtra.title) } : {
                     id: gid, title: this.uniqueGroupTitle(undefined, gid), nodeIds: nids, bypassed: false, bounds,
                     fontSize: 14, colorHue: 48, colorSat: 100, colorLit: 55,
                     effect: 'none', effectSpeed: 3,

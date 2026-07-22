@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
-import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260708_group_settings_animation_slider_hitbox";
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260722_group_header_icon_centering";
+import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260722_rgthree_fast_groups_p0";
 import { fetchJson, postJson } from "./core/api.js";
 import {
   installPerformanceDebugApi,
@@ -33,15 +34,22 @@ import { createTemplateGroupHeaderRenderer } from "./templates/group-header-rend
 import { createTemplateRowRenderer } from "./templates/row-renderer.js";
 import { renderTemplateContextMenu as renderTemplateContextMenuRenderer } from "./templates/context-menu-renderer.js";
 import { createTemplateMinimap } from "./templates/minimap.js";
+import {
+  emptyTemplateTrash as emptyTemplateTrashStore,
+  moveTemplateToTrash,
+  permanentlyDeleteTemplateFromTrash,
+  restoreTemplateFromTrash,
+} from "./templates/trash-store.js";
 import { createPersonalizationPanel } from "./ui/personalization-panel.js";
 import { setExpandedRecursive } from "./ui/tree-expansion.js";
 import { applyDecoratedIcon } from "./ui/decorated-icon.js";
 import { createPreviewPositioner } from "./ui/preview-positioner.js";
 import { createPanelChrome } from "./ui/panel-chrome.js";
+import { shouldCloseWorkspaceModule } from "./ui/module-toggle.js";
 import { createSettingsControls } from "./settings/controls.js";
 import { createSettingsDialogSections } from "./settings/dialog-sections.js";
 import { createSettingsDialogShell } from "./settings/dialog-shell.js";
-import { configureI18n, t as translate } from "./core/i18n.js";
+import { configureI18n, getLocale, t as translate } from "./core/i18n.js";
 import {
   closeOfficialWorkflow,
   getActiveOfficialWorkflow,
@@ -222,7 +230,8 @@ const FALLBACK_STRINGS = {
     "workflows.closeUnsavedMessage": "“{name}”有未保存的更改。",
     "workflows.closeSave": "保存并关闭",
     "workflows.closeDiscard": "不保存并关闭",
-    "toolbar.openWorkflow": "打开工作流",
+    "toolbar.openWorkflow": "导入",
+    "row.copy": "复制工作流",
     "nodes.title": "节点2",
     "nodes.status": "{count} 个节点",
     "nodes.searchPlaceholder": "搜索节点",
@@ -252,6 +261,9 @@ const FALLBACK_STRINGS = {
     "status.error": "错误：{message}",
     "status.openedWorkflowFile": "已打开工作流文件",
     "status.workflowSaved": "工作流已保存",
+    "status.workflowCopied": "已复制工作流：{name}",
+    "status.workflowRenameTargetExists": "已有同名工作流。",
+    "status.workflowRenameSourceMissing": "找不到原工作流文件。",
     "status.workflowSaveMismatch": "只能保存当前打开的工作流",
     "status.workflowSerializeUnavailable": "当前 ComfyUI 前端不支持直接保存当前画布",
     "workflows.sort.nameAsc": "名称 A-Z",
@@ -406,7 +418,8 @@ const FALLBACK_STRINGS = {
     "workflows.closeUnsavedMessage": "“{name}” has unsaved changes.",
     "workflows.closeSave": "Save and close",
     "workflows.closeDiscard": "Close without saving",
-    "toolbar.openWorkflow": "Open workflow",
+    "toolbar.openWorkflow": "Import",
+    "row.copy": "Copy workflow",
     "nodes.title": "Nodes 2",
     "nodes.status": "{count} nodes",
     "nodes.searchPlaceholder": "Search nodes",
@@ -436,6 +449,9 @@ const FALLBACK_STRINGS = {
     "status.error": "Error: {message}",
     "status.openedWorkflowFile": "Opened workflow file",
     "status.workflowSaved": "Workflow saved",
+    "status.workflowCopied": "Workflow copied: {name}",
+    "status.workflowRenameTargetExists": "Another workflow already uses this name.",
+    "status.workflowRenameSourceMissing": "The original workflow file was not found.",
     "status.workflowSaveMismatch": "Only the current open workflow can be saved",
     "status.workflowSerializeUnavailable": "The current ComfyUI frontend does not expose a graph serializer",
     "workflows.sort.nameAsc": "Name A-Z",
@@ -843,6 +859,7 @@ const templatesState = {
   contextMenuCloseHandler: null,
   sortMenuElement: null,
   sortMenuCloseHandler: null,
+  showTrash: false,
 };
 
 const { createRenameInput: createWorkflowRenameInputRenderer } = createWorkflowRenameInputFactory({
@@ -1616,21 +1633,21 @@ function setupWorkspaceShortcuts() {
       event.preventDefault();
       event.stopPropagation();
       event.workspace2Handled = true;
-      openWorkspace2Module("workflows");
+      openWorkspace2Module("workflows", { closeIfActive: true });
       return;
     }
     if (event.shiftKey && !event.ctrlKey && (event.code === "KeyN" || event.code === "Digit2")) {
       event.preventDefault();
       event.stopPropagation();
       event.workspace2Handled = true;
-      openWorkspace2Module("nodes");
+      openWorkspace2Module("nodes", { closeIfActive: true });
       return;
     }
     if (event.shiftKey && !event.ctrlKey && event.code === "Digit3") {
       event.preventDefault();
       event.stopPropagation();
       event.workspace2Handled = true;
-      openWorkspace2Module("templates");
+      openWorkspace2Module("templates", { closeIfActive: true });
       return;
     }
     if (event.shiftKey && !event.ctrlKey && event.code === "KeyG") {
@@ -1707,11 +1724,20 @@ function closeWorkspace2Sidebar() {
   return false;
 }
 
-function openWorkspace2Module(moduleId) {
+function openWorkspace2Module(moduleId, { closeIfActive = false } = {}) {
   const nextModule = normalizeWorkspaceModule(moduleId);
+  const panelIsOpen = isWorkspace2PanelOpen();
+  if (shouldCloseWorkspaceModule({
+    closeIfActive,
+    panelIsOpen,
+    activeModule: workspaceState.activeModule,
+    nextModule,
+  })) {
+    return closeWorkspace2Sidebar();
+  }
   workspaceState.activeModule = nextModule;
   localStorage.setItem(WORKSPACE2_MODULE_KEY, nextModule);
-  if (isWorkspace2PanelOpen()) {
+  if (panelIsOpen) {
     renderWorkspace2Panel(workspaceState.renderTarget);
     return true;
   }
@@ -2073,6 +2099,107 @@ function closeWorkspaceSettings() {
   workspaceState.settingsElement = null;
 }
 
+// A portable data bundle deliberately contains only WorkspaceKit-owned state.
+// Workflow JSON files are user documents and the node object-info cache is
+// derived data, so neither belongs in an import that can overwrite settings.
+function collectWorkspaceBrowserPreferences() {
+  const preferences = {};
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith("workspace2.")) {
+      preferences[key] = localStorage.getItem(key) || "";
+    }
+  }
+  return preferences;
+}
+
+function applyWorkspaceBrowserPreferences(preferences) {
+  if (!preferences || typeof preferences !== "object") return;
+  const currentKeys = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith("workspace2.")) currentKeys.push(key);
+  }
+  for (const key of currentKeys) localStorage.removeItem(key);
+  for (const [key, value] of Object.entries(preferences)) {
+    if (key.startsWith("workspace2.") && typeof value === "string") {
+      localStorage.setItem(key, value);
+    }
+  }
+}
+
+function downloadWorkspaceDataBundle(bundle) {
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..+$/, "").replace("T", "-");
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `comfyui-workspacekit-data-${stamp}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function exportWorkspaceDataBundle() {
+  try {
+    const response = await fetchJsonWithTimeout("/workspace2/data-bundle");
+    const bundle = response?.bundle;
+    if (!bundle || typeof bundle !== "object") throw new Error(t("settings.dataExportInvalid"));
+    bundle.browser_preferences = collectWorkspaceBrowserPreferences();
+    downloadWorkspaceDataBundle(bundle);
+    await workspace2Notice({ title: t("settings.dataManagement"), message: t("settings.dataExported") });
+  } catch (error) {
+    await workspace2Notice({ title: t("settings.dataManagement"), message: t("settings.dataExportFailed", { message: error?.message || String(error) }) });
+  }
+}
+
+async function importWorkspaceDataBundle() {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "application/json,.json";
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const bundle = await readJsonFile(file);
+      if (!bundle || typeof bundle !== "object" || Number(bundle.schema_version) !== 1 || !bundle.data) {
+        throw new Error(t("settings.dataImportInvalid"));
+      }
+      const confirmed = await workspace2Confirm({
+        title: t("settings.dataManagement"),
+        message: t("settings.dataImportConfirm"),
+        confirmText: t("settings.dataImport"),
+        danger: false,
+      });
+      if (!confirmed) return;
+      const result = await postJson("/workspace2/data-bundle/import", {
+        bundle,
+        current_browser_preferences: collectWorkspaceBrowserPreferences(),
+      });
+      applyWorkspaceBrowserPreferences(bundle.browser_preferences);
+      await workspace2Notice({
+        title: t("settings.dataManagement"),
+        message: t("settings.dataImportDone", { backup: result.backup_path || "" }),
+      });
+      window.location.reload();
+    } catch (error) {
+      await workspace2Notice({ title: t("settings.dataManagement"), message: t("settings.dataImportFailed", { message: error?.message || String(error) }) });
+    }
+  }, { once: true });
+  input.click();
+}
+
+function createWorkspaceDataManagementSection() {
+  const actions = document.createElement("div");
+  actions.className = "workspace2-settings-row";
+  const help = settingsHelp(t("settings.dataManagementHelp"));
+  const exportButton = toolbarButton("download", t("settings.dataExport"), exportWorkspaceDataBundle);
+  const importButton = toolbarButton("upload", t("settings.dataImport"), importWorkspaceDataBundle);
+  actions.append(help, exportButton, importButton);
+  return settingsSection(t("settings.dataManagement"), [actions]);
+}
+
 const {
   settingsCheckbox,
   settingsSection,
@@ -2114,6 +2241,7 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
     updatedAt: formatTimestamp(nodesState.objectInfoCachedAt),
   }),
   clearNodeCache: clearCachedObjectInfo,
+  buildDataManagementSection: createWorkspaceDataManagementSection,
 });
 
 const { createSettingsDialogShell: buildSettingsDialogShell } = createSettingsDialogShell({
@@ -2143,11 +2271,12 @@ function openWorkspaceSettings() {
     behavior,
     backgroundEffect,
     nodeCache,
+    dataManagement,
     about,
     versionInfo,
   } = buildSettingsDialogSections();
 
-  dialog.append(header, shortcuts, behavior, backgroundEffect, nodeCache, about);
+  dialog.append(header, shortcuts, behavior, backgroundEffect, nodeCache, dataManagement, about);
   backdrop.append(dialog);
   document.body.append(backdrop);
   workspaceState.settingsElement = backdrop;
@@ -4726,6 +4855,21 @@ function handleError(el, error) {
   renderPanel(el);
 }
 
+function handleWorkflowRenameError(el, error) {
+  const message = String(error?.message || "");
+  const knownStatusKey = message === "Target already exists"
+    ? "status.workflowRenameTargetExists"
+    : message === "Source not found"
+      ? "status.workflowRenameSourceMissing"
+      : "";
+  if (!knownStatusKey) {
+    handleError(el, error);
+    return;
+  }
+  state.status = t(knownStatusKey);
+  renderPanel(el);
+}
+
 function officialWorkflowPath(path) {
   return `workflows/${String(path || "").replace(/^\/+/, "")}`;
 }
@@ -5013,15 +5157,24 @@ async function createWorkflow(el, parent = selectedFolderPath()) {
 }
 
 async function renameItem(el, item, newName) {
-  if (!newName || newName === item.name) {
+  const oldPath = item.path;
+  if (!newName) {
     state.editingPath = "";
     state.editingSurface = "";
     renderPanel(el);
     return;
   }
-  const oldPath = item.path;
-  const wasSelected = state.selectedPath === oldPath;
   let nextPath = workflowRenameTargetPath(item, newName);
+  // The edit field intentionally hides `.json`, so comparing its display
+  // value with item.name makes an unchanged file look renamed. Compare the
+  // normalized target path instead and avoid a self-rename request.
+  if (nextPath.toLowerCase() === oldPath.toLowerCase()) {
+    state.editingPath = "";
+    state.editingSurface = "";
+    renderPanel(el);
+    return;
+  }
+  const wasSelected = state.selectedPath === oldPath;
   const conflict = state.items.some((entry) =>
     entry.path !== oldPath && entry.path.toLowerCase() === nextPath.toLowerCase()
   );
@@ -5036,7 +5189,14 @@ async function renameItem(el, item, newName) {
     const officialWorkflow = state.isOfficialRoot && item.type === "file"
       ? workflowStore?.getWorkflowByPath?.(officialWorkflowPath(oldPath))
       : null;
-    if (officialWorkflow && typeof workflowStore?.renameWorkflow === "function") {
+    // `getWorkflowByPath()` searches ComfyUI's full file catalog.  It does
+    // not mean the workflow is a live tab.  Calling its rename transaction
+    // for a Browse-only file can promote it into `openWorkflows`, so reserve
+    // that transaction for an actual open tab only.
+    const isOpenOfficialWorkflow = Boolean(
+      officialWorkflow && workflowStore?.openWorkflows?.includes(officialWorkflow),
+    );
+    if (isOpenOfficialWorkflow && typeof workflowStore?.renameWorkflow === "function") {
       await workflowStore.renameWorkflow(officialWorkflow, officialWorkflowPath(nextPath));
       nextPath = relativeWorkflowPathFromOfficial(officialWorkflow.path || officialWorkflowPath(nextPath));
     } else {
@@ -5055,9 +5215,9 @@ async function renameItem(el, item, newName) {
       state.selectedPath = nextPath;
       recordRecentWorkflow(nextPath);
     }
-    if (!officialWorkflow) {
-      refreshOfficialWorkflowsDeferred(500);
-    }
+    // Browse-only rename already updated the local list above.  Do not call
+    // syncWorkflows here: that refresh can also promote a catalog file into
+    // the Open section even though the user never opened it.
     renameSucceeded = true;
   } finally {
     state.workflowRenameInProgress = false;
@@ -5080,20 +5240,68 @@ async function renameItem(el, item, newName) {
 
 async function moveItem(el, sourcePath, targetFolder) {
   const source = state.items.find((entry) => entry.path === sourcePath);
-  const data = await postJson("/workspace2/move", {
-    source_path: sourcePath,
-    target_folder: targetFolder,
-  });
-  const nextPath = data?.path || joinPath(
+  let nextPath = joinPath(
     targetFolder,
     source?.name || sourcePath.split("/").pop(),
   );
+  const workflowStore = app.extensionManager?.workflow;
+  const officialWorkflow = state.isOfficialRoot && source?.type === "file"
+    ? workflowStore?.getWorkflowByPath?.(officialWorkflowPath(sourcePath))
+    : null;
+
+  // An open official workflow owns its path in ComfyUI's workflow store.
+  // Moving only through /workspace2/move changes the file on disk but leaves
+  // that object at its old path, so the Open list loses the tab after sync.
+  // Use the same official rename transaction as renameItem() when possible;
+  // ComfyUI accepts a nested target path and updates its open-tab state too.
+  if (officialWorkflow && typeof workflowStore?.renameWorkflow === "function") {
+    await workflowStore.renameWorkflow(officialWorkflow, officialWorkflowPath(nextPath));
+    nextPath = relativeWorkflowPathFromOfficial(
+      officialWorkflow.path || officialWorkflowPath(nextPath),
+    );
+  } else {
+    const data = await postJson("/workspace2/move", {
+      source_path: sourcePath,
+      target_folder: targetFolder,
+    });
+    nextPath = data?.path || nextPath;
+  }
   remapLocalWorkflowItems(sourcePath, nextPath);
   remapWorkflowPathState(sourcePath, nextPath);
   state.expanded.add(targetFolder);
   state.status = targetFolder ? t("status.movedTo", { target: targetFolder }) : t("status.movedToRoot");
   renderPanel(el);
-  refreshOfficialWorkflowsDeferred(250);
+  if (!officialWorkflow) {
+    refreshOfficialWorkflowsDeferred(250);
+  }
+}
+
+async function copyWorkflow(el, item) {
+  if (!item?.path || item.type !== "file") {
+    return;
+  }
+  const data = await postJson("/workspace2/workflow/copy", {
+    path: item.path,
+    // The server owns all filename construction; locale only chooses the
+    // documented Copy / 副本 label and can never become a path fragment.
+    locale: getLocale(),
+  });
+  const copiedPath = String(data?.path || "");
+  if (!copiedPath) {
+    throw new Error("Copy did not return a workflow path");
+  }
+  addLocalWorkflowItem({
+    ...item,
+    name: copiedPath.split("/").pop() || item.name,
+    path: copiedPath,
+    updated_at: Date.now(),
+  });
+  state.expanded.add(parentPath(copiedPath));
+  state.status = t("status.workflowCopied", { name: workflowDisplayName({ ...item, name: copiedPath.split("/").pop() }) });
+  // Copy is a Browse-only filesystem operation. Do not select the new file or
+  // synchronize ComfyUI's official workflow Store here: that sync can promote
+  // the discovered copy into Open even though the user never opened it.
+  renderPanel(el);
 }
 
 async function moveToTrash(el, item) {
@@ -6043,9 +6251,64 @@ async function deleteTemplate(el, template) {
     setPendingTemplate(null);
   }
   templatesState.library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
-  templatesState.library.templates = templatesState.library.templates.filter((item) => item.id !== template.id);
+  templatesState.library = moveTemplateToTrash(templatesState.library, template);
   templatesState.editingTemplateId = "";
   await saveTemplateLibrary(el);
+}
+
+async function restoreTemplateTrashEntry(el, entry) {
+  const library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
+  templatesState.library = restoreTemplateFromTrash(library, entry);
+  await saveTemplateLibrary(el);
+}
+
+async function permanentlyDeleteTemplateTrashEntry(el, entry) {
+  const library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
+  templatesState.library = permanentlyDeleteTemplateFromTrash(library, entry);
+  await saveTemplateLibrary(el);
+}
+
+async function emptyTemplateTrash(el) {
+  const library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
+  templatesState.library = emptyTemplateTrashStore(library);
+  await saveTemplateLibrary(el);
+}
+
+function renderTemplateTrashBody(el, body) {
+  const entries = templatesState.library?.trash || [];
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "workspace2-empty";
+    empty.textContent = t("templates.trashEmpty");
+    body.append(empty);
+    return;
+  }
+  const list = document.createElement("div");
+  list.className = "workspace2-trash-list";
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "workspace2-trash-item";
+    const info = document.createElement("div");
+    info.className = "workspace2-trash-info";
+    const icon = document.createElement("span");
+    icon.className = "workspace2-icon";
+    icon.append(iconSvg("template"));
+    const text = document.createElement("div");
+    text.className = "workspace2-trash-text";
+    const name = document.createElement("div");
+    name.className = "workspace2-trash-name";
+    name.textContent = entry.template.name;
+    const meta = document.createElement("div");
+    meta.className = "workspace2-trash-meta";
+    meta.textContent = t("templates.trashDeleted", { date: new Date(entry.deletedAt).toLocaleString() });
+    text.append(name, meta); info.append(icon, text);
+    row.append(info, iconButton("undo", t("templates.restore"), async () => restoreTemplateTrashEntry(el, entry)));
+    row.append(dangerIconButton("trash", t("templates.deletePermanently"), (event) => {
+      workspace2InlineConfirm(event.currentTarget, { confirmText: t("confirm.delete"), onConfirm: async () => permanentlyDeleteTemplateTrashEntry(el, entry) });
+    }));
+    list.append(row);
+  }
+  body.append(list);
 }
 
 function requestDeleteTemplate(el, template, anchor = null) {
@@ -9096,7 +9359,7 @@ function createWorkflowRenameInput(el, item, surface) {
     displayName: workflowDisplayName,
     prepareInput: isolateComfyKeys,
     onCommit: (name) => renameItem(el, item, name),
-    onError: (error) => handleError(el, error),
+    onError: (error) => handleWorkflowRenameError(el, error),
     onCancel: () => {
       state.editingPath = "";
       state.editingSurface = "";
@@ -9137,6 +9400,7 @@ function renderNode(el, list, node, depth) {
     onReorderDrag: beginWorkflowReorderDrag,
     onNewSubfolder: (target, path) => createFolder(target, path),
     onOpenWorkflowLocation: openWorkflowLocation,
+    onCopyWorkflow: copyWorkflow,
     onRename: (target, path) => beginWorkflowRename(target, path, "browse"),
     onMoveToTrash: (target, item) => moveToTrash(target, item),
     onError: handleError,
@@ -9778,17 +10042,54 @@ function renderTemplatesPanel(el) {
       renderTemplatesPanel(el);
     }
   });
+  const trash = toolbarButton(
+    templatesState.showTrash ? "files" : "archiveTray",
+    t(templatesState.showTrash ? "templates.showLibrary" : "templates.showTrash"),
+    () => {
+      templatesState.showTrash = !templatesState.showTrash;
+      renderTemplatesPanel(el);
+    },
+  );
+  trash.classList.add("is-trash-toggle");
+  if (templatesState.showTrash) trash.classList.add("is-active");
   const toolbar = createSearchToolbar({
     focusKey: "templates-search",
     placeholder: t("templates.searchPlaceholder"),
     value: templatesState.query,
-    buttons: [newGroup, save, templatesSortButton(el)],
+    buttons: [newGroup, save, templatesSortButton(el), trash],
     onInput: (value) => {
       templatesState.query = value;
       renderTemplatesPanel(el);
     },
   });
-  top.append(header, toolbar, templatesRootRow(el));
+  top.append(header, toolbar);
+
+  if (templatesState.showTrash) {
+    const clearRow = createRootActionRow({
+      className: "workspace2-empty-trash-row",
+      title: t("templates.emptyTrash"),
+      icon: "trash",
+      text: t("templates.emptyTrash"),
+      onClick: (event) => {
+        if (event.target?.closest?.(".workspace2-inline-confirm")) return;
+        workspace2InlineConfirm(event.currentTarget, {
+          confirmText: t("confirm.emptyTrash"),
+          onConfirm: async () => emptyTemplateTrash(el),
+        });
+      },
+    });
+    top.append(clearRow);
+    const body = document.createElement("div");
+    body.className = "workspace2-tree";
+    renderTemplateTrashBody(el, body);
+    panel.append(top, body);
+    el.append(panel);
+    restoreScrollSnapshot(el, snapshot);
+    finish({ renderedTrashCount: templatesState.library?.trash?.length || 0 });
+    return;
+  }
+
+  top.append(templatesRootRow(el));
 
   const body = document.createElement("div");
   body.className = "workspace2-tree";
@@ -11061,6 +11362,7 @@ app.registerExtension({
     setupOfficialWorkflowStateSync();
     workspace2CanvasGroups.setNoticeHandler?.(workspace2Notice);
     workspace2CanvasGroups.init();
+    installRgthreeFastGroupsBridge(workspace2CanvasGroups);
     registerWorkspace2CanvasGroupCommands();
     detectOfficialNodeAdapter();
     detectOfficialFavoritesProbe().catch((error) => {

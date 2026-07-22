@@ -20,12 +20,14 @@ export function createWorkflowRenameInputFactory({ document, schedule = setTimeo
     prepareInput(input);
 
     let renamePromise = null;
+    let settled = false;
     const commitRename = () => {
-      if (!renamePromise) {
+      if (!settled) {
+        settled = true;
         input.disabled = true;
         renamePromise = onCommit(input.value.trim());
       }
-      return renamePromise;
+      return renamePromise || Promise.resolve();
     };
 
     input.addEventListener("click", (event) => event.stopPropagation());
@@ -40,14 +42,18 @@ export function createWorkflowRenameInputFactory({ document, schedule = setTimeo
         }
         return;
       }
-      if (event.key === "Escape" && !renamePromise) {
+      if (event.key === "Escape" && !settled) {
         event.preventDefault();
         event.stopPropagation();
+        // Removing the focused input causes a blur event. Mark it settled
+        // before rendering so that blur cannot submit the stale item path.
+        settled = true;
+        input.disabled = true;
         onCancel();
       }
     });
     input.addEventListener("blur", async () => {
-      if (renamePromise) return;
+      if (settled) return;
       try {
         await commitRename();
       } catch (error) {

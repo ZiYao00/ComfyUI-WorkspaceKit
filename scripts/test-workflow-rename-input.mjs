@@ -44,6 +44,7 @@ const cancelInput = createRenameInput({
   isStillEditing: () => false,
 });
 cancelInput.listeners.get("keydown")({ key: "Escape", preventDefault(){}, stopPropagation(){} });
+await cancelInput.listeners.get("blur")({});
 assert.equal(calls.includes("cancel"), true);
 assert.equal(calls.includes("unexpectedCommit"), false);
 console.log("workflow rename-input contract passed");

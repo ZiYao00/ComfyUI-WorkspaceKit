@@ -8,7 +8,7 @@ ComfyUI-WorkspaceKit is a workspace enhancement extension for ComfyUI. It focuse
 
 It does not try to replace the official ComfyUI UI. Instead, it adds a focused workspace layer for users who need faster organization, safer file operations, better node reuse, and clearer visual structure.
 
-Current status: **public beta, 0.2.2**. It is usable for daily testing, but it is not a stable 1.0 release yet. Before using it in a main ComfyUI environment, back up your workflows, user settings, important node favorites, and important template data.
+Current status: **public beta, 0.2.3**. It is usable for daily testing, but it is not a stable 1.0 release yet. Before using it in a main ComfyUI environment, back up your workflows, user settings, important node favorites, and important template data.
 
 ## When WorkspaceKit Helps
 
@@ -28,6 +28,7 @@ WorkspaceKit currently provides one unified sidebar entry with three internal ta
 
 - **Workflows 2**: Manage workflow files in the ComfyUI workflow directory.
 - **Nodes 2**: Browse, search, favorite, group, and organize nodes.
+- **Data backup and transfer**: Export WorkspaceKit-owned data and import it later with an automatic pre-import backup. Workflow files and the derived node cache are not included.
 - **Templates**: Save selected connected nodes as reusable templates and organize them with groups.
 
 It also includes two canvas helpers:

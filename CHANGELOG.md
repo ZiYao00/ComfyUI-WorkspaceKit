@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.3 - 2026-07-22
+
+### Added
+
+- Added workflow copy from Browse, with locale-aware numbered names, safe collision handling, and no unintended Open-tab activation.
+- Added template recycle-bin operations and portable WorkspaceKit data export/import with automatic backup before import.
+- Added rgthree Fast Groups interoperability and focused regression contracts for workflow, template, shortcut, data, and canvas-group behavior.
+
+### Changed
+
+- Improved Browse-only workflow rename, cancellation, no-op detection, localized errors, and Open-tab state boundaries.
+- Refined the canvas-group header action controls: scalable title-relative sizing, title-color icons, eye-off Ignore, balanced Disable, and centered SVG alignment.
+- Strengthened node-cache isolation for installations that share an embedded Python runtime.
+
+### Notes
+
+- This remains a public beta release. The Registry publishing workflow is triggered by the `0.2.2` to `0.2.3` version change.
+
 ## 0.2.2 - 2026-07-20
 
 Release-version governance and documentation synchronization.

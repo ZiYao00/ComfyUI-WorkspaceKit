@@ -41,10 +41,11 @@ const factory = createSettingsDialogSections({
   setPanelBackgroundMode: (value) => actions.push(["background", value]),
   getNodeCacheInfo: () => ({ count: 12, updatedAt: "time" }),
   clearNodeCache: async () => actions.push(["clearCache"]),
+  buildDataManagementSection: () => ({ kind: "data-management" }),
 });
 
 const sections = factory.buildSettingsDialogSections();
-assert.deepEqual(Object.keys(sections), ["shortcuts", "behavior", "backgroundEffect", "nodeCache", "about", "versionInfo"]);
+assert.deepEqual(Object.keys(sections), ["shortcuts", "behavior", "backgroundEffect", "nodeCache", "dataManagement", "about", "versionInfo"]);
 assert.equal(sections.shortcuts.children[1].checked, true);
 sections.shortcuts.children[1].onChange(false);
 assert.deepEqual(actions.shift(), ["ctrlG", false]);
@@ -60,6 +61,7 @@ assert.equal(sections.nodeCache.children[0].children[0].text, "12\ntime");
 await sections.nodeCache.children[0].children[1].onClick();
 assert.deepEqual(actions.shift(), ["clearCache"]);
 assert.equal(sections.nodeCache.children[0].children[0].textContent, "settings.nodeCacheCleared");
+assert.equal(sections.dataManagement.kind, "data-management");
 assert.equal(sections.versionInfo.text, "settings.versionLoading");
 
 console.log("Settings dialog sections contract passed.");

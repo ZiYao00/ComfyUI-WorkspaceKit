@@ -19,9 +19,10 @@ export function createTemplateLibraryStore({
 }) {
   function emptyTemplateLibrary() {
     return {
-      version: 1,
+      version: 2,
       groups: [],
       templates: [],
+      trash: [],
       settings: {},
     };
   }
@@ -66,11 +67,30 @@ export function createTemplateLibraryStore({
             source: String(template.source || "workspace2"),
           }))
       : [];
+    const trash = Array.isArray(library.trash)
+      ? library.trash
+          .filter((entry) => entry?.template?.id && entry?.template?.name)
+          .map((entry, index) => ({
+            id: String(entry.id || entry.template.id || `trash-${index}`),
+            template: {
+              ...entry.template,
+              id: String(entry.template.id),
+              name: String(entry.template.name),
+              groupId: groupIds.has(entry.template.groupId) ? String(entry.template.groupId) : "",
+              nodes: Array.isArray(entry.template.nodes) ? entry.template.nodes : [],
+              links: Array.isArray(entry.template.links) ? entry.template.links : [],
+              bounds: entry.template.bounds && typeof entry.template.bounds === "object" ? entry.template.bounds : {},
+            },
+            originalGroupId: String(entry.originalGroupId || entry.template.groupId || ""),
+            deletedAt: Number(entry.deletedAt || Date.now()),
+          }))
+      : [];
     return {
       ...fallback,
       ...library,
       groups,
       templates,
+      trash,
       settings: { ...fallback.settings, ...(library.settings || {}) },
     };
   }

@@ -29,6 +29,7 @@ export function createSettingsDialogSections({
   setPanelBackgroundMode,
   getNodeCacheInfo,
   clearNodeCache,
+  buildDataManagementSection,
 }) {
   const buildSettingsDialogSections = () => {
     const shortcuts = settingsSection(t("settings.shortcuts"), [
@@ -101,6 +102,7 @@ export function createSettingsDialogSections({
     cacheRow.className = "workspace2-settings-row";
     cacheRow.append(cacheInfo, clearCache);
     const nodeCache = settingsSection(t("settings.nodeCache"), [cacheRow]);
+    const dataManagement = buildDataManagementSection();
 
     const versionInfo = settingsHelp(t("settings.version", { version: t("settings.versionLoading") }));
     const about = settingsSection(t("settings.about"), [
@@ -108,7 +110,7 @@ export function createSettingsDialogSections({
       settingsHelp(t("settings.github")),
     ]);
 
-    return { shortcuts, behavior, backgroundEffect, nodeCache, about, versionInfo };
+    return { shortcuts, behavior, backgroundEffect, nodeCache, dataManagement, about, versionInfo };
   };
 
   return { buildSettingsDialogSections };

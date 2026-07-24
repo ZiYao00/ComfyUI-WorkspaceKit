@@ -15,6 +15,26 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
     return row;
   };
 
+  const settingsSelect = (label, value, options, onChange) => {
+    const row = document.createElement("div");
+    row.className = "workspace2-settings-row";
+    const text = document.createElement("span");
+    text.textContent = label;
+    const select = document.createElement("select");
+    for (const option of options) {
+      const item = document.createElement("option");
+      item.value = option.value;
+      item.textContent = option.label;
+      item.selected = option.value === value;
+      select.append(item);
+    }
+    select.value = value;
+    isolateComfyKeys(select);
+    select.addEventListener("change", () => onChange?.(select.value));
+    row.append(text, select);
+    return row;
+  };
+
   const settingsSection = (title, children = []) => {
     const section = document.createElement("section");
     section.className = "workspace2-settings-section";
@@ -37,6 +57,7 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
       ["Shift + 1", t("settings.shortcuts.workflow")],
       ["Shift + 2", t("settings.shortcuts.nodes")],
       ["Shift + 3", t("settings.shortcuts.templates")],
+      ["Shift + 4", t("settings.shortcuts.extension")],
       ["Alt + C", t("settings.shortcuts.saveTemplate")],
       ["Ctrl + G", t("settings.shortcuts.createGroup")],
       ["Shift + G", t("settings.shortcuts.ungroup")],
@@ -44,17 +65,15 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
     ];
     const grid = document.createElement("div");
     grid.className = "workspace2-settings-shortcut-grid";
-    grid.style.cssText = "display:grid;grid-auto-flow:column;grid-template-rows:repeat(4,auto);grid-template-columns:1fr 1fr;gap:6px 12px;margin:4px 0 10px;";
     for (const [keys, label] of shortcuts) {
       const item = document.createElement("div");
       item.className = "workspace2-settings-shortcut-item";
-      item.style.cssText = "display:grid;grid-template-columns:72px minmax(0,1fr);gap:7px;align-items:center;min-width:0;font-size:12px;line-height:1.35;";
       const key = document.createElement("span");
+      key.className = "workspace2-settings-shortcut-key";
       key.textContent = keys;
-      key.style.cssText = "color:var(--descrip-text,#aaa);font-weight:400;white-space:nowrap;";
       const text = document.createElement("span");
+      text.className = "workspace2-settings-shortcut-label";
       text.textContent = label;
-      text.style.cssText = "color:var(--descrip-text,#aaa);font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
       item.append(key, text);
       grid.append(item);
     }
@@ -142,6 +161,7 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
 
   return {
     settingsCheckbox,
+    settingsSelect,
     settingsSection,
     settingsHelp,
     settingsShortcutGrid,

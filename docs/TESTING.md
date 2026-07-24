@@ -2,6 +2,111 @@
 
 This document records reproducible test evidence and unresolved errors found while validating WorkspaceKit. Historical endpoint, storage, and implementation names such as `Workspace2` remain in individual records where they identify the compatibility layer. A recorded error is not treated as a confirmed WorkspaceKit root cause until the owning call chain is isolated.
 
+## 2026-07-24 - Canvas-group Delete key (real single, multi, and native-key acceptance)
+
+- Backup created before this bounded canvas interaction batch: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-canvas-group-delete-key-20260724-111912.zip` (SHA-256 `95703BDE6F2D039650088E53BEAE7C9AF746AC8FE8180ED35E51531E0AD7B45A`).
+- `Delete` now removes one or more transiently selected WorkspaceKit overlay groups through one batched mutation. It reuses the existing group-removal semantics: group frames and metadata are removed, temporary Ignore/Disable modes are restored where applicable, and member nodes, links, positions, and output data are retained.
+- The keyboard policy is intentionally narrow: only an unmodified, non-repeating `Delete` with WorkspaceKit group selection and no native ComfyUI node selection is intercepted. Editable controls, modifier combinations, no-group cases, and native node selections remain outside WorkspaceKit handling.
+- Static validation passed: `test-group-delete-key-events`, existing pointer-action, selection-cancel, and multi-drag contracts; syntax checks; `git diff --check`; and served-module checks at test package `8190`.
+- **Real test-package acceptance:** Shift-selected one group and pressed Delete: its frame disappeared while the graph nodes remained. Restored/created a two-group fixture, Shift-selected both, and pressed Delete: both frames disappeared together while the nodes remained. With no WorkspaceKit group selection, selected a normal native node and pressed Delete: ComfyUI removed that native node, proving WorkspaceKit did not steal the standard node-delete path.
+- Current interaction deliberately follows the standard direct Delete action for group frames. A user-facing undo or multi-delete confirmation remains a separate future UX enhancement; it is not falsely represented as implemented.
+
+## 2026-07-24 - Sidebar-entry resilience (implementation and served-source verification)
+
+- Backup created before this startup-order batch: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-sidebar-entry-resilience-20260724-110339.zip` (176 source files).
+- The official WorkspaceKit sidebar tab now registers before locale loading, workflow loading, panel-provider setup, node probing, shortcut setup, and canvas-group integration. Early registration uses the stable `WorkspaceKit` title/tooltip until localization is ready, so it does not emit a temporary translation-key label.
+- Each later startup stage runs through a bounded error boundary. A failure records only the stage name and error class in `workspaceState.startup`, logs the full local diagnostic, and allows unrelated later stages to continue. Workflow-load failure retains the existing visible status error.
+- `scripts/test-sidebar-startup-resilience.mjs`, entry syntax validation, existing Settings contracts, locale JSON parsing, `git diff --check`, and served-source checks at test package `http://127.0.0.1:8190` passed.
+- Real test-package page acceptance at `http://127.0.0.1:8190`: after the large local installation completed initialization, exactly one `WorkspaceKit` sidebar button was present with the `🧩` icon. Opening it rendered the Workflows panel and its Workflows, Nodes, Templates, and Settings controls; captured WorkspaceKit warnings/errors were empty. A generic `ComfyApp graph accessed before initialization` error still appeared during the broader ComfyUI startup, but did not prevent the completed page or WorkspaceKit entry.
+- Follow-up implementation adds remount recovery that reads the official sidebar store first. If the tab is still registered, it restores only the emoji presentation; if that store API is temporarily unavailable, it deliberately does not re-register. This avoids creating duplicate entries through ComfyUI's append-only registration API. `test-sidebar-startup-resilience.mjs`, syntax checks, diff checks, served-source checks, and a second real 8190 page opening passed.
+- This closes the real fresh-load entry/reachability check. The remaining P0 acceptance cases are deliberate fault-injection of workflow/optional-integration failures and a controlled official sidebar DOM-remount check; they are not claimed as complete.
+
+## 2026-07-24 - Advanced settings action rows and risk cues (accepted)
+
+- Backup created before this bounded settings-action batch: `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-before-advanced-settings-actions-20260724-102024.zip` (SHA-256 `CD54BCF548D65791847EDF47725491DC37DC929D8E9CD1F6AFF26FE2FE0BCD90`).
+- Advanced data actions now use a shared action-row presentation: Export is neutral, Import is visually warned, and Clear node cache is visually dangerous and requires the existing WorkspaceKit confirmation flow before it can run. The actions retain their existing injected callbacks; this batch does not change import/export or cache protocol behavior.
+- `settings/dialog-sections.js` composes the cache action through injected confirmation and action-button helpers, keeping cache mutation and dialog lifecycle in `entry.js`. The action-wiring regression test specifically verifies that the helper is supplied to dialog sections rather than mistakenly requested from the controls factory.
+- Static verification passed: `node --check entry/entry.js`, Settings action-wiring, dialog-sections, and controls contracts, locale JSON parsing, served test-source checks, and `git diff --check`.
+- **User acceptance:** the Advanced-page operation rows and risk presentation were tested and accepted. This closes the visual/action-row part of the batch; it does not claim an end-to-end destructive cache-clear operation was performed during this acceptance.
+
+## 2026-07-24 - Configurable module shortcuts (real keyboard acceptance pending)
+
+- Backup created before this bounded shortcut-preference batch: `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-before-configurable-module-shortcuts-20260724-020500.zip` (SHA-256 `524C5C618E25056372D69FECB9D0267172023753B649E5FFF39913CCA09BD915`).
+- `ui/module-shortcuts.js` now owns only pure matching and preference-key policy. Shift+1/2/3 keep Workflows/Nodes/Templates behavior, legacy Shift+W/N remain aliases for the first two actions, and Shift+4 targets only the currently pinned extension Provider. It intentionally does nothing when no Provider is pinned.
+- Settings > Shortcuts now exposes one enable checkbox for each Shift+1/2/3/4 action. A disabled shortcut is not intercepted, so ComfyUI or the browser can receive it. Alt+C, Ctrl+G, Shift+G, and all canvas-group modifier-click behavior were not changed.
+- Syntax checks; module-shortcut, Settings-controls, Settings-sections, and Panel API contracts; locale JSON parsing; and `git diff --check` passed. The test package served the new `module-shortcuts.js` import with HTTP 200. Automated browser keyboard validation is deferred together with the Panel-integration refresh acceptance.
+
+## 2026-07-24 - Optional Provider integration gate (real reload acceptance pending)
+
+- Complete source/documentation backups were created before the change: `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-before-panel-integration-gate-20260724-013500.zip` and Layout's corresponding `ComfyUI-WorkspaceKit-Layout-before-panel-integration-gate-20260724-013500.zip`.
+- The persisted `workspace2.panelIntegrations.enabled` preference defaults to enabled. Settings exposes it under Advanced > Plugin integration as “Allow extension panels to merge”. It is deliberately a host-composition preference rather than a security boundary.
+- `WorkspaceKitPanelAPI` now retains a Provider registered while disabled but exposes no hostable providers. Re-enabling emits `availability-changed` and restores the same Provider list without a second plugin load. If the disabled Provider was active, WorkspaceKit immediately falls back to Workflows; its pinned fourth-tab preference is retained.
+- Layout was inspected but not modified: it creates its independent sidebar entry first and only removes it inside `onHostClaimed`. Therefore a page refreshed with integration disabled retains Layout's standalone entry; re-enabling and refreshing allows WorkspaceKit to claim and merge it again.
+- `node --check` for entry, panel API, and settings sections; Panel API and Settings-section contracts; locale JSON parsing; and `git diff --check` passed. Real refresh acceptance for disabled/standalone and enabled/merged states remains pending.
+
+## 2026-07-24 - Settings two-column shell (real visual acceptance pending)
+
+- Backup created before this bounded UI-only change: `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-before-settings-two-column-shell-20260724-012000.zip` (SHA-256 `63454B5C7D92E0E3B656A94ADB642A26F5379822C4DFDC4BB4D924230CDC3A6D`).
+- Settings now keeps all existing controls and their injected behavior unchanged, but mounts their section DOM into four navigable pages: General, Shortcuts, Appearance, and Advanced. Pages remain mounted and only toggle `hidden`; this preserves the existing asynchronous version update when About has not been opened yet.
+- The dialog has a responsive 760px desktop two-column shell and collapses its navigation to a horizontal strip below 640px. No shortcut assignment, persistence, background-effect calculation, cache, or data-transfer behavior changed in this batch.
+- `node --check entry/entry.js`, `scripts/test-settings-dialog-sections.mjs`, both locale JSON parses, the navigation-composition contract, and `git diff --check` passed. The test package served the changed `extensions/ComfyUI-WorkspaceKit/entry.js` resource with HTTP 200 on port 8190.
+- Real visual interaction is intentionally **not** recorded as passed: the Chrome control connection reported that the browser was unavailable during this run, so opening/clicking the four pages and checking the narrow layout remains a single pending acceptance step.
+
+## 2026-07-24 - Layout Provider host claim and unique-entry acceptance
+
+- Complete dual-repository backup before host consumption: `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-before-provider-host-claim-20260724-001500.zip` (SHA-256 `90F64929DF7A6BB777275ADDF81C9692645326C914640E89F57821E7403B8009`) and Layout's corresponding `ComfyUI-WorkspaceKit-Layout-before-provider-host-claim-20260724-001500.zip` (SHA-256 `715B376AF7B2306E25B896628C8399F874350B11FA42B22E2D75E12F0A2836DE`).
+- WorkspaceKit now scans `WorkspaceKitPanelProviderRegistry` after publishing Panel API v1, renders Provider tabs through the generic host slots, and disposes Provider DOM/listeners before a tab redraw. Layout registers its standalone fallback first, then removes it through the official `unregisterSidebarTab()` only after WorkspaceKit has registered its own sidebar and confirmed the Provider claim.
+- Current ComfyUI frontend source was inspected before this change: its official `unregisterSidebarTab(id)` destroys custom tab content, removes the entry, and clears an active tab. No hide-delay workaround is used.
+- Static checks, Provider/API contracts, Layout adapter/provider/view contracts, and `git diff --check` passed. The test package served all five changed integration resources with HTTP 200.
+- **User real-page acceptance:** WorkspaceKit displayed a `📐 Layout` tab; selecting it rendered the alignment controls and those controls executed successfully. This closes the primary Layout-host claim path. Cross-load-order, standalone-only, incompatible-API, and close/reopen checks remain part of the broader acceptance matrix.
+
+## 2026-07-23 - WorkspaceKit Panel API v1 registry baseline
+
+- Complete pre-integration backups: `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-before-panel-api-v1-baseline-20260723-221800.zip` (SHA-256 `DA2535B97606B41AF759EA1F59DA9D2D0AACDC71067A52A3A680C4F3DD62A0D0`) and the corresponding Layout repository snapshot at `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-Layout-before-panel-api-v1-baseline-20260723-221900.zip` (SHA-256 `EF9923E8A38413AA013555A44CA33A0285B8E1177382787F00A90CF3504AC652`).
+- `integrations/panel-api.js` publishes the versioned, browser-only `window.WorkspaceKitPanelAPI` at the start of WorkspaceKit setup. It stores optional providers only; it does not yet render a Layout tab, alter the existing three WorkspaceKit modules, or modify Layout.
+- The v1 contract validates providers, rejects duplicate IDs, supports idempotent re-publication, exposes a read-only provider list, and isolates subscriber errors from registry mutations.
+- `scripts/test-panel-api.mjs` covers publication, validation, duplicate handling, registration/unregistration events, and conflicting API detection. WorkspaceKit Canvas contracts and Layout's existing geometry/command-registry tests passed as the pre-integration baseline.
+
+## 2026-07-23 - WorkspaceKit sidebar host and provider slots
+
+- Backup before this bounded extraction: `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-before-panel-host-shell-20260723-223500.zip` (SHA-256 `BE4A4D66C10A6AC2E3ED9A30CE43E040DF7D398E5A772608880B091996B745DE`).
+- `ui/workspace-panel-host.js` now owns only the sidebar shell: generic tab buttons, the existing settings button, and stable hidden header/context plus visible content slots. Existing Workflows, Nodes, and Templates renderers still receive the same `.workspace2-module-body` content mount, so this batch does not alter their data, actions, or render ownership.
+- The tab grid now derives its column count from the provided tab list; this is preparation for an optional provider tab, not a provider integration. No Layout tab is rendered or registered in this batch.
+- `scripts/test-workspace-panel-host.mjs` verifies a four-tab host contract, active tab state, exact activation delivery, settings delivery, and stable slot classes. `node --check` for the host and composition root, the host/API/selection contracts, and `git diff --check` passed.
+- Test package source checks at `http://127.0.0.1:8190` returned HTTP 200 for both `entry.js` and `ui/workspace-panel-host.js`; the served entry imports the host and the served module contains both the host factory and compatibility mount class. Fresh-page visual acceptance remains separately blocked by the known external `ComfyUI-ZML-Image` preload error before the canvas initializes; this batch did not modify that external plugin.
+
+## 2026-07-23 - Canvas-group pointer actions and transient selection
+
+- Follow-up backup before correcting multi-drag membership: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-before-group-multidrag-membership-fix-20260723-183807.zip`.
+- Single-group selection remains internal so ordinary drag behavior is unchanged, but its dashed outline is now reserved for two or more selected groups.
+- `canvas-groups/multi-drag-plan.js` now treats persisted `group.nodeIds` as the authoritative node-membership source, matching execution/restore behavior. A bounds-based node scan is retained only when a legacy group has no live member IDs. The contract covers member precedence, nested-group de-duplication, coordinate-container compatibility, and legacy fallback.
+- Runtime investigation first found that an already-open browser page still held the old ES module under an unchanged import query. A fresh module cache key was added for the group module and its new pure helper.
+- A second runtime cause was confirmed in the live ComfyUI graph: node positions are `Float64Array` values, not plain JavaScript arrays. The old `Array.isArray(node.pos)` condition therefore excluded every member node from the drag-start list. `hasNodePosition()` now accepts any finite two-value coordinate container.
+- During a multi-group drag, automatic visual-bounds membership synchronization is temporarily suspended. This prevents members from being evicted while the group frame moves before the corresponding nodes are repositioned.
+- Real test-package browser acceptance using `002.json`: Shift-selected two groups, dragged them once, and verified the plan contained six node IDs and all six live node positions moved by the same `+116.870761 / +58.435381` canvas delta as their group frames. A click on blank canvas then cleared `selectedGroupIds` and all selection outlines. This passed in the actual test page.
+- The external `ComfyUI-ZML-Image` frontend was temporarily excluded only to isolate an unrelated `vite:preloadError` (`fabric`), then restored byte-for-byte from its single-file backup (SHA-256 matched). The complete test package was restarted afterward and is listening on port 8190. The frontend error is not recorded as a WorkspaceKit defect.
+- Backup before the selection-cancellation change: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-group-selection-cancel-events-20260723-212400.zip` (SHA-256 `0745DDB11D832EE51910945B3D980601AA82E2FED62E8BB6B0D1E7C518352CF9`).
+- Selection cancellation now listens on `window` capture rather than `document` capture. This is intentionally earlier than third-party `document` listeners that can stop propagation. Only a left `pointerdown` whose composed path contains the actual graph canvas clears selection; group boxes, WorkspaceKit dialogs, toolbars, and sidebars do not.
+- Escape clears transient selection unless the active element is an editable input, textarea, select, or contenteditable control. It does not prevent or stop the event, preserving ComfyUI's normal Escape behavior.
+- `scripts/test-group-selection-cancel-events.mjs` passed together with the pointer-action and multi-drag contracts. The test package served the versioned entry, group module, and new cancellation module with HTTP 200.
+- Fresh-page real acceptance remains pending, not failed: the fully restored test package currently raises the known external `ComfyUI-ZML-Image` `vite:preloadError` before `app.canvas` is initialized. No WorkspaceKit error preceded that failure, and this batch did not modify the external plugin again.
+
+- Backup created before the bounded interaction change: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-group-pointer-actions-and-selection-20260723-181159.zip`.
+- Canvas group pointer actions are now semantic defaults: `Ctrl/Meta + Left Click` toggles Ignore/Bypass, `Alt + Left Click` toggles Disable, and `Shift + Left Click` toggles transient group selection. Mixed modifier combinations intentionally do nothing.
+- Ignore and Disable reuse `toggleGroupExecutionMode()`, which snapshots each node's original mode and restores it on the second action. The legacy direct bypass path is no longer used for modifier clicks.
+- Selection is represented by a non-serialized `selectedGroupIds` set and a 2px theme-color dashed outline with a 3px offset. It does not modify group colors, animations, node selection, or workflow JSON.
+- Test-package acceptance at `http://127.0.0.1:8190` using `002.json`: Ctrl+click entered Ignore and a second Ctrl+click restored; Alt+click entered Disable and a second Alt+click restored; Shift+click selected two groups simultaneously with the expected dashed outlines. The first batch intentionally does not change group drag behaviour.
+- `scripts/test-group-pointer-actions.mjs` verifies the three exact modifier mappings, Meta compatibility, and rejection of mixed/right-click combinations.
+
+## 2026-07-23 - Canvas-group multi-select drag plan
+
+- Backup created before the bounded movement change: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-group-multiselect-drag-plan-20260723-181735.zip`.
+- With two or more selected groups, WorkspaceKit now builds one de-duplicated movement plan. Every selected group border moves once; a selected parent also carries unselected contained child-group borders; nodes are collected by ID from the selected group bounds and move once even when groups overlap or a parent and child are both selected.
+- Existing single-group dragging remains on its prior path to avoid changing its verified containment behavior.
+- Real test-package acceptance at `http://127.0.0.1:8190` in a fresh page using `002.json`: Shift-selected two groups, dragged one by `+40px/+20px`, and both headers moved by exactly that amount. A reverse drag restored the pre-test positions. Clicking blank canvas cleared both selection outlines.
+- The test initially revealed that a page already open before the second source change retained its old ES-module instance. A fresh ComfyUI page loaded the new `startMultiGroupDrag()` method; this is a test-page reload boundary, not a workflow-data issue.
+- `scripts/test-group-multi-drag-plan.mjs` covers selected parent/child/peer groups, contained-child border inclusion, and node-ID de-duplication.
+
 ## 2026-07-22 - Browse workflow copy and import label
 
 - Backup created before the bounded change: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-workflow-import-copy-and-group-title-20260722-20260722-210012.zip`.
@@ -430,6 +535,14 @@ Material layers:
 - Translucent theme surface controlled by inverse slider transparency.
 - Fine CSS radial grain.
 - Soft diagonal highlight and inset edge.
+
+## 2026-07-23 - Frosted glass blur control
+
+The Frosted glass slider now controls the actual `backdrop-filter` blur rather
+than material transparency. Its value is saved in `workspace2.panelBlur` and
+maps `0–100` to `0–32px`; `100` is the strongest supported frosted effect.
+The existing material-transparency value is retained only to preserve the
+appearance of earlier installations and is no longer changed by this slider.
 
 Visual acceptance:
 

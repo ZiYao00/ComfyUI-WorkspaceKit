@@ -27,6 +27,13 @@ the same pull request as any module ownership change.
 | `core/api.js` | WorkspaceKit HTTP helpers | UI lifecycle | Endpoint callers and Python routes |
 | `core/i18n.js` | Locale configuration and translation lookup | Panel rendering | Locale asset and fallback checks |
 | `core/performance.js` | Performance spans and measurements | Business behavior | Instrumentation smoke checks |
+| `core/startup-stage.js` | Isolated optional-startup stage runner and concise failure recording | Sidebar registration, feature behavior, UI rendering, or error presentation | Sidebar-startup resilience contract and test-package served-source check passed |
+
+## Public integration modules
+
+| Module | Owns | Must not own | Validation |
+| --- | --- | --- | --- |
+| `integrations/panel-api.js` | Versioned browser Provider registry, validation, ID de-duplication, availability gate, lifecycle notification, and safe global publication of `WorkspaceKitPanelAPI` | Sidebar rendering, provider DOM, Layout command behavior, persistence, network, or provider-specific settings | API availability/registration contract passed; host integration acceptance remains separate |
 
 ## Shared UI modules
 
@@ -35,6 +42,20 @@ the same pull request as any module ownership change.
 | `ui/personalization-panel.js` | Shared icon/color personalization dialog DOM, viewport clamping, choice selection, Escape/outside dismissal, and apply/reset callback delivery | Workflow/template/node-group data, endpoint calls, persistence, rendering decisions, or official Store access | Dialog contract, test-package resource/sidebar-load check, and real safe Esc-close interaction passed |
 | `ui/tree-expansion.js` | Shared recursive add/remove of caller-supplied expanded-key Sets | Tree shape, persistence, rendering, panel state, network, files, or official Store access | Expansion contract, test-package resource check, and WorkspaceKit panel-load check passed |
 | `ui/decorated-icon.js` | Shared Prime-icon/emoji class, text, and color-variable presentation | Icon choice, feature data, persistence, rendering policy, network, files, or official Store access | Icon contract passed; user-tested panel regression passed |
+| `ui/panel-background-state.js` | Persisted transparent/frosted background value normalization and blur/opacity snapping | DOM placement, overlay lifecycle, settings rendering, or panel behavior | Background-state contract and test-package resource check passed |
+| `ui/workspace-panel-host.js` | Sidebar shell, built-in/pinned tab strip, settings control, provider overflow menu, and stable host slots | Workflow/Node/Template business logic, Provider registration, or Provider command behavior | Host contract and test-package source-resource check passed; broader Provider matrix remains pending |
+| `ui/provider-tabs.js`, `ui/provider-label.js` | Provider tab planning, pinning policy, and localized Provider label resolution | Provider registration, rendering, persistence writes, or extension behavior | Provider/API contracts passed; real multi-provider matrix remains pending |
+| `ui/module-shortcuts.js` | Fixed Shift+1/2/3/4 shortcut matching and enabled-preference policy | Custom key assignment, browser/ComfyUI conflict policy, sidebar activation, or keyboard listener registration | Module-shortcut contract passed; real keyboard matrix remains pending |
+
+## Canvas-group modules
+
+| Module | Owns | Must not own | Validation |
+| --- | --- | --- | --- |
+| `canvas-groups/pointer-actions.js` | Semantic Ctrl/Meta Ignore, Alt Disable, and Shift selection gesture resolution | DOM listeners, group mutation, persistence, canvas state, or workflow serialization | Pointer-action contract and test-package modifier-click acceptance passed |
+| `canvas-groups/multi-drag-plan.js` | Pure de-duplicated group/node movement plan for multi-selected overlay groups; persisted `group.nodeIds` are authoritative and bounds are legacy fallback only | DOM listeners, graph mutation, persistence, group selection state, or workflow serialization | Membership, de-duplication, coordinate-container compatibility, and legacy-fallback contract passed; real test-package two-group drag acceptance passed |
+| `canvas-groups/selection-cancel-events.js` | Pure eligibility rules for clearing transient group selection from canvas blank-space pointer input and Escape | DOM listener registration, group mutation, persistence, canvas state, or workflow serialization | Pointer and editable-focus contract passed; real-page acceptance pending a test frontend that reaches canvas initialization |
+| `canvas-groups/delete-key-events.js` | Pure eligibility rules for handling unmodified Delete only when WorkspaceKit group selection exists and native node deletion does not | DOM listeners, group mutation, persistence, native node selection, or workflow serialization | Delete-key policy contract and real test-package single/multi/native-delete acceptance passed |
+| `canvas-groups/marquee-selection.js` | Canvas marquee rectangle normalization and read-only overlay-group intersection selection | Native ComfyUI marquee handling, DOM listeners, group mutation, persistence, or workflow serialization | Marquee contract and test-package acceptance passed; native-compatibility regression remains pending |
 
 ## Nodes modules
 
@@ -84,8 +105,8 @@ the same pull request as any module ownership change.
 | Module | Owns | Must not own | Validation |
 | --- | --- | --- | --- |
 | `settings/controls.js` | Settings dialog control DOM: sections, help, checkbox, shortcut grid, ranges, background-mode rows, and disabled-state update | Persistence, glass/opacity behavior, dialog lifecycle, global keyboard handling, network, or sidebar placement | Control contract and test-package Settings dialog acceptance passed |
-| `settings/dialog-sections.js` | Five Settings content sections: shortcuts, behavior, background mode, cache, and about/version placeholders | LocalStorage, node-cache implementation, glass behavior, version request, dialog lifecycle, global keyboard handling, or sidebar placement | Section contract and test-package Settings dialog acceptance passed |
-| `settings/dialog-shell.js` | Settings backdrop, dialog shell, title/header DOM, and close-intent callback | Attaching/removing the dialog, Escape, version request, persistence, glass behavior, global listeners, or sidebar placement | Shell contract and test-package Settings dialog acceptance passed |
+| `settings/dialog-sections.js` | Settings content sections: shortcuts, behavior, background mode, integration gate, cache, data transfer, and about/version placeholders; composes semantic action rows through injected action/confirmation helpers | LocalStorage, node-cache implementation, glass behavior, version request, dialog lifecycle, global keyboard handling, or sidebar placement | Section and action-wiring contracts passed; Advanced-page operation-row user acceptance passed |
+| `settings/dialog-shell.js` | Settings backdrop, dialog shell, title/header DOM, and close-intent callback | Attaching/removing the dialog, Escape, version request, persistence, glass behavior, global listeners, page-navigation policy, or sidebar placement | Shell contract and test-package Settings dialog acceptance passed |
 
 ## Workflows modules
 

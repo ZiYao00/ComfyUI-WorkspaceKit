@@ -1,8 +1,10 @@
 import { app } from "../../scripts/app.js";
 import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
-import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260722_group_header_icon_centering";
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260724_group_settings_theme_feedback_r5";
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260722_rgthree_fast_groups_p0";
+import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { fetchJson, postJson } from "./core/api.js";
+import { createWorkspaceStartupStageRunner } from "./core/startup-stage.js?v=20260724_startup_stage_isolation_r1";
 import {
   installPerformanceDebugApi,
   measurePromise,
@@ -47,8 +49,20 @@ import { applyDecoratedIcon } from "./ui/decorated-icon.js";
 import { createPreviewPositioner } from "./ui/preview-positioner.js";
 import { createPanelChrome } from "./ui/panel-chrome.js";
 import { shouldCloseWorkspaceModule } from "./ui/module-toggle.js";
-import { createSettingsControls } from "./settings/controls.js";
-import { createSettingsDialogSections } from "./settings/dialog-sections.js";
+import { createPanelBackgroundState } from "./ui/panel-background-state.js";
+import { createWorkspacePanelHost } from "./ui/workspace-panel-host.js";
+import { resolveWorkspacePanelProviderLabel } from "./ui/provider-label.js";
+import { PINNED_PROVIDER_KEY, createWorkspaceTabPlan } from "./ui/provider-tabs.js";
+import { MODULE_SHORTCUTS, isModuleShortcutEnabled, moduleShortcutStorageKey, resolveModuleShortcut } from "./ui/module-shortcuts.js";
+import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, GROUP_POINTER_MODIFIER, normalizeGroupPointerBindings, swapGroupPointerBinding } from "./canvas-groups/pointer-actions.js?v=20260724_configurable_modifiers_r1";
+// Settings controls and sections change their return contracts independently.
+// Keep their cache keys aligned with entry.js to avoid a refreshed entry using
+// an older child module from a long-lived ComfyUI browser session.
+import { createSettingsControls } from "./settings/controls.js?v=20260724_configurable_shortcuts_r2";
+// Bump this query when the section return contract changes. ComfyUI browser
+// sessions can retain an imported child module after entry.js has refreshed;
+// an old section factory would otherwise omit a newly added section.
+import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260724_settings_compat_r3";
 import { createSettingsDialogShell } from "./settings/dialog-shell.js";
 import { configureI18n, getLocale, t as translate } from "./core/i18n.js";
 import {
@@ -139,14 +153,13 @@ import {
   WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY,
   WORKSPACE2_MODULE_KEY,
   WORKSPACE2_MODULES,
-  WORKSPACE2_PANEL_BACKGROUND_MODE_KEY,
-  WORKSPACE2_PANEL_GLASS_KEY,
-  WORKSPACE2_PANEL_GLASS_TRANSPARENCY_KEY,
-  WORKSPACE2_PANEL_OPACITY_KEY,
   WORKSPACE2_TAB_ID,
 } from "./core/constants.js";
 
 const WORKFLOW_OPEN_SECTION_COLLAPSED_KEY = "workspace2.workflows.openCollapsed";
+// This is a host preference, not a security boundary. It controls whether
+// optional Provider tabs can be merged into WorkspaceKit's sidebar shell.
+const WORKSPACE2_PANEL_INTEGRATIONS_ENABLED_KEY = "workspace2.panelIntegrations.enabled";
 const WORKFLOW_BROWSE_SECTION_COLLAPSED_KEY = "workspace2.workflows.browseCollapsed";
 const nodePanelState = createNodePanelState({
   sectionFilters: NODE_SECTION_FILTERS,
@@ -162,10 +175,6 @@ const {
   t,
 });
 const WORKSPACE2_MENU_MARK = "🧩 ";
-const WORKSPACE2_MENU_LABELS = new Set([
-  `${WORKSPACE2_MENU_MARK}编组`,
-  `${WORKSPACE2_MENU_MARK}保存为模板`,
-]);
 
 const FALLBACK_STRINGS = {
   "zh-CN": {
@@ -175,6 +184,10 @@ const FALLBACK_STRINGS = {
     "workspace.tab.nodes": "节点",
     "workspace.tab.templates": "模板",
     "settings.title": "设置",
+    "settings.nav.common": "常用",
+    "settings.nav.shortcuts": "快捷键",
+    "settings.nav.appearance": "外观",
+    "settings.nav.advanced": "高级",
     "settings.shortcuts": "快捷键",
     "settings.behavior": "打开行为",
     "settings.recentWorkflows": "打开记录数量",
@@ -185,6 +198,10 @@ const FALLBACK_STRINGS = {
     "settings.transparentBackground": "透明背景",
     "settings.glassBackground": "磨砂玻璃",
     "settings.nodeCache": "节点缓存",
+    "settings.panelIntegrations": "插件集成",
+    "settings.extensionSettings": "扩展设置",
+    "settings.panelIntegrationsEnabled": "允许扩展合并到侧边栏",
+    "settings.panelIntegrationsHelp": "关闭后，兼容扩展会在下次刷新页面后保持独立入口；重新开启并刷新后，会再次合并到 WorkspaceKit。",
     "settings.about": "关于",
     "settings.ctrlG": "启用 WorkspaceKit 编组",
     "settings.ctrlGHelp": "开启后，Ctrl+G 会替换 ComfyUI 默认编组。",
@@ -193,12 +210,18 @@ const FALLBACK_STRINGS = {
     "settings.shortcuts.workflow": "工作流面板",
     "settings.shortcuts.nodes": "节点面板",
     "settings.shortcuts.templates": "模板面板",
+    "settings.shortcuts.extension": "置顶扩展面板",
     "settings.shortcuts.saveTemplate": "保存模板",
     "settings.shortcuts.createGroup": "WorkspaceKit 编组",
     "settings.shortcuts.ungroup": "取消编组",
-    "settings.shortcuts.shiftLeftClickKey": "Shift + 左键",
+    "settings.shortcuts.shiftLeftClickKey": "Ctrl + 左键",
     "settings.shortcuts.toggleGroupIgnore": "切换是否忽略编组",
     "settings.shortcutsHelp": "常用快捷键",
+    "settings.moduleShortcutsHelp": "关闭某一项后，对应组合键会交还给 ComfyUI 或浏览器。Shift + 4 会打开当前置顶的扩展面板。",
+    "settings.moduleShortcuts.workflows": "启用 Shift + 1（工作流）",
+    "settings.moduleShortcuts.nodes": "启用 Shift + 2（节点）",
+    "settings.moduleShortcuts.templates": "启用 Shift + 3（模板）",
+    "settings.moduleShortcuts.extension": "启用 Shift + 4（置顶扩展）",
     "settings.cacheCount": "缓存节点：{count}",
     "settings.cacheUpdated": "更新时间：{time}",
     "settings.cacheEmpty": "暂无缓存",
@@ -363,6 +386,10 @@ const FALLBACK_STRINGS = {
     "workspace.tab.nodes": "Nodes",
     "workspace.tab.templates": "Templates",
     "settings.title": "Settings",
+    "settings.nav.common": "General",
+    "settings.nav.shortcuts": "Shortcuts",
+    "settings.nav.appearance": "Appearance",
+    "settings.nav.advanced": "Advanced",
     "settings.shortcuts": "Shortcuts",
     "settings.behavior": "Open behavior",
     "settings.recentWorkflows": "Open history count",
@@ -373,6 +400,10 @@ const FALLBACK_STRINGS = {
     "settings.transparentBackground": "Transparent background",
     "settings.glassBackground": "Frosted glass",
     "settings.nodeCache": "Node cache",
+    "settings.panelIntegrations": "Plugin integration",
+    "settings.extensionSettings": "Extension settings",
+    "settings.panelIntegrationsEnabled": "Allow extension panels to merge",
+    "settings.panelIntegrationsHelp": "When disabled, compatible extensions remain separate after the next page refresh. Re-enable and refresh to merge them into WorkspaceKit again.",
     "settings.about": "About",
     "settings.ctrlG": "Enable WorkspaceKit groups",
     "settings.ctrlGHelp": "When enabled, Ctrl+G replaces the ComfyUI default group command.",
@@ -381,12 +412,18 @@ const FALLBACK_STRINGS = {
     "settings.shortcuts.workflow": "Workflows panel",
     "settings.shortcuts.nodes": "Nodes panel",
     "settings.shortcuts.templates": "Templates panel",
+    "settings.shortcuts.extension": "Pinned extension panel",
     "settings.shortcuts.saveTemplate": "Save template",
     "settings.shortcuts.createGroup": "WorkspaceKit group",
     "settings.shortcuts.ungroup": "Ungroup",
-    "settings.shortcuts.shiftLeftClickKey": "Shift + Left Click",
+    "settings.shortcuts.shiftLeftClickKey": "Ctrl + Left Click",
     "settings.shortcuts.toggleGroupIgnore": "Toggle group ignore",
     "settings.shortcutsHelp": "Common shortcuts",
+    "settings.moduleShortcutsHelp": "Disable a shortcut to leave its key combination available to ComfyUI or the browser. Shift + 4 opens the currently pinned extension panel.",
+    "settings.moduleShortcuts.workflows": "Enable Shift + 1 (Workflows)",
+    "settings.moduleShortcuts.nodes": "Enable Shift + 2 (Nodes)",
+    "settings.moduleShortcuts.templates": "Enable Shift + 3 (Templates)",
+    "settings.moduleShortcuts.extension": "Enable Shift + 4 (Pinned extension)",
     "settings.cacheCount": "Cached nodes: {count}",
     "settings.cacheUpdated": "Updated: {time}",
     "settings.cacheEmpty": "No cache yet",
@@ -663,6 +700,7 @@ const state = {
   folderFirst: localStorage.getItem(WORKFLOW_FOLDER_FIRST_KEY) !== "0",
   customOrder: workflowCustomOrderStore.read(),
   locale: DEFAULT_LOCALE,
+  localeReady: false,
   strings: {},
   localeTimer: null,
   workflowsTarget: null,
@@ -700,7 +738,32 @@ const workspaceState = {
   renderTarget: null,
   settingsElement: null,
   settingsCloseHandler: null,
+  panelApi: null,
+  providerDispose: null,
+  claimedProviderIds: new Set(),
+  sidebarRegistered: false,
+  startup: {
+    lastStartedStage: "",
+    lastCompletedStage: "",
+    failures: [],
+  },
 };
+
+const panelBackgroundState = createPanelBackgroundState(window.localStorage);
+const {
+  glassBlur,
+  glassBlurPixels,
+  glassTransparency,
+  panelBackgroundMode,
+  panelOpacity,
+  setGlassBlurValue,
+  setGlassTransparencyValue,
+  setPanelBackgroundModeValue,
+  setPanelOpacityValue,
+  snapGlassBlur,
+  snapGlassTransparency,
+  snapPanelOpacity,
+} = panelBackgroundState;
 
 // Keep dirty markers and official Store notifications outside the renderer.
 // The module intentionally preserves the rename/load guards that previously
@@ -1531,7 +1594,57 @@ function cssEscape(value) {
 }
 
 function normalizeWorkspaceModule(moduleId) {
-  return WORKSPACE2_MODULES.includes(moduleId) ? moduleId : "workflows";
+  if (WORKSPACE2_MODULES.includes(moduleId)) return moduleId;
+  return findWorkspacePanelProvider(moduleId) ? moduleId : "workflows";
+}
+
+function workspacePanelProviders() {
+  // This helper also runs while workspaceState is being initialized to repair
+  // a persisted provider tab id, so it must not read workspaceState itself.
+  const api = globalThis.WorkspaceKitPanelAPI;
+  return typeof api?.getProviders === "function" ? api.getProviders() : [];
+}
+
+function findWorkspacePanelProvider(moduleId) {
+  const id = String(moduleId || "");
+  return workspacePanelProviders().find((provider) => provider?.id === id) ?? null;
+}
+
+function disposeWorkspacePanelProvider() {
+  const dispose = workspaceState.providerDispose;
+  workspaceState.providerDispose = null;
+  if (typeof dispose !== "function") return;
+  try { dispose(); } catch (error) { console.warn("[WorkspaceKit] Provider cleanup failed", error); }
+}
+
+function claimWorkspacePanelProvider(provider) {
+  if (!workspaceState.sidebarRegistered || !provider?.id || workspaceState.claimedProviderIds.has(provider.id)) return;
+  try {
+    provider.onHostClaimed?.();
+    workspaceState.claimedProviderIds.add(provider.id);
+  } catch (error) {
+    console.warn("[WorkspaceKit] Provider host claim failed", provider.id, error);
+  }
+}
+
+function claimRegisteredWorkspacePanelProviders() {
+  workspacePanelProviders().forEach(claimWorkspacePanelProvider);
+}
+
+function setupWorkspacePanelProviderLifecycle(api) {
+  api.subscribe((event) => {
+    if (event.type === "registered") claimWorkspacePanelProvider(event.provider);
+    if (event.type === "availability-changed" && event.enabled) claimRegisteredWorkspacePanelProviders();
+    if (event.type === "availability-changed"
+      && !event.enabled
+      && !WORKSPACE2_MODULES.includes(workspaceState.activeModule)) {
+      // A hidden Provider cannot remain the active tab. Keep its pinned id in
+      // storage so enabling integrations later can restore the user's choice.
+      workspaceState.activeModule = "workflows";
+      localStorage.setItem(WORKSPACE2_MODULE_KEY, workspaceState.activeModule);
+    }
+    if (workspaceState.renderTarget?.isConnected) renderWorkspace2Panel(workspaceState.renderTarget);
+  });
 }
 
 function scrollSnapshot(el) {
@@ -1566,6 +1679,11 @@ function restoreScrollSnapshot(el, snapshot) {
 
 function t(key, values = {}) {
   return translate(key, values);
+}
+
+function menuLabel(key, fallback) {
+  const translated = t(key);
+  return translated === key ? fallback : translated;
 }
 
 function warnMissingTranslation(key) {
@@ -1636,26 +1754,20 @@ function setupWorkspaceShortcuts() {
     if (isEditableTarget(event.target)) {
       return;
     }
-    if (event.shiftKey && !event.ctrlKey && (event.code === "KeyW" || event.code === "Digit1")) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.workspace2Handled = true;
-      openWorkspace2Module("workflows", { closeIfActive: true });
-      return;
-    }
-    if (event.shiftKey && !event.ctrlKey && (event.code === "KeyN" || event.code === "Digit2")) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.workspace2Handled = true;
-      openWorkspace2Module("nodes", { closeIfActive: true });
-      return;
-    }
-    if (event.shiftKey && !event.ctrlKey && event.code === "Digit3") {
-      event.preventDefault();
-      event.stopPropagation();
-      event.workspace2Handled = true;
-      openWorkspace2Module("templates", { closeIfActive: true });
-      return;
+    const moduleShortcut = resolveModuleShortcut(event);
+    if (moduleShortcut && isModuleShortcutEnabled(moduleShortcut.id, (key) => localStorage.getItem(key))) {
+      const moduleId = moduleShortcut.moduleId === "pinned-provider"
+        ? workspaceTabPlan().pinned?.id
+        : moduleShortcut.moduleId;
+      // Shift+4 intentionally remains unhandled when no Provider is pinned,
+      // leaving that key available to ComfyUI and the browser.
+      if (moduleId) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.workspace2Handled = true;
+        openWorkspace2Module(moduleId, { closeIfActive: true });
+        return;
+      }
     }
     if (event.shiftKey && !event.ctrlKey && event.code === "KeyG") {
       event.preventDefault();
@@ -1682,6 +1794,63 @@ function setupWorkspaceShortcuts() {
 
 function isWorkspace2CtrlGCreateEnabled() {
   return localStorage.getItem(CANVAS_GROUP_CTRL_G_KEY) !== "0";
+}
+
+function moduleShortcutOptions() {
+  return MODULE_SHORTCUTS.map((shortcut) => ({
+    label: t(`settings.moduleShortcuts.${shortcut.id}`),
+    checked: isModuleShortcutEnabled(shortcut.id, (key) => localStorage.getItem(key)),
+    onChange: (checked) => localStorage.setItem(moduleShortcutStorageKey(shortcut.id), checked ? "1" : "0"),
+  }));
+}
+
+function groupPointerShortcutOptions() {
+  let stored = null;
+  try { stored = JSON.parse(localStorage.getItem(GROUP_POINTER_BINDINGS_KEY) || ""); } catch { /* defaults */ }
+  const bindings = normalizeGroupPointerBindings(stored);
+  const actionOptions = Object.values(GROUP_POINTER_ACTION).map((action) => ({
+    value: action,
+    label: t(`settings.groupPointerActions.${action}`),
+  }));
+  return [GROUP_POINTER_MODIFIER.CONTROL, GROUP_POINTER_MODIFIER.ALT, GROUP_POINTER_MODIFIER.SHIFT].map((modifier) => ({
+    modifier,
+    label: t(`settings.groupPointerModifiers.${modifier}`),
+    value: bindings[modifier],
+    options: actionOptions,
+    onChange: (nextAction) => {
+      const next = swapGroupPointerBinding(bindings, modifier, nextAction);
+      localStorage.setItem(GROUP_POINTER_BINDINGS_KEY, JSON.stringify(next));
+      // The three modifier bindings are a one-to-one mapping. Refresh only
+      // their controls in place after a swap: reopening the full dialog used
+      // to reset the user to the first Settings page.
+      const settingsRoot = workspaceState.settingsElement;
+      for (const select of settingsRoot?.querySelectorAll?.("[data-workspace2-group-pointer-modifier]") || []) {
+        const selectModifier = select.dataset.workspace2GroupPointerModifier;
+        if (next[selectModifier]) select.value = next[selectModifier];
+      }
+    },
+  }));
+}
+
+function buildProviderSettingsSection() {
+  const providers = workspacePanelProviders().filter((provider) => typeof provider?.renderSettings === "function");
+  if (!providers.length) return null;
+  const section = settingsSection(t("settings.extensionSettings"), []);
+  for (const provider of providers) {
+    const container = document.createElement("div");
+    container.className = "workspace2-provider-settings";
+    const title = document.createElement("div");
+    title.className = "workspace2-settings-section-title";
+    title.textContent = resolveWorkspacePanelProviderLabel(provider).text;
+    container.append(title);
+    try {
+      provider.renderSettings({ document, container, app, translate: t });
+      section.append(container);
+    } catch (error) {
+      console.warn("[WorkspaceKit] Provider settings render failed", provider.id, error);
+    }
+  }
+  return section.children.length > 1 ? section : null;
 }
 
 function isWorkspace2PanelOpen() {
@@ -1771,46 +1940,19 @@ function isWorkspace2AltCOpenTemplatesEnabled() {
   return localStorage.getItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY) !== "0";
 }
 
-function snapPanelOpacity(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return 100;
-  }
-  return Math.max(5, Math.min(100, Math.round(numeric)));
+function isWorkspacePanelIntegrationsEnabled() {
+  return localStorage.getItem(WORKSPACE2_PANEL_INTEGRATIONS_ENABLED_KEY) !== "0";
 }
 
-function panelOpacity() {
-  return snapPanelOpacity(localStorage.getItem(WORKSPACE2_PANEL_OPACITY_KEY) || "100");
-}
-
-function snapGlassTransparency(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return 45;
-  }
-  return Math.max(5, Math.min(95, Math.round(numeric)));
-}
-
-function panelBackgroundMode() {
-  const stored = localStorage.getItem(WORKSPACE2_PANEL_BACKGROUND_MODE_KEY);
-  if (stored === "transparent" || stored === "glass") {
-    return stored;
-  }
-  const migrated = localStorage.getItem(WORKSPACE2_PANEL_GLASS_KEY) === "1"
-    ? "glass"
-    : "transparent";
-  localStorage.setItem(WORKSPACE2_PANEL_BACKGROUND_MODE_KEY, migrated);
-  return migrated;
+function setWorkspacePanelIntegrationsEnabled(checked) {
+  const enabled = checked !== false;
+  localStorage.setItem(WORKSPACE2_PANEL_INTEGRATIONS_ENABLED_KEY, enabled ? "1" : "0");
+  workspaceState.panelApi?.setProvidersEnabled?.(enabled);
+  return enabled;
 }
 
 function isPanelGlassEnabled() {
   return panelBackgroundMode() === "glass";
-}
-
-function glassTransparency() {
-  return snapGlassTransparency(
-    localStorage.getItem(WORKSPACE2_PANEL_GLASS_TRANSPARENCY_KEY) || "70",
-  );
 }
 
 function cleanupWorkspacePanelAncestors() {
@@ -1843,14 +1985,22 @@ function refreshWorkspacePanelAncestorsIfVisible() {
   }
 }
 
-function hideWorkspace2SidebarSurfaces() {
-  document.querySelectorAll(".workspace2-host").forEach((node) => {
-    node.classList.add("is-workspace2-surface-hidden");
-  });
-  document.querySelectorAll(".workspace2-shell").forEach((node) => {
-    node.classList.add("is-workspace2-overlay-hidden");
-  });
-  workspaceState.glassPortalElement?.classList.add("is-workspace2-overlay-hidden");
+function disposeWorkspace2SidebarSurface() {
+  // ComfyUI custom sidebar tabs receive a shared render host.  Hiding our
+  // previous content left that host occupied, which made other custom tabs
+  // require a close/reopen cycle before their first render.  Release only our
+  // own DOM before the next tab's target click; never alter the shared sidebar
+  // panel or its ancestors.
+  workspaceState.glassPortalElement?.remove();
+  workspaceState.glassPortalElement = null;
+  const host = workspaceState.renderTarget;
+  if (host?.isConnected) {
+    host.replaceChildren();
+    host.classList.remove("workspace2-host", "is-glass-background", "is-workspace2-surface-hidden");
+    host.removeAttribute("style");
+  }
+  workspaceState.renderTarget = null;
+  cleanupWorkspacePanelAncestors();
 }
 
 function findClosestSidebarTabButton(target) {
@@ -1909,27 +2059,32 @@ function setupWorkspacePanelOpacityCleanup() {
     }
     const sidebarButton = findClosestSidebarTabButton(event.target);
     if (sidebarButton && !isWorkspace2SidebarTabButton(sidebarButton)) {
-      hideWorkspace2SidebarSurfaces();
       window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 0);
       return;
     }
     window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 0);
     window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 160);
   };
-  document.addEventListener("pointerdown", scheduleRefresh, true);
+  document.addEventListener("pointerdown", (event) => {
+    const sidebarButton = findClosestSidebarTabButton(event.target);
+    if (sidebarButton && !isWorkspace2SidebarTabButton(sidebarButton)) {
+      disposeWorkspace2SidebarSurface();
+    }
+  }, true);
   document.addEventListener("click", scheduleRefresh, true);
 }
 
 function markWorkspacePanelAncestors(host) {
   cleanupWorkspacePanelAncestors();
-  let node = host?.parentElement;
-  let depth = 0;
-  while (node && node !== document.body && depth < 12 && node.contains(host)) {
-    node.classList.add("workspace2-sidebar-transparent-root");
-    node.setAttribute("data-workspace2-transparent-root", "1");
-    node = node.parentElement;
-    depth += 1;
+  // ComfyUI custom sidebars share the outer application layout.  Only this
+  // panel is an opaque backdrop for WorkspaceKit; marking ancestors can make a
+  // third-party sidebar mount into a transparent or stale shared container.
+  const sidebarPanel = host?.closest?.(".side-bar-panel");
+  if (!sidebarPanel || !sidebarPanel.contains(host)) {
+    return;
   }
+  sidebarPanel.classList.add("workspace2-sidebar-transparent-root");
+  sidebarPanel.setAttribute("data-workspace2-transparent-root", "1");
 }
 
 function applyWorkspaceBackgroundEffect(panel) {
@@ -1940,7 +2095,9 @@ function applyWorkspaceBackgroundEffect(panel) {
   const glass = isPanelGlassEnabled();
   const glassOpacity = 100 - glassTransparency();
   const alpha = glass ? `${glassOpacity}%` : `${panelOpacity()}%`;
-  const blur = glass ? "24px" : "0px";
+  // The user-facing 0–100 setting maps to 0–32px.  32px is a visibly dense
+  // frosted material while avoiding an unbounded backdrop-filter cost.
+  const blur = glass ? `${glassBlurPixels()}px` : "0px";
   const saturate = glass ? "1.35" : "1";
   const brightness = glass ? "1.08" : "1";
   const highlightAlpha = glass ? Math.max(0.008, Math.min(0.038, glassOpacity * 0.00075)) : 0;
@@ -2075,24 +2232,20 @@ function setupWorkspaceGlassOverlayTracking() {
 }
 
 function setPanelOpacity(value) {
-  const next = snapPanelOpacity(value);
-  localStorage.setItem(WORKSPACE2_PANEL_OPACITY_KEY, String(next));
+  const next = setPanelOpacityValue(value);
   cleanupWorkspacePanelAncestors();
   document.querySelectorAll(".workspace2-host, .workspace2-shell").forEach(applyWorkspaceBackgroundEffect);
   return next;
 }
 
 function setPanelBackgroundMode(mode) {
-  const next = mode === "glass" ? "glass" : "transparent";
-  localStorage.setItem(WORKSPACE2_PANEL_BACKGROUND_MODE_KEY, next);
-  localStorage.setItem(WORKSPACE2_PANEL_GLASS_KEY, next === "glass" ? "1" : "0");
+  const next = setPanelBackgroundModeValue(mode);
   document.querySelectorAll(".workspace2-host, .workspace2-shell").forEach(applyWorkspaceBackgroundEffect);
   syncWorkspaceGlassOverlay();
 }
 
-function setGlassTransparency(value) {
-  const next = snapGlassTransparency(value);
-  localStorage.setItem(WORKSPACE2_PANEL_GLASS_TRANSPARENCY_KEY, String(next));
+function setGlassBlur(value) {
+  const next = setGlassBlurValue(value);
   document.querySelectorAll(".workspace2-host, .workspace2-shell").forEach(applyWorkspaceBackgroundEffect);
   syncWorkspaceGlassOverlay();
 }
@@ -2199,16 +2352,20 @@ async function importWorkspaceDataBundle() {
 
 function createWorkspaceDataManagementSection() {
   const actions = document.createElement("div");
-  actions.className = "workspace2-settings-row";
+  actions.className = "workspace2-settings-action-row";
   const help = settingsHelp(t("settings.dataManagementHelp"));
-  const exportButton = toolbarButton("download", t("settings.dataExport"), exportWorkspaceDataBundle);
-  const importButton = toolbarButton("upload", t("settings.dataImport"), importWorkspaceDataBundle);
-  actions.append(help, exportButton, importButton);
+  const buttons = document.createElement("div");
+  buttons.className = "workspace2-settings-action-buttons";
+  const exportButton = settingsActionButton("download", t("settings.dataExport"), exportWorkspaceDataBundle);
+  const importButton = settingsActionButton("upload", t("settings.dataImport"), importWorkspaceDataBundle, { variant: "warning" });
+  buttons.append(exportButton, importButton);
+  actions.append(help, buttons);
   return settingsSection(t("settings.dataManagement"), [actions]);
 }
 
 const {
   settingsCheckbox,
+  settingsSelect,
   settingsSection,
   settingsHelp,
   settingsShortcutGrid,
@@ -2222,6 +2379,8 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
   t,
   toolbarButton,
   settingsCheckbox,
+  settingsSelect,
+  settingsActionButton,
   settingsSection,
   settingsHelp,
   settingsShortcutGrid,
@@ -2232,6 +2391,10 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
   setCtrlGEnabled: (checked) => localStorage.setItem(CANVAS_GROUP_CTRL_G_KEY, checked ? "1" : "0"),
   isAltCOpenTemplatesEnabled: isWorkspace2AltCOpenTemplatesEnabled,
   setAltCOpenTemplatesEnabled: (checked) => localStorage.setItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY, checked ? "1" : "0"),
+  isPanelIntegrationsEnabled: isWorkspacePanelIntegrationsEnabled,
+  setPanelIntegrationsEnabled: setWorkspacePanelIntegrationsEnabled,
+  moduleShortcutOptions,
+  groupPointerShortcutOptions,
   workflowRecentLimit,
   snapWorkflowRecentLimit,
   setWorkflowRecentLimit,
@@ -2239,15 +2402,21 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
   panelOpacity,
   snapPanelOpacity,
   setPanelOpacity,
-  glassTransparency,
-  snapGlassTransparency,
-  setGlassTransparency,
+  glassBlur,
+  snapGlassBlur,
+  setGlassBlur,
   setPanelBackgroundMode,
   getNodeCacheInfo: () => ({
     count: nodesState.objectInfo ? Object.keys(nodesState.objectInfo).length : 0,
     updatedAt: formatTimestamp(nodesState.objectInfoCachedAt),
   }),
   clearNodeCache: clearCachedObjectInfo,
+  confirmClearNodeCache: () => workspace2Confirm({
+    title: t("settings.nodeCache"),
+    message: t("settings.clearNodeCacheConfirm"),
+    confirmText: t("settings.clearNodeCache"),
+    danger: true,
+  }),
   buildDataManagementSection: createWorkspaceDataManagementSection,
 });
 
@@ -2275,15 +2444,59 @@ function openWorkspaceSettings() {
 
   const {
     shortcuts,
+    groupPointerShortcuts,
     behavior,
     backgroundEffect,
     nodeCache,
     dataManagement,
+    integrations,
     about,
     versionInfo,
   } = buildSettingsDialogSections();
+  const providerSettings = buildProviderSettingsSection();
 
-  dialog.append(header, shortcuts, behavior, backgroundEffect, nodeCache, dataManagement, about);
+  // Keep every section mounted while switching pages. This lets the
+  // asynchronous package-version update reach About even before it is opened.
+  const settingPages = [
+    { id: "common", label: t("settings.nav.common"), sections: [behavior] },
+    { id: "shortcuts", label: t("settings.nav.shortcuts"), sections: [shortcuts, groupPointerShortcuts].filter(Boolean) },
+    { id: "appearance", label: t("settings.nav.appearance"), sections: [backgroundEffect] },
+    { id: "advanced", label: t("settings.nav.advanced"), sections: [integrations, providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
+  ];
+  const settingsLayout = document.createElement("div");
+  settingsLayout.className = "workspace2-settings-layout";
+  const settingsNav = document.createElement("nav");
+  settingsNav.className = "workspace2-settings-nav";
+  settingsNav.setAttribute("aria-label", t("settings.title"));
+  const settingsPagesElement = document.createElement("div");
+  settingsPagesElement.className = "workspace2-settings-pages";
+  const pageButtons = new Map();
+  const pageElements = new Map();
+  const selectSettingsPage = (pageId) => {
+    for (const page of settingPages) {
+      const isActive = page.id === pageId;
+      pageButtons.get(page.id)?.classList.toggle("is-active", isActive);
+      pageButtons.get(page.id)?.setAttribute("aria-current", isActive ? "page" : "false");
+      pageElements.get(page.id).hidden = !isActive;
+    }
+  };
+  for (const page of settingPages) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace2-settings-nav-button";
+    button.textContent = page.label;
+    button.addEventListener("click", () => selectSettingsPage(page.id));
+    const pageElement = document.createElement("section");
+    pageElement.className = "workspace2-settings-page";
+    pageElement.append(...page.sections);
+    settingsNav.append(button);
+    settingsPagesElement.append(pageElement);
+    pageButtons.set(page.id, button);
+    pageElements.set(page.id, pageElement);
+  }
+  selectSettingsPage("common");
+  settingsLayout.append(settingsNav, settingsPagesElement);
+  dialog.append(header, settingsLayout);
   backdrop.append(dialog);
   document.body.append(backdrop);
   workspaceState.settingsElement = backdrop;
@@ -2390,7 +2603,7 @@ function findWorkspace2SidebarTabElement(tabId) {
   }
 
   const expectedTitle = tabId === WORKSPACE2_TAB_ID
-    ? t("workspace.title")
+    ? (state.localeReady ? t("workspace.title") : "WorkspaceKit")
     : t("canvasGroups.title");
   const candidates = document.querySelectorAll("button,[role='tab'],[role='button'],.p-tab,.p-button");
   for (const candidate of candidates) {
@@ -2711,8 +2924,18 @@ function workspace2InlineConfirm(anchor, { confirmText = t("confirm.delete"), on
 
 async function loadLocale() {
   state.locale = await configureI18n(app, FALLBACK_STRINGS);
+  state.localeReady = true;
   state.strings = {};
 }
+
+// Sidebar registration is intentionally performed before optional feature
+// startup. A failed workflow load, integration probe, or canvas enhancement
+// must leave the user a reachable WorkspaceKit entry instead of making the
+// whole plugin appear absent.
+const runWorkspaceStartupStage = createWorkspaceStartupStageRunner({
+  startup: workspaceState.startup,
+  onFailure: (stage, error) => console.warn(`[WorkspaceKit] startup stage failed: ${stage}`, error),
+});
 
 function localeAssetUrl(locale) {
   return new URL(`./locales/${locale}.json`, import.meta.url).href;
@@ -2938,7 +3161,7 @@ function styles() {
       z-index: 1;
       flex: 0 0 auto;
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr)) 30px;
+      grid-template-columns: repeat(var(--workspace2-tab-count, 3), minmax(0, 1fr)) 30px;
       gap: 7px;
       padding: 9px 10px 7px;
       border-bottom: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 62%, transparent);
@@ -2998,9 +3221,28 @@ function styles() {
       stroke: currentColor;
       fill: none;
     }
-    .workspace2-module-body {
+    .workspace2-module-overflow { position:relative; min-width:66px; }
+    .workspace2-module-overflow summary { list-style:none; min-height:30px; display:grid; place-items:center; padding:0 8px; border:1px solid var(--p-content-border-color, var(--border-color, rgba(255,255,255,.14))); border-radius:8px; color:var(--p-text-muted-color,rgba(255,255,255,.7)); cursor:pointer; font:500 12px/1.2 var(--font-family,Arial,sans-serif); }
+    .workspace2-module-overflow summary::-webkit-details-marker { display:none; }
+    .workspace2-module-overflow-menu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:180px; padding:6px; border:1px solid var(--p-content-border-color,var(--border-color,rgba(255,255,255,.16))); border-radius:9px; background:var(--comfy-menu-bg,var(--p-content-background,#202124)); box-shadow:0 10px 28px rgba(0,0,0,.25); }
+    .workspace2-module-overflow-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px; }
+    .workspace2-module-overflow-row button { min-width:0; border:0; border-radius:6px; padding:7px 8px; color:var(--p-text-color,var(--fg-color,#ddd)); background:transparent; text-align:left; cursor:pointer; font:500 12px/1.2 var(--font-family,Arial,sans-serif); }
+    .workspace2-module-overflow-row button:hover { background:var(--p-list-option-hover-background,rgba(255,255,255,.075)); }
+    .workspace2-module-frame {
       position: relative;
       z-index: 1;
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .workspace2-module-header-host[hidden],
+    .workspace2-module-context-host[hidden] {
+      display: none;
+    }
+    .workspace2-module-body {
+      position: relative;
       flex: 1 1 auto;
       min-height: 0;
       overflow: hidden;
@@ -3022,9 +3264,12 @@ function styles() {
       padding: 8vh 16px 16px;
     }
     .workspace2-settings-dialog {
-      width: min(430px, calc(100vw - 32px));
+      width: min(880px, calc(100vw - 32px));
+      height: min(720px, calc(100vh - 64px));
       max-height: min(720px, calc(100vh - 64px));
-      overflow: auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       border: 1px solid var(--workspace2-border, rgba(255, 255, 255, 0.14));
       border-radius: 10px;
       color: var(--p-text-color, var(--fg-color, #ddd));
@@ -3037,31 +3282,137 @@ function styles() {
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      margin-bottom: 10px;
+      min-height: 34px;
+      margin-bottom: 12px;
     }
     .workspace2-settings-title {
-      font: 600 14px/1.3 var(--font-family, Arial, sans-serif);
+      font: 600 16px/1.3 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-settings-layout {
+      min-height: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 176px minmax(0, 1fr);
+      border-top: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
+    }
+    .workspace2-settings-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 16px 14px 16px 0;
+      border-right: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
+    }
+    .workspace2-settings-nav-button {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--workspace2-muted, rgba(255,255,255,.62));
+      background: transparent;
+      cursor: pointer;
+      text-align: left;
+      font: 600 13px/1 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-settings-nav-button:hover {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-list-option-hover-background, rgba(255,255,255,.08));
+    }
+    .workspace2-settings-nav-button.is-active {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      border-color: color-mix(in srgb, var(--workspace2-accent, #6aa6ff) 22%, transparent);
+      background: linear-gradient(90deg, color-mix(in srgb, var(--workspace2-accent, #6aa6ff) 10%, transparent), transparent);
+      box-shadow: inset 2px 0 0 var(--workspace2-accent, #6aa6ff);
+    }
+    .workspace2-settings-pages {
+      min-width: 0;
+      min-height: 0;
+      max-height: none;
+      overflow: auto;
+      padding: 4px 20px 24px;
+    }
+    .workspace2-settings-page[hidden] {
+      display: none;
+    }
+    .workspace2-settings-page {
+      width: min(640px, 100%);
+      margin: 0 auto;
     }
     .workspace2-settings-section {
-      border-top: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
-      padding: 10px 0;
+      border-top: 0;
+      padding: 18px 0;
+      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 58%, transparent);
     }
+    .workspace2-settings-section:last-child { border-bottom: 0; }
     .workspace2-settings-section-title {
-      color: var(--workspace2-muted, rgba(255,255,255,.55));
-      font: 600 11px/1.3 var(--font-family, Arial, sans-serif);
-      margin-bottom: 8px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      font: 600 12px/1.35 var(--font-family, Arial, sans-serif);
+      margin-bottom: 12px;
     }
     .workspace2-settings-row {
-      min-height: 30px;
-      display: flex;
+      min-height: 36px;
+      display: grid;
+      grid-template-columns: minmax(170px, 1fr) minmax(230px, 260px);
       align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 4px 0;
-      font-size: 12px;
+      gap: 18px;
+      padding: 5px 0;
+      font-size: 13px;
     }
     .workspace2-settings-row.is-disabled {
       opacity: 0.52;
+    }
+    .workspace2-settings-action-row {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 5px 0;
+    }
+    .workspace2-settings-action-row .workspace2-settings-help {
+      flex: 1 1 auto;
+      margin: 0;
+    }
+    .workspace2-settings-action-buttons {
+      display: flex;
+      flex: 0 0 auto;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .workspace2-settings-action {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 0 11px;
+      border: 1px solid var(--p-button-secondary-border-color, var(--workspace2-border, rgba(255,255,255,.18)));
+      border-radius: 6px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-button-secondary-background, rgba(255,255,255,.055));
+      cursor: pointer;
+      font: 600 12px/1 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-settings-action:hover {
+      background: var(--p-list-option-hover-background, rgba(255,255,255,.10));
+    }
+    .workspace2-settings-action svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+    }
+    .workspace2-settings-action--warning {
+      color: var(--p-orange-300, #f5bd72);
+      border-color: color-mix(in srgb, currentColor 44%, transparent);
+      background: color-mix(in srgb, currentColor 9%, transparent);
+    }
+    .workspace2-settings-action--danger {
+      color: var(--p-red-300, #ff9a9a);
+      border-color: color-mix(in srgb, currentColor 46%, transparent);
+      background: color-mix(in srgb, currentColor 10%, transparent);
     }
     .workspace2-settings-mode-row.is-disabled {
       opacity: 1;
@@ -3084,10 +3435,22 @@ function styles() {
       cursor: pointer;
       user-select: none;
     }
+    .workspace2-settings-row > label:only-child { justify-self: start; }
+    .workspace2-settings-row > select {
+      width: 260px;
+      min-height: 32px;
+      justify-self: end;
+      padding: 0 9px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-inputtext-background, var(--comfy-input-bg, rgba(0,0,0,.18)));
+      border: 1px solid var(--p-inputtext-border-color, var(--workspace2-border, rgba(255,255,255,.18)));
+      border-radius: 5px;
+      font: 500 13px/1.2 var(--font-family, Arial, sans-serif);
+    }
     .workspace2-settings-range {
-      width: 148px;
+      width: 260px;
       display: grid !important;
-      grid-template-columns: minmax(0, 1fr) 24px;
+      grid-template-columns: minmax(0, 1fr) 36px;
       align-items: center;
       gap: 8px;
       cursor: default !important;
@@ -3100,13 +3463,83 @@ function styles() {
     .workspace2-settings-range span {
       color: var(--workspace2-muted);
       text-align: right;
-      font-size: 11px;
+      font-size: 12px;
     }
     .workspace2-settings-help {
       color: var(--workspace2-muted, rgba(255,255,255,.55));
-      font-size: 11px;
+      max-width: 580px;
+      font-size: 12px;
       line-height: 1.45;
-      margin: 4px 0 8px;
+      margin: 2px 0 12px;
+    }
+    .workspace2-settings-shortcut-grid {
+      display: grid;
+      grid-auto-flow: column;
+      grid-template-rows: repeat(4, auto);
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 24px;
+      margin: 4px 0 14px;
+    }
+    .workspace2-settings-shortcut-item {
+      display: grid;
+      grid-template-columns: 78px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .workspace2-settings-shortcut-key,
+    .workspace2-settings-shortcut-label {
+      color: var(--workspace2-muted, var(--descrip-text, #aaa));
+      font-weight: 400;
+    }
+    .workspace2-settings-shortcut-key { white-space: nowrap; }
+    .workspace2-settings-shortcut-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    @media (max-width: 640px) {
+      .workspace2-settings-dialog {
+        width: min(520px, calc(100vw - 24px));
+        height: min(640px, calc(100vh - 24px));
+      }
+      .workspace2-settings-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .workspace2-settings-nav {
+        flex-direction: row;
+        overflow-x: auto;
+        padding: 8px 0;
+        border-right: 0;
+        border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
+      }
+      .workspace2-settings-nav-button {
+        flex: 0 0 auto;
+      }
+      .workspace2-settings-pages {
+        max-height: min(590px, calc(100vh - 162px));
+        padding: 0 4px 20px;
+      }
+      .workspace2-settings-row {
+        grid-template-columns: minmax(0, 1fr) minmax(180px, 230px);
+        gap: 12px;
+      }
+      .workspace2-settings-action-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .workspace2-settings-action-buttons {
+        width: 100%;
+        justify-content: flex-start;
+      }
+      .workspace2-settings-range,
+      .workspace2-settings-row > select {
+        width: 230px;
+      }
+      .workspace2-settings-shortcut-grid {
+        grid-template-columns: 1fr;
+        grid-auto-flow: row;
+        grid-template-rows: none;
+      }
     }
     .workspace2-confirm-backdrop {
       position: fixed;
@@ -6275,6 +6708,23 @@ async function deleteTemplate(el, template) {
   await saveTemplateLibrary(el);
 }
 
+// Settings actions deliberately do not reuse toolbarButton(). Toolbar buttons
+// are compact, icon-only controls for panel chrome; settings actions need a
+// stable label, aligned hit area, and explicit risk treatment.
+function settingsActionButton(iconName, label, onClick, { variant = "secondary" } = {}) {
+  const element = document.createElement("button");
+  element.className = `workspace2-settings-action workspace2-settings-action--${variant}`;
+  element.type = "button";
+  element.title = label;
+  element.setAttribute("aria-label", label);
+  element.append(iconSvg(iconName));
+  const text = document.createElement("span");
+  text.textContent = label;
+  element.append(text);
+  element.addEventListener("click", onClick);
+  return element;
+}
+
 async function restoreTemplateTrashEntry(el, entry) {
   const library = normalizeTemplateLibrary(templatesState.library || emptyTemplateLibrary());
   templatesState.library = restoreTemplateFromTrash(library, entry);
@@ -8922,42 +9372,31 @@ function workspaceModuleLabel(moduleId) {
   if (moduleId === "templates") {
     return t("workspace.tab.templates");
   }
+  const provider = findWorkspacePanelProvider(moduleId);
+  if (provider) return resolveWorkspacePanelProviderLabel(provider).text;
   return t("workspace.tab.workflows");
 }
 
-function renderWorkspaceModuleTabs(el) {
-  const tabs = document.createElement("div");
-  tabs.className = "workspace2-module-tabs";
-  for (const moduleId of WORKSPACE2_MODULES) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `workspace2-module-tab ${workspaceState.activeModule === moduleId ? "is-active" : ""}`;
-    button.textContent = workspaceModuleLabel(moduleId);
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      workspaceState.activeModule = moduleId;
-      localStorage.setItem(WORKSPACE2_MODULE_KEY, moduleId);
-      renderWorkspace2Panel(el);
-    });
-    tabs.append(button);
+function workspaceModuleTab(moduleId) {
+  const provider = findWorkspacePanelProvider(moduleId);
+  if (!provider) {
+    return { id: moduleId, label: workspaceModuleLabel(moduleId) };
   }
-  const settings = document.createElement("button");
-  settings.type = "button";
-  settings.className = "workspace2-module-settings";
-  settings.title = t("settings.title");
-  settings.setAttribute("aria-label", t("settings.title"));
-  settings.append(iconSvg("settings"));
-  settings.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    openWorkspaceSettings();
-  });
-  tabs.append(settings);
-  return tabs;
+  const label = String(provider.tabLabel || provider.title || provider.id);
+  const icon = String(provider.icon || "").trim();
+  return {
+    id: moduleId,
+    label: icon ? `${icon} ${label}` : label,
+    tooltip: String(provider.tabTooltip || provider.title || label),
+  };
+}
+
+function workspaceTabPlan() {
+  return createWorkspaceTabPlan(WORKSPACE2_MODULES, workspacePanelProviders(), localStorage.getItem(PINNED_PROVIDER_KEY) || "");
 }
 
 function renderWorkspace2Panel(el) {
+  disposeWorkspacePanelProvider();
   workspaceState.renderTarget = el;
   styles();
   setupWorkspaceKeyIsolation();
@@ -8968,21 +9407,52 @@ function renderWorkspace2Panel(el) {
   workspaceState.glassPortalElement = null;
   prepareWorkspaceSidebarHost(el);
 
-  const shell = document.createElement("div");
-  shell.className = "workspace2-shell";
-  applyWorkspaceBackgroundEffect(shell);
-  const body = document.createElement("div");
-  body.className = "workspace2-module-body";
-  shell.append(renderWorkspaceModuleTabs(el), body);
-  el.append(shell);
+  const plan = workspaceTabPlan();
+  const visibleIds = [...plan.coreIds, ...(plan.pinned ? [plan.pinned.id] : [])];
+  const panelHost = createWorkspacePanelHost({
+    tabs: visibleIds.map(workspaceModuleTab),
+    activeTabId: workspaceState.activeModule,
+    onActivate: (moduleId) => {
+      workspaceState.activeModule = moduleId;
+      localStorage.setItem(WORKSPACE2_MODULE_KEY, moduleId);
+      renderWorkspace2Panel(el);
+    },
+    settingsTitle: t("settings.title"),
+    onOpenSettings: openWorkspaceSettings,
+    createSettingsIcon: () => iconSvg("settings"),
+    overflowProviders: plan.overflowProviders,
+    providerLabel: (provider) => resolveWorkspacePanelProviderLabel(provider).text,
+    onActivateProvider: (id) => { workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },
+    onPinProvider: (id) => { localStorage.setItem(PINNED_PROVIDER_KEY, id); workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },
+    overflowLabel: t("workspace.extensions"),
+    pinLabel: t("workspace.pin"),
+  });
+  applyWorkspaceBackgroundEffect(panelHost.shell);
+  el.append(panelHost.shell);
   syncWorkspaceGlassOverlay();
 
-  if (workspaceState.activeModule === "nodes") {
-    renderNodesPanel(body);
+  const provider = findWorkspacePanelProvider(workspaceState.activeModule);
+  if (provider) {
+    try {
+      const dispose = provider.render({
+        app, translate: t, surface: panelHost.shell,
+        headerHost: panelHost.headerHost,
+        contextHost: panelHost.contextHost,
+        contentHost: panelHost.contentHost,
+      });
+      workspaceState.providerDispose = typeof dispose === "function" ? dispose : null;
+    } catch (error) {
+      console.error("[WorkspaceKit] Provider render failed", provider.id, error);
+      workspaceState.activeModule = "workflows";
+      localStorage.setItem(WORKSPACE2_MODULE_KEY, "workflows");
+      renderPanel(panelHost.contentHost);
+    }
+  } else if (workspaceState.activeModule === "nodes") {
+    renderNodesPanel(panelHost.contentHost);
   } else if (workspaceState.activeModule === "templates") {
-    renderTemplatesPanel(body);
+    renderTemplatesPanel(panelHost.contentHost);
   } else {
-    renderPanel(body);
+    renderPanel(panelHost.contentHost);
   }
   window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 0);
   window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 180);
@@ -11220,11 +11690,16 @@ function registerWorkspace2SidebarTab() {
     return true;
   }
 
+  // `setup()` registers before locale loading as an availability boundary.
+  // Both bundled locales use WorkspaceKit as the tab title, so this stable
+  // fallback avoids a translation-key label during an early registration.
+  const title = state.localeReady ? t("workspace.title") : "WorkspaceKit";
+  const tooltip = state.localeReady ? t("workspace.tooltip") : "WorkspaceKit";
   app.extensionManager.registerSidebarTab({
     id: WORKSPACE2_TAB_ID,
     icon: "pi pi-sitemap",
-    title: t("workspace.title"),
-    tooltip: t("workspace.tooltip"),
+    title,
+    tooltip,
     type: "custom",
     render: renderWorkspace2Panel,
   });
@@ -11268,6 +11743,57 @@ function installWorkspace2SidebarEmojiIcon() {
     }
   };
   markButton();
+}
+
+function officialSidebarTabIds() {
+  const getSidebarTabs = app.extensionManager?.getSidebarTabs;
+  // An unavailable store API is not evidence that the tab was removed.  The
+  // official registerSidebarTab API appends records, so treating this as an
+  // empty list would create duplicate sidebar entries on a transient remount.
+  if (typeof getSidebarTabs !== "function") return null;
+  const tabs = getSidebarTabs.call(app.extensionManager);
+  const list = Array.isArray(tabs) ? tabs : Array.isArray(tabs?.value) ? tabs.value : [];
+  return new Set(list.map((tab) => tab?.id).filter(Boolean));
+}
+
+function recoverWorkspace2SidebarAfterRemount() {
+  const registeredIds = officialSidebarTabIds();
+  // When the official store still owns the tab, Vue will recreate its DOM.
+  // Only reapply our emoji class; calling registerSidebarTab here would create
+  // duplicate entries because the official API intentionally appends tabs.
+  if (registeredIds === null || registeredIds.has(WORKSPACE2_TAB_ID)) {
+    installWorkspace2SidebarEmojiIcon();
+    return registeredIds === null ? "state-unavailable" : "already-registered";
+  }
+  const registry = globalThis.__workspace2RegisteredSidebarTabs ||= new Set();
+  registry.delete(WORKSPACE2_TAB_ID);
+  return registerWorkspace2SidebarTab() ? "re-registered" : "unavailable";
+}
+
+function setupWorkspace2SidebarRemountRecovery() {
+  if (setupWorkspace2SidebarRemountRecovery.ready || !document.body) return;
+  setupWorkspace2SidebarRemountRecovery.ready = true;
+  let scheduled = false;
+  const scheduleRecovery = () => {
+    if (scheduled) return;
+    scheduled = true;
+    window.setTimeout(() => {
+      scheduled = false;
+      recoverWorkspace2SidebarAfterRemount();
+    }, 0);
+  };
+  const mentionsWorkspaceKit = (node) => {
+    if (!(node instanceof Element)) return false;
+    const text = node.textContent || "";
+    return text.includes("WorkspaceKit")
+      || Boolean(node.matches?.(`[data-tab-id="${WORKSPACE2_TAB_ID}"], [data-sidebar-tab-id="${WORKSPACE2_TAB_ID}"]`))
+      || Boolean(node.querySelector?.(`[data-tab-id="${WORKSPACE2_TAB_ID}"], [data-sidebar-tab-id="${WORKSPACE2_TAB_ID}"]`));
+  };
+  new MutationObserver((records) => {
+    if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some(mentionsWorkspaceKit))) {
+      scheduleRecovery();
+    }
+  }).observe(document.body, { childList: true, subtree: true });
 }
 
 function setupWorkspace2ContextMenuOrdering() {
@@ -11354,13 +11880,19 @@ app.registerExtension({
     return [
       null,
       {
-        content: `${WORKSPACE2_MENU_MARK}编组`,
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuCreateSelected", "Group Selected Nodes (Ctrl+G)")}`,
         callback: () => {
           workspace2CanvasGroups.createGroupFromSelection?.();
         },
       },
       {
-        content: `${WORKSPACE2_MENU_MARK}保存为模板`,
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuCreateEmpty", "New Empty Group")}`,
+        callback: () => {
+          workspace2CanvasGroups.createEmptyGroupAtContextPoint?.();
+        },
+      },
+      {
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuSaveTemplate", "Save as Template (Alt+C)")}`,
         callback: () => {
           saveSelectedNodesAsTemplateFromContextMenu();
         },
@@ -11373,13 +11905,13 @@ app.registerExtension({
   getNodeMenuItems(node) {
     return [
       {
-        content: `${WORKSPACE2_MENU_MARK}编组`,
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuCreateSelected", "Group Selected Nodes (Ctrl+G)")}`,
         callback: () => {
           workspace2CanvasGroups.createGroupFromSelection?.(node);
         },
       },
       {
-        content: `${WORKSPACE2_MENU_MARK}保存为模板`,
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuSaveTemplate", "Save as Template (Alt+C)")}`,
         callback: () => {
           saveSelectedNodesAsTemplateFromContextMenu(node);
         },
@@ -11389,33 +11921,60 @@ app.registerExtension({
   async setup() {
     installPerformanceDebugApi();
     const finish = startPerformanceSpan("workspace.setup");
-    await loadLocale();
-    startLocaleWatcher();
-    setupWorkspaceShortcuts();
-    setupWorkspace2ContextMenuOrdering();
-    setupWorkflowDirtyTracking();
-    setupOfficialWorkflowStateSync();
-    workspace2CanvasGroups.setNoticeHandler?.(workspace2Notice);
-    workspace2CanvasGroups.init();
-    installRgthreeFastGroupsBridge(workspace2CanvasGroups);
-    registerWorkspace2CanvasGroupCommands();
-    detectOfficialNodeAdapter();
-    detectOfficialFavoritesProbe().catch((error) => {
-      console.debug("[Workspace2] official favorites probe failed", error);
-    });
-    try {
-      await loadWorkflows();
-    } catch (error) {
-      state.status = t("status.error", { message: error.message });
-    }
-    if (registerWorkspace2SidebarTab()) {
-      prefetchTemplateLibrary();
-      finish({ sidebar: "registered" });
+
+    // Keep the official sidebar registration outside every optional startup
+    // stage.  If it is unavailable, retain the existing fallback behavior.
+    if (!registerWorkspace2SidebarTab()) {
+      console.warn("[Workspace2] registerSidebarTab is not available; using fallback panel.");
+      showFallbackPanel();
+      finish({ sidebar: "fallback" });
       return;
     }
+    workspaceState.sidebarRegistered = true;
+    setupWorkspace2SidebarRemountRecovery();
 
-    console.warn("[Workspace2] registerSidebarTab is not available; using fallback panel.");
-    showFallbackPanel();
-    finish({ sidebar: "fallback" });
+    await runWorkspaceStartupStage("locale", async () => {
+      await loadLocale();
+      startLocaleWatcher();
+    });
+    await runWorkspaceStartupStage("panel-api", async () => {
+      const panelApi = publishWorkspaceKitPanelApi(globalThis, {
+        providersEnabled: isWorkspacePanelIntegrationsEnabled(),
+      });
+      if (!panelApi.ok) {
+        console.warn("[WorkspaceKit] Panel API v1 was not published", panelApi.code);
+        return;
+      }
+      workspaceState.panelApi = panelApi.api;
+      setupWorkspacePanelProviderLifecycle(panelApi.api);
+      registerPendingWorkspaceKitPanelProviders(panelApi.api);
+    });
+    await runWorkspaceStartupStage("shortcuts", () => setupWorkspaceShortcuts());
+    await runWorkspaceStartupStage("workflow-dirty-tracking", () => setupWorkflowDirtyTracking());
+    await runWorkspaceStartupStage("official-workflow-sync", () => setupOfficialWorkflowStateSync());
+    await runWorkspaceStartupStage("canvas-groups", () => {
+      workspace2CanvasGroups.setNoticeHandler?.(workspace2Notice);
+      workspace2CanvasGroups.init();
+      installRgthreeFastGroupsBridge(workspace2CanvasGroups);
+      registerWorkspace2CanvasGroupCommands();
+    });
+    await runWorkspaceStartupStage("node-adapter", () => detectOfficialNodeAdapter());
+    await runWorkspaceStartupStage("official-favorites-probe", () => detectOfficialFavoritesProbe());
+    await runWorkspaceStartupStage("workflows", async () => {
+      try {
+        await loadWorkflows();
+      } catch (error) {
+        state.status = t("status.error", { message: error.message });
+        throw error;
+      }
+    });
+    await runWorkspaceStartupStage("provider-claim", () => claimRegisteredWorkspacePanelProviders());
+    await runWorkspaceStartupStage("template-prefetch", () => prefetchTemplateLibrary());
+
+    finish({
+      sidebar: "registered",
+      lastCompletedStage: workspaceState.startup.lastCompletedStage,
+      failedStages: workspaceState.startup.failures.map(({ stage }) => stage),
+    }, workspaceState.startup.failures.length ? "partial" : "ok");
   },
 });

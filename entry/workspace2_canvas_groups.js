@@ -6,6 +6,19 @@
 import { app } from "../../scripts/app.js";
 import { t } from "./core/i18n.js";
 import { ensureWorkspaceKitDialogStyles } from "./core/dialog_styles.js";
+import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, normalizeGroupPointerBindings, resolveGroupPointerAction } from "./canvas-groups/pointer-actions.js?v=20260724_configurable_modifiers_r1";
+import { buildMultiGroupDragPlan, hasNodePosition } from "./canvas-groups/multi-drag-plan.js?v=20260723_group_membership_r5";
+import {
+    shouldClearGroupSelectionFromKeyEvent,
+    shouldClearGroupSelectionFromPointerEvent,
+} from "./canvas-groups/selection-cancel-events.js?v=20260724_group_ctrl_marquee_r2";
+import { shouldDeleteSelectedWorkspaceKitGroups } from "./canvas-groups/delete-key-events.js?v=20260724_group_delete_key_r1";
+import {
+    groupIdsIntersectingMarquee,
+    hasMeaningfulMarqueeDrag,
+    marqueeRectFromPoints,
+    shouldStartGroupMarquee,
+} from "./canvas-groups/marquee-selection.js?v=20260724_group_ctrl_marquee_r1";
 
 const MODE_ALWAYS = 0;
 const MODE_BYPASS = 4;
@@ -38,9 +51,16 @@ const finiteNumber = (value, fallback) => {
 
 const Workspace2CanvasGroups = {
     initialized: false,
-    version: "20260708-group-settings-animation-slider-hitbox",
+    version: "20260724-group-delete-key-r1",
     groups: {},       // groupId → {id, title, nodeIds, bypassed, bounds, fontSize}
     groupEls: {},
+    selectedGroupIds: new Set(), // transient canvas-only selection; never serialized
+    lastCanvasContextPoint: null,
+    canvasMarquee: null,
+    // Auto membership uses a group's visual bounds.  During a multi-drag the
+    // bounds and members must move as one transaction, otherwise the periodic
+    // bounds scan can evict members between pointer events.
+    _suspendMembershipSync: false,
     overlay: null,
     noticeHandler: null,
 
@@ -69,7 +89,7 @@ const Workspace2CanvasGroups = {
         // extension hooks. Do not patch LiteGraph's global menu prototype:
         // that shared prototype is also used by other sidebar extensions.
         this.setupSerializationHooks();
-        this.setupBodyBypass();
+        this.setupGroupPointerActions();
         this.startSyncLoop();
         this.waitForGraph();
     },
@@ -122,23 +142,149 @@ const Workspace2CanvasGroups = {
         // document/window key events here.
     },
 
-    /* ── Shift+单击框体=绕过 ── */
-    setupBodyBypass() {
+    /* ── 编组修饰键：Ctrl=忽略，Alt=禁止，Shift=多选 ── */
+    setupGroupPointerActions() {
         document.addEventListener('mousedown', e => {
-            if (!e.shiftKey || e.button !== 0) return;
-            const cx = e.clientX, cy = e.clientY;
-            for (const gid of Object.keys(this.groups)) {
-                const el = this.groupEls[gid];
-                if (!el) continue;
-                const r = el.getBoundingClientRect();
-                if (r.width === 0) continue;
-                if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) {
-                    e.preventDefault(); e.stopPropagation();
-                    this.toggleBypass(gid);
-                    return;
-                }
+            let storedBindings = null;
+            try { storedBindings = JSON.parse(localStorage.getItem(GROUP_POINTER_BINDINGS_KEY) || ""); } catch { /* default mapping */ }
+            const action = resolveGroupPointerAction(e, normalizeGroupPointerBindings(storedBindings));
+            if (!action) return;
+            const groupEl = e.target?.closest?.('.xzg-group-box');
+            const gid = groupEl?.dataset?.groupId;
+            if (!gid || !this.groups[gid]) return;
+            // Header controls and resize handles retain their own single-group
+            // behaviour; modifier gestures belong only to a group surface.
+            if (e.target?.closest?.('button, input, select, textarea, .xzg-resize-handle')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (action === GROUP_POINTER_ACTION.SELECT) {
+                this.toggleGroupSelection(gid);
+            } else if (action === GROUP_POINTER_ACTION.BYPASS) {
+                this.toggleGroupExecutionMode(gid, 'bypass');
+            } else if (action === GROUP_POINTER_ACTION.MUTE) {
+                this.toggleGroupExecutionMode(gid, 'mute');
             }
         }, true);
+
+        // Use window capture rather than document capture.  A third-party
+        // extension can stop propagation on document before WorkspaceKit sees
+        // the event; window is earlier in the capture path.  Restrict this to
+        // the real canvas so ordinary toolbar/sidebar clicks do not alter a
+        // transient canvas selection.
+        window.addEventListener('pointerdown', e => {
+            if (e.button === 2) this.recordCanvasContextPoint(e);
+            if (shouldStartGroupMarquee(e, app?.canvas?.canvas)) {
+                this.beginCanvasMarquee(e);
+            } else if (shouldClearGroupSelectionFromPointerEvent(e, app?.canvas?.canvas)) {
+                this.clearGroupSelection();
+            }
+        }, true);
+
+        // This runs after ComfyUI has received the same native Ctrl marquee.
+        // Do not call preventDefault or stopPropagation here: native node and
+        // LiteGraph-group selection must continue to work exactly as before.
+        window.addEventListener('pointerup', e => this.finishCanvasMarquee(e), true);
+        window.addEventListener('pointercancel', e => this.cancelCanvasMarquee(e), true);
+
+        window.addEventListener('keydown', e => {
+            if (shouldClearGroupSelectionFromKeyEvent(e, document.activeElement)) {
+                this.clearGroupSelection();
+                return;
+            }
+            if (shouldDeleteSelectedWorkspaceKitGroups(e, {
+                activeElement: document.activeElement,
+                selectedGroupCount: this.selectedGroupIds.size,
+            })) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation?.();
+                this.removeSelectedGroups();
+            }
+        }, true);
+
+        // The ComfyUI menu hook supplies callbacks rather than the original
+        // pointer event. Keep only the latest canvas context position so an
+        // empty group can be created exactly where the user opened the menu.
+        window.addEventListener('contextmenu', e => this.recordCanvasContextPoint(e), true);
+    },
+
+    recordCanvasContextPoint(event) {
+        const canvas = app?.canvas?.canvas;
+        const path = typeof event?.composedPath === 'function' ? event.composedPath() : [];
+        if (!canvas || !(path.includes(canvas) || event?.target === canvas)) return false;
+        const rect = canvas.getBoundingClientRect();
+        const ds = app?.canvas?.ds;
+        const scale = ds?.scale || 1;
+        this.lastCanvasContextPoint = {
+            x: (event.clientX - rect.left) / scale - (ds?.offset?.[0] || 0),
+            y: (event.clientY - rect.top) / scale - (ds?.offset?.[1] || 0),
+        };
+        return true;
+    },
+
+    beginCanvasMarquee(event) {
+        this.canvasMarquee = {
+            pointerId: event.pointerId,
+            start: { x: event.clientX, y: event.clientY },
+        };
+    },
+
+    finishCanvasMarquee(event) {
+        const marquee = this.canvasMarquee;
+        if (!marquee || (marquee.pointerId != null && event.pointerId != null && marquee.pointerId !== event.pointerId)) return false;
+        this.canvasMarquee = null;
+        const end = { x: event.clientX, y: event.clientY };
+        if (!hasMeaningfulMarqueeDrag(marquee.start, end)) return false;
+        const ids = groupIdsIntersectingMarquee(this.groupEls, marqueeRectFromPoints(marquee.start, end))
+            .filter((groupId) => Boolean(this.groups[groupId]));
+        if (!ids.length) return false;
+        for (const groupId of ids) this.selectedGroupIds.add(groupId);
+        this.activeGroupId = ids.at(-1) || this.activeGroupId;
+        this.refreshGroupSelection();
+        return true;
+    },
+
+    cancelCanvasMarquee(event) {
+        if (!this.canvasMarquee || (this.canvasMarquee.pointerId != null && event.pointerId != null && this.canvasMarquee.pointerId !== event.pointerId)) return false;
+        this.canvasMarquee = null;
+        return true;
+    },
+
+    toggleGroupSelection(gid) {
+        if (!this.groups[gid]) return;
+        if (this.selectedGroupIds.has(gid)) this.selectedGroupIds.delete(gid);
+        else this.selectedGroupIds.add(gid);
+        this.activeGroupId = this.selectedGroupIds.size ? gid : null;
+        this.refreshGroupSelection();
+    },
+
+    selectOnlyGroup(gid) {
+        if (!this.groups[gid]) return;
+        if (this.selectedGroupIds.size === 1 && this.selectedGroupIds.has(gid)) return;
+        this.selectedGroupIds = new Set([gid]);
+        this.activeGroupId = gid;
+        this.refreshGroupSelection();
+    },
+
+    prepareGroupDrag(gid) {
+        if (!this.selectedGroupIds.has(gid)) this.selectOnlyGroup(gid);
+        this.activeGroupId = gid;
+    },
+
+    clearGroupSelection() {
+        if (!this.selectedGroupIds.size) return;
+        this.selectedGroupIds.clear();
+        this.refreshGroupSelection();
+    },
+
+    refreshGroupSelection() {
+        const hasMultiSelection = this.selectedGroupIds.size > 1;
+        for (const [gid, el] of Object.entries(this.groupEls)) {
+            const showSelection = hasMultiSelection && this.selectedGroupIds.has(gid);
+            el.classList.toggle('is-xzg-group-selected', showSelection);
+            el.style.outline = showSelection ? '2px dashed var(--p-primary-color, var(--accent-color, #5da9ff))' : 'none';
+            el.style.outlineOffset = showSelection ? '3px' : '0';
+        }
     },
 
     /* ── 同步循环 ── */
@@ -334,7 +480,7 @@ const Workspace2CanvasGroups = {
             });
 
             // 自动收纳/释放节点（降低频率：每10帧检测一次）
-            if (!el._xzgSyncFrame || el._xzgSyncFrame <= 0) {
+            if (!this._suspendMembershipSync && (!el._xzgSyncFrame || el._xzgSyncFrame <= 0)) {
                 this.syncNodeMembership(g, b);
                 el._xzgSyncFrame = 10;
             }
@@ -833,6 +979,43 @@ const Workspace2CanvasGroups = {
         console.log('[Workspace2 Canvas Groups] 创建:', gid, directNodeIds.length, '直接节点', childGroupIds.size, '子编组');
     },
 
+    createEmptyGroupAtContextPoint() {
+        const canvas = app?.canvas?.canvas;
+        const ds = app?.canvas?.ds;
+        if (!canvas || !ds) return false;
+        const rect = canvas.getBoundingClientRect();
+        const scale = ds.scale || 1;
+        const center = {
+            x: (rect.width / 2) / scale - (ds.offset?.[0] || 0),
+            y: (rect.height / 2) / scale - (ds.offset?.[1] || 0),
+        };
+        const recorded = this.lastCanvasContextPoint;
+        const point = recorded && Number.isFinite(recorded.x) && Number.isFinite(recorded.y)
+            ? recorded
+            : center;
+        const style = this.readDefaultStyle();
+        const gid = 'g_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+        this.groups[gid] = {
+            id: gid,
+            title: this.uniqueGroupTitle(),
+            nodeIds: [],
+            allowEmpty: true,
+            bypassed: false,
+            // Align the frame's top-left corner with the canvas context-menu
+            // origin. This is the point the user sees, unlike a hidden center
+            // offset that makes the new frame feel displaced.
+            bounds: { x: point.x, y: point.y, w: 300, h: 200 },
+            ...style,
+        };
+        this.renderGroup(gid);
+        this.selectOnlyGroup(gid);
+        app.graph?.setDirtyCanvas?.(true, true);
+        app.graph?.change?.();
+        this.syncGroupsToExtra();
+        console.log('[Workspace2 Canvas Groups] 创建空白编组:', gid);
+        return true;
+    },
+
     killGroup(gid) {
         const el = this.groupEls[gid];
         if (el) {
@@ -841,6 +1024,7 @@ const Workspace2CanvasGroups = {
         }
         delete this.groupEls[gid];
         delete this.groups[gid];
+        this.selectedGroupIds.delete(gid);
     },
 
     /* ── 渲染 ── */
@@ -946,6 +1130,7 @@ const Workspace2CanvasGroups = {
                 if (e.button !== 0) return;
                 e.preventDefault(); e.stopPropagation();
                 bringToFront();
+                self.prepareGroupDrag(group.id);
                 self.startDrag(group.id, e);
             });
             // 边框区域拦截了滚轮事件，需转发到画布以支持缩放
@@ -984,6 +1169,7 @@ const Workspace2CanvasGroups = {
             e.preventDefault();
             e.stopPropagation();
             bringToFront();
+            self.prepareGroupDrag(group.id);
             self.startDrag(group.id, e);
         });
 
@@ -1078,21 +1264,25 @@ const Workspace2CanvasGroups = {
         group = this.groups[group.id] || group;
         const gid = group.id;
 
-        // 保存快照，防止取消后仍未还原
-        const _snapshot = {
-            title: group.title,
-            fontSize: group.fontSize,
-            titleColor: group.titleColor,
-            headerBgColor: group.headerBgColor,
-            colorHue: group.colorHue, colorSat: group.colorSat, colorLit: group.colorLit,
-            useUnifiedColor: Boolean(group.useUnifiedColor),
-            effect: group.effect, effectSpeed: group.effectSpeed,
-            borderWidth: group.borderWidth, borderOpacity: group.borderOpacity,
-            shadowSize: group.shadowSize,
-            shadowColor: group.shadowColor,
-            contentPadding: group.contentPadding,
-            bounds: group.bounds ? { ...group.bounds } : null
-        };
+        // Save a cancel snapshot before live preview starts.  A successful
+        // Apply to All becomes a new committed baseline, so this object is
+        // deliberately mutable and can be rebased after that operation.
+        const captureSnapshot = target => ({
+            title: target.title,
+            fontSize: target.fontSize,
+            titleColor: target.titleColor,
+            headerBgColor: target.headerBgColor,
+            colorHue: target.colorHue, colorSat: target.colorSat, colorLit: target.colorLit,
+            useUnifiedColor: Boolean(target.useUnifiedColor),
+            effect: target.effect, effectSpeed: target.effectSpeed,
+            borderWidth: target.borderWidth, borderOpacity: target.borderOpacity,
+            shadowSize: target.shadowSize,
+            shadowColor: target.shadowColor,
+            contentPadding: target.contentPadding,
+            bounds: target.bounds ? { ...target.bounds } : null
+        });
+        const _snapshot = captureSnapshot(group);
+        const rebaseCancelSnapshot = () => Object.assign(_snapshot, captureSnapshot(group));
         const revertSnapshot = () => {
             Object.assign(group, {
                 title: _snapshot.title,
@@ -1229,10 +1419,10 @@ const Workspace2CanvasGroups = {
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;">
                     <div style="display:flex;align-items:center;gap:2px;min-width:0;">
                         <span style="color:#bbb;font-size:12px;white-space:nowrap;">${t('groups.preset')}</span>
-                        <button class="xzg-preset-btn" data-preset="0" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">1</button>
-                        <button class="xzg-preset-btn" data-preset="1" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">2</button>
-                        <button class="xzg-preset-btn" data-preset="2" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">3</button>
-                        <button class="xzg-preset-btn" data-preset="3" type="button" style="height:26px;width:19px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">4</button>
+                        <button class="xzg-preset-btn" data-preset="0" type="button" style="height:26px;width:28px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">1</button>
+                        <button class="xzg-preset-btn" data-preset="1" type="button" style="height:26px;width:28px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">2</button>
+                        <button class="xzg-preset-btn" data-preset="2" type="button" style="height:26px;width:28px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">3</button>
+                        <button class="xzg-preset-btn" data-preset="3" type="button" style="height:26px;width:28px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">4</button>
                     </div>
                     <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
                         <button class="xzg-save-preset" type="button" style="height:26px;padding:0 8px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:11px;white-space:nowrap;" title="${t('groups.savePresetTooltip')}">${t('groups.savePreset')}</button>
@@ -1703,6 +1893,7 @@ const Workspace2CanvasGroups = {
         // 点击外部关闭（定义在按钮处理之前，确保 cleanupModal 捕获最新版本）
         modal.addEventListener('mousedown', e => e.stopPropagation());
         let closeOutFn = null;
+        let modalClosed = false;
         const cleanupModal = () => {
             if (closeOutFn) document.removeEventListener('mousedown', closeOutFn);
             if (hiddenPicker && hiddenPicker.parentNode) hiddenPicker.remove();
@@ -1710,17 +1901,67 @@ const Workspace2CanvasGroups = {
             if (shadowColorPicker && shadowColorPicker.parentNode) shadowColorPicker.remove();
             if (modal.parentNode) modal.remove();
         };
-        closeOutFn = e => { if (!modal.contains(e.target)) { this.setActivePreset(activePresetSnapshot); revertSnapshot(); cleanupModal(); } };
-        setTimeout(() => document.addEventListener('mousedown', closeOutFn), 50);
-
-        modal.querySelector('.xzg-set-cancel').addEventListener('click', () => {
+        // One cancellation path is shared by the Cancel button, an outside
+        // click, and Escape.  Settings controls preview directly on `group`,
+        // so merely removing the modal would leave a partial title/style edit.
+        const cancelModal = () => {
+            if (modalClosed) return;
+            modalClosed = true;
             this.setActivePreset(activePresetSnapshot);
             revertSnapshot();
             cleanupModal();
+        };
+        const flashActionSuccess = (button, text, duration = 850) => new Promise(resolve => {
+            const originalText = button.textContent;
+            const originalBackground = button.style.background;
+            const originalBorderColor = button.style.borderColor;
+            const originalTransform = button.style.transform;
+            button.disabled = true;
+            button.textContent = `✓ ${text}`;
+            // Use the active ComfyUI theme color, not an unrelated success
+            // green, so light/dark/custom themes remain visually coherent.
+            button.style.background = 'var(--p-primary-color, var(--accent-color, #0A84FF))';
+            button.style.borderColor = 'color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 72%, white)';
+            button.style.transform = 'scale(1.035)';
+            setTimeout(() => {
+                button.disabled = false;
+                button.textContent = originalText;
+                button.style.background = originalBackground;
+                button.style.borderColor = originalBorderColor;
+                button.style.transform = originalTransform;
+                resolve();
+            }, duration);
         });
-        modal.querySelector('.xzg-set-apply').addEventListener('click', () => {
+        const applyModal = () => {
+            if (modalClosed) return;
+            modalClosed = true;
             applySettings(group);
             cleanupModal();
+        };
+        closeOutFn = e => { if (!modal.contains(e.target)) cancelModal(); };
+        setTimeout(() => document.addEventListener('mousedown', closeOutFn), 50);
+
+        modal.querySelector('.xzg-set-cancel').addEventListener('click', () => {
+            cancelModal();
+        });
+        modal.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                cancelModal();
+                return;
+            }
+            // Enter is a submit shortcut for editable settings, but must not
+            // steal IME composition, native color-picker use, or a focused
+            // button's own activation behavior.
+            if (e.key === 'Enter' && !e.isComposing && !e.target?.closest?.('button') && e.target?.type !== 'color') {
+                e.preventDefault();
+                e.stopPropagation();
+                applyModal();
+            }
+        });
+        modal.querySelector('.xzg-set-apply').addEventListener('click', () => {
+            applyModal();
         });
 
         modal.querySelectorAll('.xzg-preset-btn').forEach(btn => {
@@ -1731,9 +1972,10 @@ const Workspace2CanvasGroups = {
             });
         });
 
-        modal.querySelector('.xzg-save-preset').addEventListener('click', () => {
+        modal.querySelector('.xzg-save-preset').addEventListener('click', async event => {
             this.saveStylePreset(activePresetIndex, readControlsStyle());
             refreshPresetButtons();
+            await flashActionSuccess(event.currentTarget, t('groups.saved'));
         });
 
         modal.querySelector('.xzg-reset-default').addEventListener('click', () => {
@@ -1744,7 +1986,8 @@ const Workspace2CanvasGroups = {
         });
 
         // 全局应用
-        modal.querySelector('.xzg-set-apply-all').addEventListener('click', () => {
+        modal.querySelector('.xzg-set-apply-all').addEventListener('click', async event => {
+            if (modalClosed) return;
             const style = readControlsStyle();
             for (const [, g2] of Object.entries(this.groups)) {
                 Object.assign(g2, style);
@@ -1759,7 +2002,11 @@ const Workspace2CanvasGroups = {
             app.graph?.change?.();
             this.syncGroupsToExtra();
             this.writeGroupDataToNodes();
-            cleanupModal();
+            // Keep the dialog open for further refinement, but do not let a
+            // later Cancel falsely undo only the current group after a global
+            // operation has already committed every group.
+            rebaseCancelSnapshot();
+            await flashActionSuccess(event.currentTarget, t('groups.applied'), 360);
         });
 
         // （closeOut 监听已在上面 cleanupModal 中统一管理）
@@ -1814,6 +2061,11 @@ const Workspace2CanvasGroups = {
 
     /* ── 拖动框体（节点跟随，自动收纳框内节点） ── */
     startDrag(gid, downEv) {
+        const selectedGroupIds = [...this.selectedGroupIds].filter(id => this.groups[id]?.bounds);
+        if (selectedGroupIds.length > 1 && selectedGroupIds.includes(gid)) {
+            this.startMultiGroupDrag(selectedGroupIds, downEv);
+            return;
+        }
         const group = this.groups[gid];
         if (!group?.bounds) return;
         const canvas = app?.canvas;
@@ -1922,6 +2174,75 @@ const Workspace2CanvasGroups = {
         document.addEventListener('mouseup', onUp);
     },
 
+    /* ── 多选拖动：选中编组和节点均按唯一 ID 仅移动一次 ── */
+    startMultiGroupDrag(selectedGroupIds, downEv) {
+        const canvas = app?.canvas;
+        const graph = app?.graph;
+        if (!canvas?.ds || !graph?._nodes) return;
+
+        const plan = buildMultiGroupDragPlan({
+            groups: this.groups,
+            nodes: graph._nodes,
+            selectedGroupIds,
+        });
+        if (plan.groupIds.length < 2) return;
+
+        const groupStarts = plan.groupIds
+            .map(id => {
+                const group = this.groups[id];
+                return group?.bounds ? { group, x: group.bounds.x, y: group.bounds.y } : null;
+            })
+            .filter(Boolean);
+        const nodeIds = new Set(plan.nodeIds);
+        const nodeStarts = graph._nodes
+            .filter(node => nodeIds.has(String(node.id)) && hasNodePosition(node))
+            .map(node => ({ node, x: node.pos[0], y: node.pos[1] }));
+        const scale = canvas.ds.scale || 1;
+        const startX = downEv.clientX;
+        const startY = downEv.clientY;
+        const self = this;
+        this._suspendMembershipSync = true;
+        // Non-serialized acceptance evidence.  It lets real-page tests prove
+        // whether a drag plan reached graph nodes without changing workflow data.
+        window.Workspace2CanvasGroupsLastMultiDrag = {
+            at: Date.now(),
+            plan: { groupIds: [...plan.groupIds], nodeIds: [...plan.nodeIds] },
+            groupStartIds: groupStarts.map(({ group }) => group.id),
+            nodeStartIds: nodeStarts.map(({ node }) => String(node.id)),
+            lastDelta: { x: 0, y: 0 },
+        };
+
+        const onMove = e => {
+            const dx = (e.clientX - startX) / scale;
+            const dy = (e.clientY - startY) / scale;
+            groupStarts.forEach(({ group, x, y }) => {
+                group.bounds.x = x + dx;
+                group.bounds.y = y + dy;
+            });
+            nodeStarts.forEach(({ node, x, y }) => {
+                node.pos[0] = x + dx;
+                node.pos[1] = y + dy;
+            });
+            window.Workspace2CanvasGroupsLastMultiDrag.lastDelta = { x: dx, y: dy };
+            graph.setDirtyCanvas?.(true, true);
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            self._suspendMembershipSync = false;
+            // Resume periodic membership checks on a later frame, after the
+            // final node and border positions are visible to the overlay.
+            groupStarts.forEach(({ group }) => {
+                const el = self.groupEls[group.id];
+                if (el) el._xzgSyncFrame = 10;
+            });
+            self.syncGroupsToExtra();
+            graph.change?.();
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    },
+
     /* ── 调整大小 ── */
     startResize(gid, downEv) {
         const group = this.groups[gid];
@@ -1964,6 +2285,10 @@ const Workspace2CanvasGroups = {
         const refs = this._ensureRefs(el);
         const bw = finiteNumber(g.borderWidth, 2) * scale;
         const bo = g.borderOpacity ?? 0.65;
+        const showSelection = this.selectedGroupIds.size > 1 && this.selectedGroupIds.has(gid);
+        el.classList.toggle('is-xzg-group-selected', showSelection);
+        el.style.outline = showSelection ? '2px dashed var(--p-primary-color, var(--accent-color, #5da9ff))' : 'none';
+        el.style.outlineOffset = showSelection ? '3px' : '0';
 
         if (g.bypassed) {
             el.style.border = `${bw}px solid hsla(280,60%,55%,${bo})`;
@@ -1996,6 +2321,7 @@ const Workspace2CanvasGroups = {
             el?.parentElement?.removeChild(el);
         }
         this.groupEls = {};
+        this.selectedGroupIds = new Set([...this.selectedGroupIds].filter(gid => this.groups[gid]));
         for (const id of Object.keys(this.groups)) this.renderGroup(id);
     },
 
@@ -2287,16 +2613,30 @@ const Workspace2CanvasGroups = {
     },
 
     /* ── 删除 ── */
-    removeGroup(gid) {
-        const g = this.groups[gid];
-        if (!g) return;
+    removeGroups(groupIds) {
+        const ids = [...new Set(groupIds || [])].filter(gid => this.groups[gid]);
+        if (!ids.length) return false;
         const graph = app?.graph;
-        if (graph && !this._restoreGroupExecutionMode(g, graph) && g.bypassed) {
-            g.nodeIds.forEach(nid => { const n = graph._nodes.find(x => x.id === nid || x.id == nid); if (n) n.mode = MODE_ALWAYS; });
+        for (const gid of ids) {
+            const group = this.groups[gid];
+            if (graph && !this._restoreGroupExecutionMode(group, graph) && group.bypassed) {
+                group.nodeIds.forEach(nid => { const n = graph._nodes.find(x => x.id === nid || x.id == nid); if (n) n.mode = MODE_ALWAYS; });
+            }
+            this.killGroup(gid);
         }
-        this.killGroup(gid);
+        this.activeGroupId = this.groups[this.activeGroupId] ? this.activeGroupId : null;
+        this.refreshGroupSelection();
         graph?.setDirtyCanvas?.(true, true); graph?.change?.();
         this.syncGroupsToExtra();
+        return true;
+    },
+
+    removeGroup(gid) {
+        return this.removeGroups([gid]);
+    },
+
+    removeSelectedGroups() {
+        return this.removeGroups([...this.selectedGroupIds]);
     },
 
     ungroupSelection() {
@@ -2306,6 +2646,13 @@ const Workspace2CanvasGroups = {
         const selected = Object.values(app?.canvas?.selected_nodes || {}).filter(Boolean);
         const selectedIds = new Set(selected.map(n => n.id));
         const groupIds = new Set();
+
+        // Shift-click multi-selection is independent from LiteGraph's native
+        // node selection. Include it first so Shift+G dissolves every selected
+        // WorkspaceKit group, not only the most recently active one.
+        for (const gid of this.selectedGroupIds) {
+            if (this.groups[gid]) groupIds.add(gid);
+        }
 
         for (const node of selected) {
             if (node?._xzgGroupId && this.groups[node._xzgGroupId]) {
@@ -2362,6 +2709,7 @@ const Workspace2CanvasGroups = {
             id: g.id,
             title: g.title,
             nodeIds: [...(g.nodeIds || [])],
+            allowEmpty: Boolean(g.allowEmpty),
             bypassed: Boolean(g.bypassed),
             // 记录逐节点原模式，保证“旁路/禁用 → 恢复”不把用户的手动模式改成执行。
             executionMode: g.executionMode || null,
@@ -2767,7 +3115,10 @@ const Workspace2CanvasGroups = {
             if (group.shadowSize === undefined) group.shadowSize = 0;
             if (!group.shadowColor) group.shadowColor = DEFAULT_SHADOW_COLOR;
         }
-        for (const gid of Object.keys(this.groups)) if (!this.groups[gid].nodeIds || !this.groups[gid].nodeIds.length) delete this.groups[gid];
+        for (const gid of Object.keys(this.groups)) {
+            const group = this.groups[gid];
+            if ((!group.nodeIds || !group.nodeIds.length) && !group.allowEmpty) delete this.groups[gid];
+        }
         this.rebuildAllEls();
         this.applyBypassStates();
         window.Workspace2CanvasGroupsLastRestore = {

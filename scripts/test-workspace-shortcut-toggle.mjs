@@ -31,9 +31,13 @@ assert.equal(shouldCloseWorkspaceModule({
 }), false);
 
 const entrySource = await readFile(new URL("../entry/entry.js", import.meta.url), "utf8");
-assert.match(entrySource, /openWorkspace2Module\("workflows", \{ closeIfActive: true \}\)/);
-assert.match(entrySource, /openWorkspace2Module\("nodes", \{ closeIfActive: true \}\)/);
-assert.match(entrySource, /openWorkspace2Module\("templates", \{ closeIfActive: true \}\)/);
+// Module shortcuts now share one resolver so Shift+1/2/3/4 cannot drift into
+// separate handlers.  The resolver's own contract verifies the exact key map;
+// this integration contract verifies that every resolved module still follows
+// the established second-press toggle path.
+assert.match(entrySource, /const moduleShortcut = resolveModuleShortcut\(event\);/);
+assert.match(entrySource, /isModuleShortcutEnabled\(moduleShortcut\.id,/);
+assert.match(entrySource, /openWorkspace2Module\(moduleId, \{ closeIfActive: true \}\)/);
 assert.match(entrySource, /shouldCloseWorkspaceModule\(/);
 
 console.log("Workspace shortcut-toggle contract passed.");

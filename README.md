@@ -24,12 +24,12 @@ WorkspaceKit brings these daily organization tasks into one workspace sidebar.
 
 ## Main Features
 
-WorkspaceKit currently provides one unified sidebar entry with three internal tabs:
+WorkspaceKit provides one unified sidebar entry with three built-in tabs and optional compatible extension tabs:
 
 - **Workflows 2**: Manage workflow files in the ComfyUI workflow directory.
 - **Nodes 2**: Browse, search, favorite, group, and organize nodes.
 - **Data backup and transfer**: Export WorkspaceKit-owned data and import it later with an automatic pre-import backup. Workflow files and the derived node cache are not included.
-- **Templates**: Save selected connected nodes as reusable templates and organize them with groups.
+- **Templates**: Save selected connected nodes as reusable templates, organize them with groups, and recover deleted items from template trash.
 
 It also includes two canvas helpers:
 
@@ -89,10 +89,10 @@ Key features:
 - Drag templates to the canvas.
 - Click a template, then click the canvas to place it.
 - Template groups and subgroups.
-- Template search, sorting, rename, and delete.
+- Template search, sorting, rename, delete, trash, and restore.
 - Template hover preview.
 - Template context menu: rename, place at canvas center, copy name, delete.
-- Inline delete confirmation for templates and template groups.
+- Inline delete confirmation for templates and template groups, followed by recoverable template trash.
 
 During the beta compatibility period, template data continues to use the existing Workspace2-compatible location under the ComfyUI user directory. Existing template data therefore remains available after upgrading to WorkspaceKit. Back up important template data regularly.
 
@@ -103,8 +103,11 @@ Group Enhancements make canvas groups closer to common design-tool behavior.
 Key features:
 
 - `Ctrl+G` creates a WorkspaceKit group from the selected nodes.
-- `Shift+G` ungroups.
-- `Shift + left click` toggles whether WorkspaceKit groups ignore node selection.
+- `Shift+G` removes one or more selected WorkspaceKit group frames without deleting their nodes.
+- `Ctrl/Meta + left click` toggles Ignore; `Alt + left click` toggles Disable.
+- `Shift + left click` adds or removes a WorkspaceKit group from the transient multi-selection.
+- `Ctrl + drag` on blank canvas extends ComfyUI's native marquee to WorkspaceKit groups.
+- `Delete` removes selected WorkspaceKit group frames while leaving their nodes and links intact.
 - Right-click a group title bar to edit group style.
 - Save the current group style as one of the default group presets.
 - Configure group margin, border, shadow, animation, and related visual settings.
@@ -129,11 +132,16 @@ Default style:
 | `Shift+1` / `Shift+W` | Open Workflows 2 |
 | `Shift+2` / `Shift+N` | Open Nodes 2 |
 | `Shift+3` | Open Templates |
+| `Shift+4` | Open the pinned compatible extension tab, when present |
 | `Alt+C` | Save selected nodes as a template |
 | `Ctrl+G` | Create WorkspaceKit group |
 | `Shift+G` | Ungroup |
+| `Delete` | Remove selected WorkspaceKit group frames; nodes are retained |
 | `Ctrl + click` folder toggle | Recursively expand or collapse folders / groups |
-| `Shift + left click` | Toggle whether WorkspaceKit groups ignore node selection |
+| `Ctrl/Meta + left click` group header | Toggle Ignore for the group |
+| `Alt + left click` group header | Toggle Disable for the group |
+| `Shift + left click` group header | Add/remove a group from multi-selection |
+| `Ctrl + drag` blank canvas | Select WorkspaceKit groups along with ComfyUI's native marquee |
 
 ## Installation
 
@@ -166,7 +174,7 @@ Do not update your ComfyUI Python environment unless you understand the environm
 
 WorkspaceKit has two trash layers:
 
-- **WorkspaceKit trash**: the plugin-level recoverable trash used when deleting workflows from Workflows 2.
+- **WorkspaceKit trash**: recoverable trash used by Workflows 2. Templates also use a separate recoverable library trash.
 - **System trash**: the operating system trash / recycle bin.
 
 On Windows, WorkspaceKit has a built-in recycle bin fallback. On other platforms, system trash support depends on `send2trash` and the desktop environment it supports.
@@ -186,7 +194,7 @@ WorkspaceKit moves, renames, and organizes workflow files. Before using it in a 
 - Screenshots and GIF tutorials are not included yet.
 - Very large workflow directories may take longer to scan and refresh.
 - The Registry listing is published; visual metadata such as an icon, banner, screenshots, and GIF tutorials can still be improved.
-- Template deletion currently uses inline confirmation; undo or template trash can be improved in a future version.
+- Template trash is available; undo, bulk recovery, and additional recovery UX can be improved in a future version.
 - Nodes 2 search speed, ranking quality, and pinyin matching still need more testing in very large node libraries.
 
 ## Project Notes

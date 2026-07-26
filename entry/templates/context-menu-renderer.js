@@ -12,7 +12,6 @@ export function renderTemplateContextMenu({
   onError,
   onRename,
   onPlaceCenter,
-  onCopyName,
   onDelete,
   schedule = setTimeout,
 }) {
@@ -53,7 +52,6 @@ export function renderTemplateContextMenu({
 
   addItem(t("templates.rename"), () => onRename(template));
   addItem(t("templates.placeCenter"), () => onPlaceCenter(template));
-  addItem(t("templates.copyName"), () => onCopyName(template));
   addItem(t("templates.delete"), () => onDelete(template));
 
   document.body.append(menu);

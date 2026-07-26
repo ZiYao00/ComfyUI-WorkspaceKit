@@ -7,6 +7,7 @@ export function createTemplateRowRenderer({
   document,
   translate,
   iconSvg,
+  iconButton,
   dangerIconButton,
   schedule = setTimeout,
 }) {
@@ -21,6 +22,7 @@ export function createTemplateRowRenderer({
     isSelected,
     makeDropTarget,
     prepareRenameInput,
+    onStartRename,
     onRename,
     onRenameError,
     onCancelRename,
@@ -99,6 +101,11 @@ export function createTemplateRowRenderer({
     actions.className = "workspace2-actions";
     actions.addEventListener("pointerenter", onActionsPointerEnter);
     actions.append(
+      iconButton("edit", translate("templates.rename"), (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onStartRename();
+      }),
       dangerIconButton("trash", translate("templates.delete"), (event) => {
         event.preventDefault();
         event.stopPropagation();

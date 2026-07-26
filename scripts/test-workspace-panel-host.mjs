@@ -49,9 +49,16 @@ assert.equal(host.tabButtons.get("layout").title, "WorkspaceKit Layout");
 assert.equal(host.tabButtons.get("layout").attributes.get("aria-label"), "WorkspaceKit Layout");
 assert.equal(host.headerHost.hidden, true);
 assert.equal(host.contextHost.hidden, true);
+assert.equal(host.toolbarHost, host.contextHost);
+assert.equal(host.controlsHost.hidden, true);
+assert.equal(host.headerHost.dataset.workspacekitPanelSlot, "header");
+assert.equal(host.toolbarHost.dataset.workspacekitPanelSlot, "toolbar");
+assert.equal(host.controlsHost.dataset.workspacekitPanelSlot, "controls");
+assert.equal(host.contentHost.dataset.workspacekitPanelSlot, "content");
+assert.equal(host.moduleFrame.dataset.workspacekitPanelBlueprint, "v1");
 assert.equal(host.contentHost.className, "workspace2-module-body");
 assert.equal(host.contentHost.dataset.workspace2ModuleMount, "true");
-assert.deepEqual(host.moduleFrame.children, [host.headerHost, host.contextHost, host.contentHost]);
+assert.deepEqual(host.moduleFrame.children, [host.headerHost, host.toolbarHost, host.controlsHost, host.contentHost]);
 
 const providerEvents = [];
 const overflowHost = createWorkspacePanelHost({

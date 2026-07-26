@@ -10,8 +10,9 @@ their feature behavior; WorkspaceKit owns tab placement and lifecycle.
   title: "Example",       // required fallback
   icon: "🧩",              // optional emoji/text icon
   getTitle: () => "示例",  // optional provider-localized title
-  render({ headerHost, contextHost, contentHost, surface, app, translate }) {
+  render({ headerHost, contextHost, contentHost, surface, app, translate, ui }) {
     // Append only to the supplied hosts; return dispose().
+    // ui is optional; an existing Provider may safely ignore it.
     return () => {};
   },
   onHostClaimed() {
@@ -29,6 +30,28 @@ Providers must not import WorkspaceKit private modules or mutate its sidebar.
 `renderSettings` is optional. When present, WorkspaceKit places it under
 Settings > Advanced > Extension settings; Providers without it create no empty
 settings area.
+
+## Optional UI Template capability
+
+Provider render context now supplies an optional **Panel UI Template v1**
+capability. It is not required for registration, and existing Providers remain
+valid when they ignore it.
+
+When available, `ui` exposes `version`, `major`, `supports(requiredMajor)`,
+and generic primitive factories such as `createModuleHeader`, `createSection`,
+`createIconButton`, `createSegmentedControl`, `createRangeControl`,
+`createCommandGrid`, and `createStandaloneShell`. Providers must check the
+major contract they require and keep a safe local presentation fallback when
+`ui` is absent or incompatible.
+
+The UI Template runtime is published independently from the setting that
+allows Providers to merge into the WorkspaceKit tab strip. That setting affects
+panel placement, not whether a standalone family plugin may use a compatible
+installed Template.
+
+The standalone-family fallback behavior, compatibility rules, and remaining
+implementation/acceptance plan are documented in
+[Panel UI Template v1](PANEL_UI_TEMPLATE.md).
 
 ## Integration availability
 

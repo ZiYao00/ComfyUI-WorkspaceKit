@@ -1,23 +1,16 @@
+import { createPanelUiPrimitives } from "../ui-kit/primitives.js";
+
 // Shared panel header/search DOM. Callers retain query state and decide what a
 // search input changes. IME composition is handled here so Workflows, Nodes,
 // Templates, and Groups do not drift into inconsistent search behavior.
 export function createPanelChrome({ document, translate, iconSvg, prepareInput }) {
+  const productUi = createPanelUiPrimitives(document);
   const createPanelHeader = (titleText, statusText, options = {}) => {
-    const header = document.createElement("div");
-    header.className = "workspace2-header";
-    const title = document.createElement("div");
-    title.className = "workspace2-title";
-    title.textContent = titleText;
-    const status = document.createElement("div");
-    status.className = "workspace2-status";
-    status.textContent = statusText;
-    // Header status is deliberately visually compact. Keep the full transient
-    // message available without allowing a long node/template name to change
-    // the shared header height and shift the panel content below it.
-    status.title = statusText || "";
-    if (options.statusDataset) status.dataset[options.statusDataset] = "1";
-    header.append(title, status);
-    return header;
+    return productUi.createModuleHeader({
+      title: titleText,
+      status: statusText,
+      statusDataset: options.statusDataset,
+    }).element;
   };
 
   const createSearchToolbar = ({ focusKey, placeholder, value, onInput, buttons = [] }) => {

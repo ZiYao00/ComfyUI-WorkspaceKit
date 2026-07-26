@@ -2,6 +2,57 @@
 
 This document records reproducible test evidence and unresolved errors found while validating WorkspaceKit. Historical endpoint, storage, and implementation names such as `Workspace2` remain in individual records where they identify the compatibility layer. A recorded error is not treated as a confirmed WorkspaceKit root cause until the owning call chain is isolated.
 
+## 2026-07-26 - Layout product-component convergence (hosted real page accepted)
+
+- Complete pre-change snapshots: WorkspaceKit
+  `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-product-ui-component-extraction-20260726-visual-unification.zip`
+  (SHA-256 `61DA940D0F383295A246CF34E2AC86652DB0996A37CC2F21C57E1C1F29D07E4F`)
+  and Layout
+  `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-Layout-before-product-ui-component-extraction-20260726-visual-unification.zip`
+  (SHA-256 `1700E806263B1DEB6BCA2341A768787ED7F1C6C4C79FD75A9B6E6A0D753317F4`).
+- `panel-chrome.js` now delegates the existing Workflows/Nodes/Templates
+  title-and-status element construction to the public UI Kit. The returned DOM
+  retains `workspace2-header`, `workspace2-title`, and `workspace2-status` for
+  compatibility with the established product stylesheet.
+- Template v1.2.0 changes Layout's control band to the same compact product
+  rhythm and maps Layout Header/Controls/Content hosts to product slot spacing.
+  The command grid remains Layout-owned feature content.
+- Static verification passed: panel chrome, Template primitive/API/export/host
+  contracts, Layout module/Provider/standalone tests (9/9), JavaScript syntax,
+  deterministic Vendor verification, and `git diff --check`.
+- **Real test-package acceptance:** after a port-8190 reload, hosted `📐 排版`
+  rendered exactly one shared product header, three product slots, one command
+  grid, and no legacy Layout chrome. Header/status, range, mode controls, and
+  all twelve commands rendered without a WorkspaceKit-specific console error.
+- Standalone placement and the dark/light/transparent/frosted comparison remain
+  separate, explicitly pending acceptance items.
+
+## 2026-07-24 - Layout one-source visual enforcement (real visual acceptance pending)
+
+- Complete WorkspaceKit and Layout snapshots were created before this bounded
+  visual-source batch. The exact archive paths and SHA-256 values are recorded
+  in `PANEL_UI_TEMPLATE_IMPLEMENTATION.md`, Batch 4.1.
+- Template v1.1.0 maps its shared tokens to WorkspaceKit's existing product
+  surface, tab, control, hover, glass-border, and glass-shadow variables, with
+  ComfyUI tokens retained only for an independently installed Layout Vendor
+  runtime.
+- Layout's module view no longer constructs legacy header, range, segmented,
+  or command-grid DOM when a Template is unavailable. It requires a complete
+  host or generated Vendor Template, preventing a second editable visual system
+  from returning silently.
+- Static evidence passed: Layout module/Provider/standalone tests (9/9),
+  WorkspaceKit Template/export/API/host tests, JavaScript syntax checks, Vendor
+  verification, and `git diff --check`.
+- **Not accepted yet:** no live Chrome page was available to refresh during this
+  record. Merged and standalone visual comparison in dark/light/transparent/
+  frosted modes remains explicitly pending.
+
+## 2026-07-24 - Workflow Panel Blueprint reference migration
+
+- Backup created before the bounded UI migration: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-workflows-panel-blueprint-migration-20260724-164758.zip` (SHA-256 `64E9988039DC56D56CBAAB99834C1B66ACFA2A0FA779C4F2DDB3C9372AB906CB`).
+- `renderPanel()` now maps the pre-existing Workflows UI into the Template's Header, Toolbar, Controls, and Content slots. Workflow files, service calls, sorting, drag handlers, and open-state behavior were intentionally not rewritten.
+- Real test-package browser acceptance covered normal Open/Browse rendering, trash rendering, search input plus clear, sort-menu open/close, sidebar close/reopen, and the merged Layout tab. No WorkspaceKit test error was recorded. Creation/import and an actual workflow drag remain part of the broader workflow regression checklist rather than being claimed as this batch's direct evidence.
+
 ## 2026-07-24 - Canvas-group Delete key (real single, multi, and native-key acceptance)
 
 - Backup created before this bounded canvas interaction batch: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-canvas-group-delete-key-20260724-111912.zip` (SHA-256 `95703BDE6F2D039650088E53BEAE7C9AF746AC8FE8180ED35E51531E0AD7B45A`).

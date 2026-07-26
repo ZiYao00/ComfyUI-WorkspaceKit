@@ -1,0 +1,19 @@
+// Public version boundary for the reusable WorkspaceKit panel UI. This is
+// intentionally separate from the WorkspaceKit plugin version and from the
+// Provider API version.
+// 1.1.0 establishes the WorkspaceKit product-theme bridge. Family panels use
+// the same WorkspaceKit tokens when the host is present, while the Vendor
+// runtime keeps ComfyUI-native fallbacks for a genuinely standalone install.
+// 1.2.0 makes the established WorkspaceKit product header the Template
+// header as well, so built-in tabs and family panels no longer maintain
+// separate title/status DOM structures.
+// 1.2.1 centers segmented icon controls with the same button geometry used
+// by built-in panel toolbars, preventing baseline drift in hosted Layout.
+// 1.3.0 publishes a capability contract so family plugins negotiate their
+// required UI surface without treating every visual minor release as a break.
+export const PANEL_UI_TEMPLATE_VERSION = "1.3.0";
+export const PANEL_UI_TEMPLATE_MAJOR = 1;
+
+export function supportsPanelUiTemplate(requiredMajor) {
+  return Number(requiredMajor) === PANEL_UI_TEMPLATE_MAJOR;
+}

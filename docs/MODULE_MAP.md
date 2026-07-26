@@ -34,11 +34,13 @@ the same pull request as any module ownership change.
 | Module | Owns | Must not own | Validation |
 | --- | --- | --- | --- |
 | `integrations/panel-api.js` | Versioned browser Provider registry, validation, ID de-duplication, availability gate, lifecycle notification, and safe global publication of `WorkspaceKitPanelAPI` | Sidebar rendering, provider DOM, Layout command behavior, persistence, network, or provider-specific settings | API availability/registration contract passed; host integration acceptance remains separate |
+| `integrations/panel-ui-template-api.js` | Versioned public `WorkspaceKitPanelUITemplate` runtime publication and compatible UI-factory access | Provider registration, tab placement, glass Portal/background behavior, feature commands, persistence, or Provider-local language | Template runtime contract, existing Provider/API regression, and test-package source-resource checks passed; real mounted example Provider remains pending |
 
 ## Shared UI modules
 
 | Module | Owns | Must not own | Validation |
 | --- | --- | --- | --- |
+| `ui-kit/version.js`, `ui-kit/styles.js`, `ui-kit/primitives.js`, `ui-kit/blueprint.js`, `ui-kit/template.js` | Versioned Panel UI Template source: generic Token/style installation, panel primitives, fixed Header/Toolbar/Controls/Content Blueprint, standalone shell construction, and browser-safe Template factory | WorkspaceKit sidebar registration, glass Portal/background lifecycle, Provider registry publication, graph behavior, feature persistence, or Provider-specific words | UI primitive contract passed; Layout consumes shared primitives; Blueprint B1 is complete and the feature-migration sequence is recorded in `docs/PANEL_BLUEPRINT.md` |
 | `ui/personalization-panel.js` | Shared icon/color personalization dialog DOM, viewport clamping, choice selection, Escape/outside dismissal, and apply/reset callback delivery | Workflow/template/node-group data, endpoint calls, persistence, rendering decisions, or official Store access | Dialog contract, test-package resource/sidebar-load check, and real safe Esc-close interaction passed |
 | `ui/tree-expansion.js` | Shared recursive add/remove of caller-supplied expanded-key Sets | Tree shape, persistence, rendering, panel state, network, files, or official Store access | Expansion contract, test-package resource check, and WorkspaceKit panel-load check passed |
 | `ui/decorated-icon.js` | Shared Prime-icon/emoji class, text, and color-variable presentation | Icon choice, feature data, persistence, rendering policy, network, files, or official Store access | Icon contract passed; user-tested panel regression passed |

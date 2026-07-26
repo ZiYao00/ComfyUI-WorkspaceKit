@@ -82,18 +82,30 @@ export function createWorkspacePanelHost({
 
   const moduleFrame = document.createElement("div");
   moduleFrame.className = "workspace2-module-frame";
+  // The legacy host names remain valid while the Blueprint exposes the
+  // product-wide header / toolbar / controls / content anatomy.  Built-in
+  // renderers still mount into contentHost in this batch, so merely adding
+  // the slots cannot change their render lifecycle or visual layout.
   const headerHost = document.createElement("div");
   headerHost.className = "workspace2-module-header-host";
+  headerHost.dataset.workspacekitPanelSlot = "header";
   headerHost.hidden = true;
-  const contextHost = document.createElement("div");
-  contextHost.className = "workspace2-module-context-host";
-  contextHost.hidden = true;
+  const toolbarHost = document.createElement("div");
+  toolbarHost.className = "workspace2-module-context-host";
+  toolbarHost.dataset.workspacekitPanelSlot = "toolbar";
+  toolbarHost.hidden = true;
+  const controlsHost = document.createElement("div");
+  controlsHost.className = "workspace2-module-controls-host";
+  controlsHost.dataset.workspacekitPanelSlot = "controls";
+  controlsHost.hidden = true;
   const contentHost = document.createElement("div");
   // Existing panel renderers intentionally continue to receive this exact
   // class. prepareWorkspaceModuleMount() depends on it during the migration.
   contentHost.className = "workspace2-module-body";
   contentHost.dataset.workspace2ModuleMount = "true";
-  moduleFrame.append(headerHost, contextHost, contentHost);
+  contentHost.dataset.workspacekitPanelSlot = "content";
+  moduleFrame.dataset.workspacekitPanelBlueprint = "v1";
+  moduleFrame.append(headerHost, toolbarHost, controlsHost, contentHost);
   shell.append(tabStrip, moduleFrame);
 
   return {
@@ -103,7 +115,10 @@ export function createWorkspacePanelHost({
     settingsButton,
     moduleFrame,
     headerHost,
-    contextHost,
+    toolbarHost,
+    // Kept for pre-Blueprint Providers. New modules should use toolbarHost.
+    contextHost: toolbarHost,
+    controlsHost,
     contentHost,
   };
 }

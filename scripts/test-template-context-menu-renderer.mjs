@@ -28,10 +28,10 @@ renderTemplateContextMenu({
   document, window, state, t: (key) => key, el: "panel",
   closeMenu: () => calls.push("close"), onError: () => calls.push("error"),
   onRename: async () => calls.push("rename"), onPlaceCenter: async () => calls.push("place"),
-  onCopyName: async () => calls.push("copy"), onDelete: async () => calls.push("delete"),
+  onDelete: async () => calls.push("delete"),
   schedule: (callback) => callback(),
 });
-assert.equal(appendedMenu.children.length, 4);
+assert.equal(appendedMenu.children.length, 3);
 assert.equal(appendedMenu.style.left, "27px");
 assert.equal(appendedMenu.style.top, "41px");
 assert.equal(state.contextMenuElement, appendedMenu);

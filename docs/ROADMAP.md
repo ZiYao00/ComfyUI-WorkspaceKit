@@ -2,6 +2,23 @@
 
 This document records planned product work. A listed item is a design intent, not a released feature or compatibility promise.
 
+## P0 — WorkspaceKit Panel UI Template v1
+
+Status: **architecture approved; implementation not started.**
+
+WorkspaceKit will provide a versioned, opt-in UI Template for family modules
+and external panel Providers. Layout remains independently installable, but
+uses a generated and Git-tracked WorkspaceKit UI runtime when the host is
+absent. With a compatible WorkspaceKit installed, Layout uses the host's
+current Template whether it is merged into a tab or remains a standalone
+sidebar entry.
+
+The implementation is intentionally staged: establish a single editable UI
+source and deterministic Vendor export first; expose an optional public host
+capability second; migrate Layout merged and standalone modes separately; then
+release a documented third-party template. Details and release gates are in
+[Panel UI Template v1](PANEL_UI_TEMPLATE.md).
+
 ## P0 — Sidebar-entry resilience
 
 Status: **implementation complete; controlled fault-injection and official DOM-remount acceptance remain release gates.**
@@ -107,3 +124,59 @@ Required acceptance before release:
 2. A known browser or ComfyUI-reserved binding shows a clear warning and is not applied by default.
 3. A valid binding persists across refresh and does not break text editing or canvas gestures.
 4. Reset restores the documented defaults exactly.
+
+## P1 — Workflows Browse two-pane layout
+
+Large workflow roots can contain many first-level folders, making it awkward to
+drag a file near the bottom of the Browse tree onto a folder near the top. A
+future Browse-only two-pane layout will improve that operation without changing
+the existing Open section.
+
+- Keep the current tree layout as the default and add a separate, persisted
+  Browse-layout control beside the sort control. Layout and sort are separate
+  concerns; switching layout must not silently discard the selected sort.
+- In two-pane mode, the left pane is a independently scrollable folder tree and
+  drop target; the right pane shows the selected folder's contents and
+  breadcrumb.
+- Dragging a file from the right pane onto a visible folder in the left pane
+  uses the same verified move transaction as tree mode.
+- Search uses a full-width result state instead of mixing global results with a
+  selected-folder listing. Manual custom reordering remains disabled until its
+  cross-pane semantics are explicitly designed.
+
+Required acceptance before release:
+
+1. Tree and two-pane mode preserve the same files, folders, sort choice, and
+   expansion/selection state across refresh.
+2. A file moves from the right pane to a visible left-pane folder in one drag.
+3. Search, rename, copy, trash, restore, and external polling work in both
+   layouts without duplicate operations or full-list flicker.
+4. The existing tree layout remains unchanged when the feature is disabled.
+
+## P1 — Alt-drag duplicate WorkspaceKit groups
+
+WorkspaceKit overlay groups will support a duplication gesture matching ComfyUI
+node duplication semantics without taking away the existing Alt-click Disable
+gesture.
+
+- `Alt + click` keeps its current Disable behavior; only an Alt drag that
+  exceeds the normal movement threshold becomes duplication.
+- Duplicate the selected WorkspaceKit group set, their member nodes, and only
+  links whose endpoints are both inside that duplicated set. Do not alter the
+  source group, source nodes, external links, queue state, or output data.
+- Reuse ComfyUI's supported node-cloning path through a narrow compatibility
+  adapter, then build old-to-new node and group ID maps before restoring group
+  membership and internal links.
+- New group names receive localized incrementing Copy/副本 suffixes. Failure is
+  transactional: remove all newly created objects rather than leaving a
+  half-duplicated graph.
+
+Required acceptance before release:
+
+1. Alt-click still toggles Disable and does not create a copy.
+2. Alt-drag of one group creates one independent group with copied nodes and
+   internal links; original nodes remain unchanged.
+3. Multi-selected groups duplicate shared nodes only once and preserve their
+   internal relative layout.
+4. Save/reload preserves the duplicate groups, while external links and queued
+   execution remain unchanged.

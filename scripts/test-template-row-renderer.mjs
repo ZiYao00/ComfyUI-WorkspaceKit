@@ -22,6 +22,13 @@ const { renderTemplateRow } = createTemplateRowRenderer({
   document: { createElement: () => new Element() },
   translate: (key, values = {}) => `${key}:${values.nodes ?? ""}/${values.links ?? ""}`,
   iconSvg: (name) => ({ icon: name }),
+  iconButton: (icon, title, action) => {
+    const button = new Element();
+    button.icon = icon;
+    button.title = title;
+    button.addEventListener("click", action);
+    return button;
+  },
   dangerIconButton: (icon, title, action) => {
     const button = new Element();
     button.icon = icon;
@@ -41,6 +48,7 @@ const row = renderTemplateRow({
   isSelected: true,
   makeDropTarget: (...args) => calls.push(["drop", ...args]),
   prepareRenameInput: () => calls.push(["prepare"]),
+  onStartRename: () => calls.push(["startRename"]),
   onRename: async () => calls.push(["rename"]),
   onRenameError: () => calls.push(["renameError"]),
   onCancelRename: () => calls.push(["cancel"]),
@@ -69,12 +77,13 @@ row.listeners.get("pointerenter")({ target: plainTarget });
 row.listeners.get("pointermove")({ target: plainTarget });
 row.listeners.get("pointerleave")({});
 await row.listeners.get("dblclick")({ target: plainTarget, preventDefault(){}, stopPropagation(){} });
-row.children[2].children[0].listeners.get("click")({ currentTarget: "delete-button", preventDefault(){}, stopPropagation(){} });
-assert.deepEqual(calls.map(([name]) => name), ["drop", "dragStart", "dragEnd", "menu", "select", "previewEnter", "previewMove", "previewLeave", "open", "delete"]);
+row.children[2].children[0].listeners.get("click")({ currentTarget: "rename-button", preventDefault(){}, stopPropagation(){} });
+row.children[2].children[1].listeners.get("click")({ currentTarget: "delete-button", preventDefault(){}, stopPropagation(){} });
+assert.deepEqual(calls.map(([name]) => name), ["drop", "dragStart", "dragEnd", "menu", "select", "previewEnter", "previewMove", "previewLeave", "open", "startRename", "delete"]);
 
 const editingRow = renderTemplateRow({
   el: "panel", template, isEditing: true, isSelected: false, makeDropTarget: () => {},
-  prepareRenameInput: () => calls.push(["prepare"]), onRename: async () => calls.push(["rename"]), onRenameError: () => {},
+  prepareRenameInput: () => calls.push(["prepare"]), onStartRename: () => {}, onRename: async () => calls.push(["rename"]), onRenameError: () => {},
   onCancelRename: () => calls.push(["cancel"]), onDelete: () => {}, onActionsPointerEnter: () => {}, onDragStart: () => {}, onDragEnd: () => {},
   onOpenMenu: () => {}, onSelect: () => {}, onPreviewEnter: () => {}, onPreviewMove: () => {}, onPreviewLeave: () => {},
   onOpenTemplate: async () => {}, onOpenTemplateError: () => {},

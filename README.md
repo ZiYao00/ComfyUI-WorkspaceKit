@@ -1,40 +1,69 @@
 # ComfyUI-WorkspaceKit
 
-English | [中文说明](README.zh-CN.md)
+**English** · [简体中文](README.zh-CN.md)
 
-> **Maintenance notice:** I will be travelling and unable to update the plugin for the next 2–3 weeks. Please use the current public beta with appropriate backups; issues and pull requests may receive a delayed response.
+> ## A high-efficiency workspace plugin for ComfyUI creators
+>
+> **Manage workflows, node favorites, and reusable templates efficiently, and organize complex canvases with more capable groups.**
 
-ComfyUI-WorkspaceKit is a workspace enhancement extension for ComfyUI. It focuses on practical organization for large workflow libraries, large custom-node setups, node favorites, reusable node templates, and complex canvas layouts.
+![Version](https://img.shields.io/badge/version-0.2.4-blue)
+![Status](https://img.shields.io/badge/status-public%20beta-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-It does not try to replace the official ComfyUI UI. Instead, it adds a focused workspace layer for users who need faster organization, safer file operations, better node reuse, and clearer visual structure.
+ComfyUI-WorkspaceKit brings workflow management, node favorites, template reuse, and canvas organization into one focused workspace.
 
-Current status: **public beta, 0.2.4**. It is usable for daily testing, but it is not a stable 1.0 release yet. Before using it in a main ComfyUI environment, back up your workflows, user settings, important node favorites, and important template data.
+Current status: **public beta, 0.2.4**. Back up important workflows, user settings, node favorites, and template data before first using it in a production ComfyUI environment.
 
-## When WorkspaceKit Helps
+<p align="center">
+  <a href="#why-workspacekit">Why WorkspaceKit</a> ·
+  <a href="#core-features">Core features</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#five-minute-quick-start">Quick start</a> ·
+  <a href="#shortcuts">Shortcuts</a> ·
+  <a href="#data-safety-and-backups">Data safety</a>
+</p>
 
-WorkspaceKit is designed for users who run into these problems after using ComfyUI for a while:
+## Why WorkspaceKit
 
-- Too many workflow files to manage comfortably in a plain list.
-- Too many custom nodes and extensions mixed into the node browser.
-- Frequently reused connected node groups that need to be saved as templates.
-- Large workflows that need clearer groups, titles, and visual sections.
-- File operations such as move, rename, and delete that need safer recovery behavior.
+After using ComfyUI for a while, it is common to run into these problems:
 
-WorkspaceKit brings these daily organization tasks into one workspace sidebar.
+- Workflow files become difficult to browse in a flat list.
+- Hundreds of extensions make it harder to find frequently used nodes.
+- Repeated node structures need to be rebuilt again and again.
+- Large workflows need clearer visual regions and titles.
+- Rename, move, delete, and migration operations need a recovery path.
 
-## Main Features
+WorkspaceKit brings those daily organization tasks into one workspace sidebar.
+
+| Common problem | WorkspaceKit approach | Result |
+| --- | --- | --- |
+| Too many workflows | **Workflows 2**: folder tree, search, drag and drop, sorting, recents | Organize by project and find files faster |
+| Nodes are hard to find or remember | **Nodes 2**: source categories, search, pinyin search, favorite groups | Build a personal node library |
+| Repeated node structures | **Templates**: preserve node positions and links | Save once and reuse anytime |
+| Large canvases become hard to read | **Group Enhancements + Title2** | Create clearer work areas and hierarchy |
+| Risk of accidental deletion or migration loss | **Two-layer trash + data backup and transfer** | Safer recovery, backup, and migration |
+
+## Core Features
 
 WorkspaceKit provides one unified sidebar entry with three built-in tabs and optional compatible extension tabs:
 
 - **Workflows 2**: Manage workflow files in the ComfyUI workflow directory.
 - **Nodes 2**: Browse, search, favorite, group, and organize nodes.
-- **Data backup and transfer**: Export WorkspaceKit-owned data and import it later with an automatic pre-import backup. Workflow files and the derived node cache are not included.
-- **Templates**: Save selected connected nodes as reusable templates, organize them with groups, and recover deleted items from template trash.
+- **Templates**: Save selected connected nodes as reusable templates, organize them with groups, and recover deleted items.
+- **Group Enhancements**: Improve canvas group gestures, title-bar controls, and group styling.
+- **Title2**: A lightweight visual title and annotation node for complex workflows.
 
-It also includes two canvas helpers:
+### One entry for core creative assets
 
-- **Group Enhancements**: Better canvas group shortcuts, title-bar style settings, and default group styling.
-- **Title2**: A lightweight visual title / annotation node for large workflows.
+The three built-in tabs manage workflow files, node favorites, and node templates. Compatible external tabs can be merged or shown independently through user settings; when a compatible tab is pinned, `Shift+4` opens it.
+
+### Turn frequent actions into reusable assets
+
+Node favorites and templates turn your usual nodes, connected structures, and organization habits into reusable personal assets.
+
+### Efficient, with recovery in mind
+
+Workflows and templates each provide recoverable trash. Data import and official-favorites write operations create the appropriate backup first to reduce risk during organization and migration.
 
 ## Features
 
@@ -45,18 +74,34 @@ Workflows 2 is for workflow-file organization, especially when you have many `.j
 Key features:
 
 - Uses the official ComfyUI workflow directory by default.
-- Tree-style folder management with folders and subfolders.
-- Create, rename, and drag workflow files and folders.
+- Tree-style folders and subfolders.
+- Create, rename, copy, drag, and organize workflow files and folders.
 - Drop support for folders, expanded folder areas, and the root area.
-- Plugin-level trash and restore before moving items to the operating system trash.
+- Recoverable plugin trash before optional operating-system trash.
 - Sorting, custom order, and folder-first sorting.
 - Recent workflow history with configurable item count.
 - Search, clear search, refresh, and direct workflow opening.
-- Open workflow file location.
+- Open a workflow's file location.
 - Folder icon and color customization.
-- Recursive expand/collapse with `Ctrl + click`.
+- `Ctrl + click` a folder or group with child levels to recursively expand or collapse it.
 
-Advanced users can choose a custom workflow root. If you use this, choose a dedicated workflow folder. Do not use a disk root, Desktop, Downloads, or a large project directory.
+> **Note:** Recursive toggle applies to tree folders and groups, not section headers such as Open / Browse or Favorites / Comfy / Extensions. While a search is active, matching paths stay visible, so a collapsed result is not visually hidden.
+
+![Workflows 2: folders, sorting, and drag-and-drop](Preview/a1.png)
+
+![Workflows 2: trash and restore](Preview/a1.1.png)
+
+**Quick access:** `Shift+1` / `Shift+W`
+
+| Search-bar action | Purpose |
+| --- | --- |
+| Create folder | Create a folder in the current browse location. |
+| Create workflow | Create an empty workflow. |
+| Import | Select and import a workflow from disk. |
+| Sort | Choose name, modified-time, or custom ordering; folders can be prioritized. |
+| Trash | Open deleted workflows; click again to return to the workflow list. |
+
+Advanced users can choose a custom workflow root. Use a dedicated workflow directory only; do not use a drive root, Desktop, Downloads, or a large project directory.
 
 ### Nodes 2
 
@@ -69,32 +114,53 @@ Key features:
 - Groups extension nodes by plugin source.
 - Search with fuzzy search and pinyin search.
 - Favorite root, favorite groups, and favorite subgroups.
-- Drag nodes into favorite groups.
-- Drag favorite nodes between groups.
-- Drag nodes to canvas.
+- Drag nodes into favorite groups or to the canvas.
 - Click a node, then click the canvas to place it.
-- Node preview cards.
-- Import/export with official ComfyUI favorites, with automatic settings backup before writing.
-- Dimmed display for missing third-party nodes instead of silently deleting them.
-- Node cache for faster first display in large node libraries.
+- Detailed and compact node previews.
+- Import, export, backup, and restore official ComfyUI favorites and WorkspaceKit favorites.
+- Missing third-party nodes are dimmed instead of silently removed.
+- Node caching improves first display for large node libraries.
+
+![Nodes 2: favorites and official-favorites synchronization](Preview/a2.png)
+
+**Quick access:** `Shift+2` / `Shift+N`
+
+| Search-bar action | Purpose |
+| --- | --- |
+| New favorite group | Create a node-favorites group. |
+| Preview mode | Switch between detailed and compact node previews. |
+| Sort | Change the node display order. |
+| Favorite Manager | Import, export, back up, and restore official and WorkspaceKit favorites. |
 
 ### Templates
 
-Templates are for reusable connected node groups. They are useful for saving common node structures such as loaders, preprocessors, control blocks, output chains, or post-processing chains.
+Templates are reusable connected node groups. Use them for common structures such as loaders, preprocessing, control blocks, output chains, or post-processing chains.
 
 Key features:
 
-- Press `Alt+C` to save the currently selected nodes as a template.
+- Press `Alt+C` to save selected connected nodes as a template.
 - Preserves relative node positions and links.
-- Drag templates to the canvas.
-- Click a template, then click the canvas to place it.
+- Drag templates to the canvas or click a template and then the canvas to place it.
 - Template groups and subgroups.
-- Template search, sorting, rename, delete, trash, and restore.
+- Template search, sorting, inline rename, deletion, trash, and restore.
 - Template hover preview.
-- Template context menu: rename, place at canvas center, copy name, delete.
+- Context menu actions: rename, place at canvas center, and delete.
 - Inline delete confirmation for templates and template groups, followed by recoverable template trash.
 
-During the beta compatibility period, template data continues to use the existing Workspace2-compatible location under the ComfyUI user directory. Existing template data therefore remains available after upgrading to WorkspaceKit. Back up important template data regularly.
+![Templates: preview, rename, and context menu](Preview/a3.png)
+
+![Templates: trash and restore](Preview/a3.1.jpg)
+
+**Quick access:** `Shift+3` · **Save template:** `Alt+C`
+
+| Search-bar action | Purpose |
+| --- | --- |
+| New template group | Create a template group. |
+| Save selected nodes as template | Save the selected connected nodes. |
+| Sort | Change template ordering. |
+| Trash | View, restore, or permanently clear deleted templates. |
+
+During the beta compatibility period, template data continues to use the existing Workspace2-compatible location under the ComfyUI user directory. Existing template data remains available after upgrading to WorkspaceKit. Back up important template data regularly.
 
 ### Group Enhancements
 
@@ -102,28 +168,32 @@ Group Enhancements make canvas groups closer to common design-tool behavior.
 
 Key features:
 
-- `Ctrl+G` creates a WorkspaceKit group from the selected nodes.
+- `Ctrl+G` creates a WorkspaceKit group from selected nodes.
 - `Shift+G` removes one or more selected WorkspaceKit group frames without deleting their nodes.
 - `Ctrl/Meta + left click` toggles Ignore; `Alt + left click` toggles Disable.
-- `Shift + left click` adds or removes a WorkspaceKit group from the transient multi-selection.
+- `Shift + left click` adds or removes a WorkspaceKit group from transient multi-selection.
 - `Ctrl + drag` on blank canvas extends ComfyUI's native marquee to WorkspaceKit groups.
-- `Delete` removes selected WorkspaceKit group frames while leaving their nodes and links intact.
-- Right-click a group title bar to edit group style.
-- Save the current group style as one of the default group presets.
-- Configure group margin, border, shadow, animation, and related visual settings.
-- Group data is saved into the workflow.
+- `Delete` removes selected WorkspaceKit group frames while keeping nodes and links.
+- Right-click a group title bar to edit its style.
+- Save the current group style as a default preset.
+- Configure margin, border, shadow, animation, and related visual settings.
+- Group data is saved in the workflow.
 
-If `Ctrl+G` conflicts with an official ComfyUI keybinding, change the official keybinding first or disable the WorkspaceKit Ctrl+G option in settings.
+If `Ctrl+G` conflicts with an official ComfyUI keybinding, change the official binding first or disable the WorkspaceKit Ctrl+G option in settings.
 
 ### Title2
 
-Title2 is a lightweight visual title / annotation node for large workflows.
+Title2 is a lightweight visual title and annotation node for large workflows.
 
 Default style:
 
 - Font size: 24
 - Background: transparent
 - Corner radius: 15
+
+### Data Backup and Transfer
+
+WorkspaceKit can export and import data it manages, which is useful when migrating node favorites, templates, folder metadata, and settings. An automatic backup is created before import. Workflow files and the reproducible node cache are not included in the export package.
 
 ## Shortcuts
 
@@ -135,7 +205,7 @@ Default style:
 | `Shift+4` | Open the pinned compatible extension tab, when present |
 | `Alt+C` | Save selected nodes as a template |
 | `Ctrl+G` | Create WorkspaceKit group |
-| `Shift+G` | Ungroup |
+| `Shift+G` | Ungroup selected WorkspaceKit group frames |
 | `Delete` | Remove selected WorkspaceKit group frames; nodes are retained |
 | `Ctrl + click` folder toggle | Recursively expand or collapse folders / groups |
 | `Ctrl/Meta + left click` group header | Toggle Ignore for the group |
@@ -145,14 +215,26 @@ Default style:
 
 ## Installation
 
-Clone this repository into your ComfyUI `custom_nodes` directory:
+### Install with ComfyUI Manager / Registry (recommended)
+
+Search for `WorkspaceKit` or `comfyui-workspacekit` in ComfyUI Manager, install it, and restart ComfyUI.
+
+### Install with Git
+
+From ComfyUI's `custom_nodes` directory:
 
 ```bash
 cd ComfyUI/custom_nodes
 git clone https://github.com/ZiYao00/ComfyUI-WorkspaceKit.git
+cd ComfyUI-WorkspaceKit
+python -m pip install -r requirements.txt
 ```
 
-Then restart ComfyUI.
+Restart ComfyUI when finished. For Windows Portable, run this from its root directory:
+
+```powershell
+.\python_embeded\python.exe -m pip install -r .\ComfyUI\custom_nodes\ComfyUI-WorkspaceKit\requirements.txt
+```
 
 ## Requirements
 
@@ -162,7 +244,7 @@ WorkspaceKit recommends:
 send2trash
 ```
 
-Install the dependency inside the Python environment used by ComfyUI for better cross-platform system trash support:
+Install the dependency inside the Python environment used by ComfyUI for better cross-platform system-trash support:
 
 ```bash
 pip install -r requirements.txt
@@ -170,42 +252,54 @@ pip install -r requirements.txt
 
 Do not update your ComfyUI Python environment unless you understand the environment you are modifying.
 
-## System Trash Behavior
+## Data Safety and Backups
+
+### Two trash layers
 
 WorkspaceKit has two trash layers:
 
-- **WorkspaceKit trash**: recoverable trash used by Workflows 2. Templates also use a separate recoverable library trash.
-- **System trash**: the operating system trash / recycle bin.
+- **WorkspaceKit trash**: recoverable trash used by Workflows 2. Templates use a separate recoverable library trash.
+- **System trash**: the operating-system trash / recycle bin.
 
-On Windows, WorkspaceKit has a built-in recycle bin fallback. On other platforms, system trash support depends on `send2trash` and the desktop environment it supports.
+On Windows, WorkspaceKit has a built-in recycle-bin fallback. On other platforms, system-trash support depends on `send2trash` and the desktop environment it supports.
 
-## Before First Use
+### Before first use
 
-WorkspaceKit moves, renames, and organizes workflow files. Before using it in a main ComfyUI environment, back up:
+WorkspaceKit moves, renames, and organizes workflow files. Before first use in a main ComfyUI environment, back up:
 
 - Your ComfyUI workflow directory.
 - Your ComfyUI user settings.
-- Important node favorite data.
+- Important node-favorite data.
 - Important template data.
 
-## Known Issues
+## Five-Minute Quick Start
 
-- This is still a public beta, not a stable 1.0 release.
-- Screenshots and GIF tutorials are not included yet.
-- Very large workflow directories may take longer to scan and refresh.
-- The Registry listing is published; visual metadata such as an icon, banner, screenshots, and GIF tutorials can still be improved.
-- Template trash is available; undo, bulk recovery, and additional recovery UX can be improved in a future version.
-- Nodes 2 search speed, ranking quality, and pinyin matching still need more testing in very large node libraries.
+1. Open WorkspaceKit from the sidebar, then use `Shift+1`, `Shift+2`, and `Shift+3` to switch between Workflows, Nodes, and Templates.
+2. Create a folder in Workflows 2 and drag a workflow into it.
+3. Search for a frequently used node in Nodes 2 and drag it into a favorites group.
+4. Select connected nodes on the canvas and press `Alt+C` to save a template.
+5. Select nodes and press `Ctrl+G` to create your first WorkspaceKit group.
+
+## Current Status and Known Limits
+
+- This is a public beta, not a stable 1.0 release.
+- The README includes annotated instructional screenshots; GIF operation tutorials are still being prepared.
+- Very large workflow directories can take longer to scan and refresh.
+- The Registry listing is published; an icon, banner, and GIF tutorials can continue to improve.
+- Template trash is available; undo, bulk restore, and additional recovery UX can be improved later.
+- Nodes 2 search speed, ranking quality, and pinyin matching still need validation in very large node libraries.
 
 ## Project Notes
 
-I am a ComfyUI user, designer, and creator, not a professional programmer. This plugin was built with extensive help from Codex. Codex helped read old plugin code, inspect newer ComfyUI frontend behavior, migrate features, debug problems, and turn design ideas into a working extension.
+I am a ComfyUI user, designer, and creator, not a professional programmer. This plugin was built with extensive help from Codex. Codex helped read older plugin code, inspect newer ComfyUI frontend behavior, migrate features, debug problems, and turn design ideas into a working extension.
 
 Maintainer: ZiYao00
 
 Project homepage: https://github.com/ZiYao00/ComfyUI-WorkspaceKit
 
 Developer documentation: [Architecture](docs/ARCHITECTURE.md), [Module Map](docs/MODULE_MAP.md), [Testing Log](docs/TESTING.md), and [Contributing](CONTRIBUTING.md).
+
+See [CHANGELOG.md](CHANGELOG.md) for version history and [ROADMAP.zh-CN.md](ROADMAP.zh-CN.md) for planned work.
 
 ## Credits
 

@@ -2,6 +2,17 @@
 
 This document records reproducible test evidence and unresolved errors found while validating WorkspaceKit. Historical endpoint, storage, and implementation names such as `Workspace2` remain in individual records where they identify the compatibility layer. A recorded error is not treated as a confirmed WorkspaceKit root cause until the owning call chain is isolated.
 
+## 2026-07-27 - Public documentation synchronization
+
+- Reworked the Chinese README and synchronized the English public metadata.
+- Confirmed the five `Preview/` screenshots used by both README pages exist and
+  remain the selected public teaching assets.
+- Updated the README content audit, bilingual screenshot guides, bilingual
+  roadmaps, architecture branding note, and third-party compatibility wording.
+- Static documentation checks passed: `git diff --check` and local-link checks
+  for both README pages. This entry records documentation validation only; it
+  does not claim a new runtime or browser acceptance result.
+
 ## 2026-07-26 - Layout product-component convergence (hosted real page accepted)
 
 - Complete pre-change snapshots: WorkspaceKit

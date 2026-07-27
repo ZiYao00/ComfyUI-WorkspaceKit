@@ -1,6 +1,10 @@
 # Third-Party Notices
 
-ComfyUI-Workspace2 is an integrated ComfyUI extension. It includes ideas, adapted implementations, or migrated behavior from the following open-source projects.
+ComfyUI-WorkspaceKit is an integrated ComfyUI extension. It includes ideas, adapted implementations, or migrated behavior from the following open-source projects.
+
+Some runtime identifiers, storage keys, and compatibility paths still contain
+`workspace2` because they preserve data created by earlier Workspace2 versions.
+That compatibility name does not change the public project name.
 
 This project is not affiliated with, endorsed by, or maintained by the original authors of these projects.
 
@@ -17,7 +21,7 @@ MIT License
 Copyright (c) 2023 pythongosssss
 ```
 
-Usage in Workspace2:
+Usage in WorkspaceKit:
 
 - Node sidebar ideas.
 - Node search and favorite-management behavior.
@@ -37,7 +41,7 @@ MIT License
 Copyright (c) 2024 11cafe
 ```
 
-Usage in Workspace2:
+Usage in WorkspaceKit:
 
 - Workflow-management foundation.
 - Workspace organization concepts.
@@ -57,7 +61,7 @@ MIT License
 Copyright (c) 2025 xiaozhuguang
 ```
 
-Usage in Workspace2:
+Usage in WorkspaceKit:
 
 - Canvas group enhancement references.
 - Title-node references.
@@ -78,13 +82,13 @@ MIT License
 Copyright (c) 2022-present zh-lx
 ```
 
-Usage in Workspace2:
+Usage in WorkspaceKit:
 
-- Workspace2 bundles an ESM build as `entry/pinyin-pro.esm.js`.
+- WorkspaceKit bundles an ESM build as `entry/pinyin-pro.esm.js`.
 - Nodes2 uses it to support pinyin-based search for Chinese node names and categories.
 
 ## Notes
 
 Third-party code and adapted implementations remain subject to their original license terms.
 
-Where source files are directly copied or substantially adapted, original copyright and license notices should be preserved where practical. This notice file records the main upstream sources used to build ComfyUI-Workspace2.
+Where source files are directly copied or substantially adapted, original copyright and license notices should be preserved where practical. This notice file records the main upstream sources used to build ComfyUI-WorkspaceKit.

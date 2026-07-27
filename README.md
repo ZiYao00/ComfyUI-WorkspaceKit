@@ -14,6 +14,8 @@ ComfyUI-WorkspaceKit brings workflow management, node favorites, template reuse,
 
 Current status: **public beta, 0.2.4**. Back up important workflows, user settings, node favorites, and template data before first using it in a production ComfyUI environment.
 
+**Maintenance note:** Updates and Issue / PR replies may be delayed for the next 2–3 weeks.
+
 <p align="center">
   <a href="#why-workspacekit">Why WorkspaceKit</a> ·
   <a href="#core-features">Core features</a> ·
@@ -291,7 +293,7 @@ WorkspaceKit moves, renames, and organizes workflow files. Before first use in a
 
 ## Project Notes
 
-I am a ComfyUI user, designer, and creator, not a professional programmer. This plugin was built with extensive help from Codex. Codex helped read older plugin code, inspect newer ComfyUI frontend behavior, migrate features, debug problems, and turn design ideas into a working extension.
+This project was developed entirely with **Codex (ChatGPT)**. I am a ComfyUI designer and creator without programming knowledge. I define the product requirements, interaction design, testing, and feedback; Codex handles code reading, implementation, feature migration, debugging, and documentation.
 
 Maintainer: ZiYao00
 

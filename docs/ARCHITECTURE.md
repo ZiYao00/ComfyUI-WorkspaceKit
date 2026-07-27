@@ -2,7 +2,7 @@
 
 ## Current repository
 
-This repository was created from the existing `ComfyUI-Workspace2` history so that proven workflow, node, template, group, and trash behavior can be preserved. Public branding is moving to WorkspaceKit, while runtime identifiers remain unchanged until compatibility migrations are designed and tested.
+This repository was created from the existing `ComfyUI-Workspace2` history so that proven workflow, node, template, group, and trash behavior can be preserved. Public branding is **ComfyUI-WorkspaceKit**. Runtime identifiers and storage keys that contain `workspace2` remain unchanged until compatibility migrations are designed and tested.
 
 ## Target layers
 

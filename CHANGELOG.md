@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Reworked the Chinese README around the unified workspace concept and clarified
+  that the project is developed with Codex (ChatGPT) for a non-programmer
+  designer maintainer.
+- Synchronized English README metadata, public installation guidance, current
+  limitations, and Preview screenshot references.
+- Updated the README audit checklist, bilingual screenshot media guides,
+  bilingual roadmaps, architecture naming, and third-party notices.
+- Kept `workspace2` references where they identify compatibility storage keys,
+  runtime identifiers, or historical test evidence.
+
 ## 0.2.4 - 2026-07-22
 
 ### Fixed

@@ -19,19 +19,19 @@ This roadmap is for public GitHub readers. It tracks broad product direction, no
 - Persistent server-side `/object_info` snapshot cache: signature validation, compressed chunk upload, atomic disk writes, and browser IndexedDB reuse.
 - English and Chinese README documentation, issue templates, pull-request template, contribution guidance, and security policy.
 
-## In Progress
+## Current follow-up work
 
-- README screenshots and GIF tutorials.
+- GIF operation tutorials and remaining Registry visual assets; the five README Preview screenshots are confirmed and published.
 - Workflows2 open-history synchronization stability with the official ComfyUI workflow manager.
-- Unsaved-state indicators, save actions, and close behavior for current/open workflow rows.
+- Main-package regression for unsaved-state indicators, save actions, and close behavior for current/open workflow rows.
 - Official workflow-list refresh stability after Workflows2 rename, delete, and trash-empty actions.
 - Large node-library validation for setups with many custom nodes.
 - Node preview polish for complex nodes.
 - Template preview polish.
 - Final visual acceptance for section headers across dark, light, transparent, and frosted-glass backgrounds.
-- Safer template deletion with undo or a template trash mechanism.
-- Data backup and restore entry for WorkspaceKit settings, Nodes2 favorites, Templates, and folder metadata.
-- Registry visual identity and public release assets: icon, banner, screenshots, and GIF tutorials.
+- Bulk restore, undo UX, and additional protection for template deletion.
+- Continued backup and restore UX improvements for WorkspaceKit settings, Nodes2 favorites, Templates, and folder metadata.
+- Remaining Registry visual assets: banner and GIF tutorials; the five README screenshots are complete.
 
 ## Stabilization Batches
 
@@ -46,11 +46,11 @@ These batches are ordered from large-install and main-package feedback. Each bat
    - Use a shared server cache plus an IndexedDB snapshot, with one background update job shared across refreshes and browser tabs.
    - Do not build the full node index before Nodes2 is opened; validate plugin changes in low-priority batches.
    - Acceptance: cached Nodes2 first paint targets under 500ms; multiple tabs never duplicate an index build.
-   - Current: frontend phase timing, a lightweight node signature, browser IndexedDB reuse, cross-tab single-job coordination, and the signature-guarded server snapshot cache are implemented. On 2026-07-16, stale snapshots were correctly rejected as the live installation changed from 198 plugins / 6,135 nodes to 200 plugins / 6,323 nodes; Nodes2 rebuilt and atomically stored matching snapshots. A valid snapshot is now returned with negotiated gzip (11.89 MB transferred for the 6,323-node snapshot, instead of about 50.35 MB uncompressed). Parallel-tab timing remains release validation, not an implementation blocker.
+   - Current: frontend phase timing, lightweight signatures, browser IndexedDB reuse, cross-tab single-job coordination, and the signature-guarded server snapshot cache are implemented. Stale signatures are rejected and rebuilt; parallel-tab timing and large-install experience remain ongoing validation, not implementation blockers.
 3. **Templates delay retest and isolation**
    - Separate endpoint, JSON parsing, preview, and browser main-thread timing.
    - Node background updates must not block the Templates first paint; large previews are generated on demand.
-   - Current: verified in the test package with two templates: idle prefetch request 128.1ms, normalization 0.2ms, first render 2.6ms. The template page performed no `/object_info` refresh while it remained active. User acceptance passed; a main-package retest remains a release gate.
+   - Current: verified in the test package with two template environments; the Templates page performed no `/object_info` refresh while it remained active. User acceptance passed; main-package exception-path retesting remains a release gate.
 4. **Incremental Workflows2 updates**
    - Update local state first for create, rename, move, delete, and restore, then coalesce background refreshes.
    - Remove repeated full-directory scans and blocking official synchronization after operations.
@@ -66,7 +66,7 @@ These batches are ordered from large-install and main-package feedback. Each bat
    - Add minimal CI for Python, JavaScript, JSON, and service-level tests.
    - Add data export/import, schema versioning, and automatic pre-import backup.
    - Complete screenshots, GIF tutorials, and Registry visual identity (icon and banner).
-- Current: API, constants, performance logging, node-cache coordination, the Nodes panel-state preferences, library normalizer, initial-library loader, and object-info state helpers, the Templates data library, the official workflow adapter, the Workflows recent-history, open-state, item, and path-state stores, plus the Open/Browse section shell, tree builder, read-only Browse search, Browse-results refresh lifecycle, Browse context-menu renderer, trash-list renderer, Browse row renderer, and sort-menu renderer have been extracted. Issue/PR templates, contribution guidance, security policy, and the Registry release gate are complete. WorkspaceKit 0.2.2 is published to Comfy Registry. The sort-menu renderer has passed its menu/open-action UI check; one normal test-package Escape-key acceptance remains. The next extraction order is remaining Nodes cache lifecycle, Nodes UI, Templates UI, then Settings; preserve regression checks between each batch.
+- Current: API, constants, performance logging, node-cache coordination, Nodes state, Templates data, official workflow adapters, workflow state, and multiple Workflows UI renderers have been extracted. Issue/PR templates, contribution guidance, security policy, and the Registry release gate are complete. WorkspaceKit 0.2.4 public-beta documentation is synchronized. The next extraction order remains Nodes cache lifecycle, Nodes UI, Templates UI, then Settings; preserve regression checks between each batch.
 
 Test evidence, performance measurements, and errors without a confirmed root cause are recorded in `docs/TESTING.md`.
 

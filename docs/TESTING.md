@@ -11,7 +11,7 @@ This document records reproducible test evidence and unresolved errors found whi
 - **Last baseline re-run**: 2026-07-28.
 - **Historical figure `61/61`** in older entries reflects the contract count at that batch; the current figure is `64/64`.
 
-Backlog IDs referenced in entries below map to the internal `.dev-docs/BACKLOG.zh-CN.md` (T-001..T-503).
+Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.zh-CN.md` (T-xxx).
 
 ## 2026-07-29 - INCIDENT: dialogs factory TDZ crash (split #3 regression) + fix
 

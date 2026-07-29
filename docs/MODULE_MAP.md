@@ -145,7 +145,8 @@ the same pull request as any module ownership change.
 For every added, removed, merged, or materially repurposed module:
 
 1. Update this table with owner, injected dependencies, forbidden responsibilities, and validation state.
-2. Update `docs/ARCHITECTURE.md` when a boundary or extraction order changes.
-3. Add reproducible evidence or an explicit pending item to `docs/TESTING.md`.
-4. Update `CONTRIBUTING.md` and the PR template if the maintenance rule itself changes.
-5. Update both READMEs only when contributor-facing navigation or user-visible behavior changes.
+2. Add one line to `CHANGELOG.md` under the Unreleased section.
+
+Update `docs/ARCHITECTURE.md` only when a boundary or extraction order changes.
+Update `docs/TESTING.md` only for significant validation events or incidents.
+Update README files only when contributor-facing navigation or user-visible behavior changes.

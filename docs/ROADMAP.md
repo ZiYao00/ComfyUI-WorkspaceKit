@@ -199,3 +199,26 @@ Required acceptance before release:
    internal relative layout.
 4. Save/reload preserves the duplicate groups, while external links and queued
    execution remain unchanged.
+
+## Maintainability — incremental `entry.js` modularization
+
+`entry/entry.js` is the composition root and remains large. It is being reduced
+in small, individually validated splits so it converges toward orchestration
+plus narrow compatibility bridges only. Extracted modules are indexed in
+[`MODULE_MAP.md`](MODULE_MAP.md); the file's internal navigation is in
+[`ENTRY_MAP.md`](ENTRY_MAP.md).
+
+Progress (2026-07-29, `entry.js` 12,178 → 8,996 lines):
+
+- Extracted `ui/styles.js` (CSS), `core/fallback-strings.js` (i18n table),
+  `ui/dialogs.js` (modal primitives), `core/search-scoring.js` +
+  `nodes/search.js` (search scoring).
+- Remaining candidates: panel appearance/glass/background, official-node
+  adapter, node drag/drop. Each is extracted one at a time with syntax +
+  contract-test + real-page verification.
+
+Rule learned from a real regression: converting a hoisted `function` to a
+non-hoisted `const` factory binding requires the binding to sit above every
+reference site — otherwise module evaluation hits the temporal dead zone and the
+whole extension fails to register. Contract tests alone do not catch this; a
+real browser load does.

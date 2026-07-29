@@ -13,6 +13,14 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.zh-CN.md` (T-xxx).
 
+## 2026-07-29 - entry.js split #6: extract official adapter to `integrations/official-node-adapter.js`
+
+- Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-official-adapter-20260729-223230.zip` (247 files).
+- **Change**: moved the 13-function official-ComfyUI reflection cluster (old L897–1192: Vue-app / node-object / preview-DOM / library-DOM detection, favorites probing, and the import-to-official action) into `entry/integrations/official-node-adapter.js` behind a `createOfficialNodeAdapter({ nodesState, t, limitedKeys, valueAtPath, loadNodeLibrary, renderNodesPanel })` factory. Public surface is 5 functions; 7 stay private. `app`/`fetchJson`/`postJson`/`OFFICIAL_NODE_ADAPTER_KEY` are imported directly; the shared reflection utils `limitedKeys`/`valueAtPath` (used elsewhere) stay in entry.js and are injected. `nodesState` is injected as a shared reference because `officialFavoritesProbe` is also written by the caller `importOfficialFavorites`. The 4 `globalThis.__workspace2*` debug hooks moved verbatim (no readers elsewhere).
+- **Two bugs caught during the split (both invisible to `node --check`)**: (1) the extraction range was off by one line, leaving `importWorkspace2FavoritesToOfficial` without its closing brace — it silently swallowed the factory `return`; caught by structural brace review, fixed. (2) the `app` import used `../../scripts/app.js` but from `entry/integrations/` the correct depth is `../../../scripts/app.js` (verified against sibling `rgthree-fast-groups.js`); this would have failed only in a real browser load. Both fixed before commit.
+- **TDZ guard**: factory binding placed at the old cluster position (after `loadNodeLibrary` L854); every returned function's first actual use is at L4396+, well after. All moved functions are hoisted declarations.
+- **Regression**: `node --check` on both files; 65/65 mjs contracts green; import-depth and brace structure verified. Runtime load can't be Node-tested (imports ComfyUI's `scripts/app.js`), same as entry.js itself. `git diff` on `entry.js`: +15 / -296. `entry.js` dropped from ~8,750 to ~8,455 lines. **Real-page check pending user**: official-favorites import action + startup adapter detection (sidebar tab must still appear).
+
 ## 2026-07-29 - entry.js split #5: extract panel appearance to `ui/panel-appearance.js`
 
 - Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-panel-appearance-clean-20260729-220024.zip` (246 files). Started from a clean tree after the other session's group-colors feature (`73bd797`) was committed; baseline was 65/65 contracts.

@@ -41,11 +41,14 @@ composition root proper. Key: `state` (L728), `canvasGroupsState` (L783),
 `workflowTree/Search/Results/ContextMenu/Trash/Items` factories (L860–930),
 `personalizationPanel` (L937), `loadNodeLibrary` (L1290).
 
-### Official-ComfyUI adapter & favorites probing — L1306–1630
-Reflection into ComfyUI's Vue app to detect node objects, DOM, and native
-favorites. Key: `findOfficialVueApp` (L1334), `findOfficialNodeObjects` (L1354),
-`detectOfficialNodeAdapter` (L1415), `detectOfficialFavoritesProbe` (L1498),
-`collectOfficialFavoritesFromProbe` (L1528), `importWorkspace2FavoritesToOfficial` (L1608).
+### Official-ComfyUI adapter & favorites probing — EXTRACTED
+Reflection into ComfyUI's Vue app / node objects / DOM / native favorites and
+the favorites-import action have been extracted to
+[`entry/integrations/official-node-adapter.js`](../entry/integrations/official-node-adapter.js)
+via the `createOfficialNodeAdapter` factory (2026-07-29). entry.js injects
+`nodesState`, `t`, `limitedKeys`, `valueAtPath`, `loadNodeLibrary`,
+`renderNodesPanel`; the module imports `app`/`fetchJson`/`postJson`/
+`OFFICIAL_NODE_ADAPTER_KEY` directly. See MODULE_MAP.
 
 ### Locale, panel-provider lifecycle & shortcuts — L1631–2010
 i18n helpers, panel-provider registration lifecycle, keyboard shortcuts.
@@ -148,7 +151,7 @@ verification (see Step 3 of the large-file plan).
 | --- | --- | --- |
 | ~~`styles` CSS literal~~ | ~~L3096–5324~~ | ✅ **Extracted** to `entry/ui/styles.js` (2026-07-29) — see MODULE_MAP |
 | ~~`FALLBACK_STRINGS` table~~ | ~~L181–650~~ | ✅ **Extracted** to `entry/core/fallback-strings.js` (2026-07-29) — see MODULE_MAP |
-| Official adapter + favorites probing | L1306–1630 | Cohesive reflection-into-ComfyUI feature, no UI; → `integrations/official-node-adapter.js` |
+| ~~Official adapter + favorites probing~~ | ~~L1306–1630~~ | ✅ **Extracted** to `entry/integrations/official-node-adapter.js` (2026-07-29) via `createOfficialNodeAdapter` factory — see MODULE_MAP |
 | ~~Panel appearance / glass / background~~ | ~~L2010–2320~~ | ✅ **Extracted** to `entry/ui/panel-appearance.js` (2026-07-29) via `createPanelAppearance` factory — see MODULE_MAP |
 | Node drag/drop cluster | L8297–8992 | Self-contained pointer/canvas DnD engine; → `nodes/drag-drop.js` (mirrors `templates/drag-drop.js`) |
 | ~~Node search/scoring~~ | ~~L7375–7609~~ | ✅ **Extracted** (2026-07-29): generic primitives → `core/search-scoring.js`, node-specific → `nodes/search.js` via `createNodeSearch` factory. Dead `fuzzySearchMatch`/`nodeSearchText`/`nodePinyinSearchText` removed. See MODULE_MAP |

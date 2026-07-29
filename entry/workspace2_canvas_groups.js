@@ -33,8 +33,45 @@ const PRESET_STYLE_KEY = 'workspace2.canvasGroups.stylePresets';
 const ACTIVE_PRESET_KEY = 'workspace2.canvasGroups.activePreset';
 const PRESET_COUNT = 4;
 const DEFAULT_CONTENT_PADDING = 12;
-const DEFAULT_BACKGROUND_OPACITY = 0.25;
+// T-210a (2026-07-29): default header opacity matches ComfyUI/LiteGraph's group
+// fill coefficient (ctx.globalAlpha = 0.25 * editor_alpha). The body fill is now
+// always derived as headerAlpha * 0.5, so this compat default is 0.25 * 0.5.
+const DEFAULT_HEADER_OPACITY = 0.25;
+const BODY_TO_HEADER_OPACITY_RATIO = 0.5;
+// T-212b (2026-07-29): the title-bar opacity slider is capped at 50%. A higher
+// value made the derived body fill (headerAlpha * 0.5) too strong. Legacy data
+// above this is clamped down when the dialog opens (consistency over preserving
+// an out-of-range value).
+const MAX_HEADER_OPACITY = 0.5;
+const MIN_HEADER_OPACITY = 0.05;
+const DEFAULT_BACKGROUND_OPACITY = DEFAULT_HEADER_OPACITY * BODY_TO_HEADER_OPACITY_RATIO;
+const DEFAULT_HEADER_BG_COLOR = `rgba(0,0,0,${DEFAULT_HEADER_OPACITY})`;
 const DEFAULT_SHADOW_COLOR = '#000000';
+// T-210b/T-212a (2026-07-29): the background row shows 10 fixed color presets
+// evenly spaced on the hue wheel. Each is a COMPLETE color preset driven by a
+// single hue: it sets the title-bar color, the (derived) body fill, and the
+// font+border color together. The swatch button itself keeps showing the
+// title-bar color (hsl(H,25%,75%)); clicking it applies the whole preset.
+const GROUP_BACKGROUND_SWATCH_HUES = Object.freeze(
+    Array.from({ length: 10 }, (_, index) => index * 36)
+);
+const GROUP_BACKGROUND_SWATCH_SATURATION = 25;
+const GROUP_BACKGROUND_SWATCH_LIGHTNESS = 75;
+// T-212a/T-212c: per-theme preset recipes. Dark theme keeps the established
+// look (light swatch title bar + bright same-hue font). Light theme uses a
+// slightly deeper title bar and pure-white font/border so text stays legible on
+// a light canvas. The header alpha is applied separately; only RGB comes from
+// these. Light values are the user's tested choice (2026-07-29).
+const GROUP_PRESET_THEME = Object.freeze({
+    dark: Object.freeze({
+        title: Object.freeze({ s: GROUP_BACKGROUND_SWATCH_SATURATION, l: GROUP_BACKGROUND_SWATCH_LIGHTNESS }),
+        font: Object.freeze({ s: 100, l: 90 }),
+    }),
+    light: Object.freeze({
+        title: Object.freeze({ s: 50, l: 80 }),
+        font: null, // null → pure white (#ffffff)
+    }),
+});
 const DEFAULT_GROUP_TITLE_KEY = 'groups.defaultTitle';
 
 function defaultGroupTitle() {
@@ -58,24 +95,96 @@ const finiteNumber = (value, fallback) => {
 
 // The body fill deliberately reuses the title-bar RGB value.  Only its alpha
 // is independent, so users do not have to maintain a second color swatch.
+const clamp01 = value => Math.max(0, Math.min(1, finiteNumber(value, 0)));
+
 const parseRgbaRgb = (value, fallback = { r: 0, g: 0, b: 0 }) => {
     const m = String(value || '').match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
     if (!m) return fallback;
     return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
 };
 
-const parseRgbaAlpha = (value, fallback = 0.4) => {
+const parseRgbaAlpha = (value, fallback = DEFAULT_HEADER_OPACITY) => {
     const m = String(value || '').match(/rgba?\([\d,\.\s]+,\s*([\d.]+)\)$/i);
     return m ? finiteNumber(m[1], fallback) : fallback;
 };
 
+// T-210b (2026-07-29): body fill RGB is always the title-bar RGB, and body alpha
+// is strictly half the title-bar alpha. No independent backgroundOpacity slider
+// value gates it anymore (the earlier min-of-header-and-background clamp is
+// gone), so the body cannot desync from the title bar.
 const groupBodyBackground = group => {
     if (!group?.backgroundFillEnabled) return 'transparent';
     const rgb = parseRgbaRgb(group.headerBgColor);
-    const headerAlpha = Math.max(0.05, Math.min(0.95, parseRgbaAlpha(group.headerBgColor)));
-    const alpha = Math.min(headerAlpha, Math.max(0.05, Math.min(0.95, finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY))));
+    const headerAlpha = clamp01(parseRgbaAlpha(group.headerBgColor, DEFAULT_HEADER_OPACITY));
+    const bodyAlpha = clamp01(headerAlpha * BODY_TO_HEADER_OPACITY_RATIO);
+    return `rgba(${rgb.r},${rgb.g},${rgb.b},${bodyAlpha})`;
+};
+
+// HSL (H in [0,360), S/L in [0,100]) → {r,g,b} in [0,255]. Used for the fixed
+// background swatches and for hex conversion of swatch colors.
+const hslToRgb = (h, s, l) => {
+    const sat = clamp01(s / 100);
+    const lit = clamp01(l / 100);
+    const a = sat * Math.min(lit, 1 - lit);
+    const f = n => {
+        const k = (n + h / 30) % 12;
+        return Math.round(255 * (lit - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)));
+    };
+    return { r: f(0), g: f(8), b: f(4) };
+};
+
+const rgbToHex = ({ r, g, b }) =>
+    '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('');
+
+// The 10 fixed color presets, precomputed once. Each entry keeps the hue so an
+// aria-label can report it, plus the swatch's own display rgb/hex (the title-bar
+// color, hsl(H,25%,75%)). Clicking a preset applies a full theme-aware recipe
+// (title + font + border) via computeGroupColorPreset(); the swatch shown stays
+// this title-bar color regardless of theme (per user: swatch display unchanged).
+const GROUP_COLOR_PRESETS = Object.freeze(GROUP_BACKGROUND_SWATCH_HUES.map(hue => {
+    const rgb = hslToRgb(hue, GROUP_BACKGROUND_SWATCH_SATURATION, GROUP_BACKGROUND_SWATCH_LIGHTNESS);
+    return Object.freeze({ hue, rgb, hex: rgbToHex(rgb) });
+}));
+
+// Replace only the RGB channels of an rgba() string, preserving its alpha.
+const replaceRgbaRgbPreserveAlpha = (rgba, rgb, fallbackAlpha = DEFAULT_HEADER_OPACITY) => {
+    const alpha = clamp01(parseRgbaAlpha(rgba, fallbackAlpha));
     return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
 };
+
+// Relative luminance of an "r,g,b" or {r,g,b} value, 0..1 (sRGB-weighted).
+const rgbLuma = ({ r, g, b }) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+
+// T-212c: detect whether the current ComfyUI theme is light. Read the content
+// background color variable; if its luma is high, we are on a light theme. This
+// runs at preset-click time only (design decision "A"): the resolved color is
+// stored on the group, not recomputed per render. Defaults to dark on any error.
+const isLightGroupTheme = () => {
+    try {
+        const probe = document.createElement('div');
+        probe.style.cssText = 'position:absolute;left:-9999px;background:var(--p-content-background,var(--comfy-menu-bg,#1e1e1e));';
+        document.body.appendChild(probe);
+        const resolved = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        const rgb = parseRgbaRgb(resolved, null);
+        if (!rgb) return false;
+        return rgbLuma(rgb) > 0.5;
+    } catch {
+        return false;
+    }
+};
+
+// T-212a: derive a complete color preset from a single hue for the active theme.
+// Returns { titleRgb, fontHex } — title-bar RGB (alpha applied by caller) and the
+// font/border color. Dark: light title + bright same-hue font. Light: deeper
+// title + pure-white font.
+const computeGroupColorPreset = (hue, light) => {
+    const recipe = light ? GROUP_PRESET_THEME.light : GROUP_PRESET_THEME.dark;
+    const titleRgb = hslToRgb(hue, recipe.title.s, recipe.title.l);
+    const fontHex = recipe.font ? rgbToHex(hslToRgb(hue, recipe.font.s, recipe.font.l)) : '#ffffff';
+    return { titleRgb, fontHex };
+};
+
 
 const Workspace2CanvasGroups = {
     initialized: false,
@@ -191,7 +300,7 @@ const Workspace2CanvasGroups = {
         ctx.save();
         for (const group of groups) {
             const b = group._previewBounds || group.bounds;
-            const headerHeight = Math.max(21, Math.round((group.fontSize || 14) * 1.5));
+            const headerHeight = Math.max(21, Math.round((group.fontSize || 14) * 1.8));
             const x = b.x;
             const y = b.y + headerHeight;
             const w = Math.max(0, b.w);
@@ -378,7 +487,7 @@ const Workspace2CanvasGroups = {
             const showSelection = this.selectedGroupIds.has(gid);
             el.classList.toggle('is-xzg-group-selected', showSelection);
             el.style.outline = showSelection ? '1px solid rgba(180, 180, 180, 0.5)' : 'none';
-            el.style.outlineOffset = showSelection ? '2px' : '0';
+            el.style.outlineOffset = showSelection ? '4px' : '0';
         }
     },
 
@@ -509,7 +618,7 @@ const Workspace2CanvasGroups = {
             // 标题文字/栏高度跟随画布缩放（无标题时保留最小操作区域）
             const fs = (g.fontSize || 14) * scale;
             const showTitle = (g.title || '').trim() !== '';
-            const headerHeight = Math.max(21 * scale, fs * 1.5);
+            const headerHeight = Math.max(21 * scale, fs * 1.8);
             const header = el.querySelector('.xzg-group-header');
             if (header) {
                 const padV = 2 * scale;
@@ -519,7 +628,7 @@ const Workspace2CanvasGroups = {
                 header.style.paddingRight = (6 * scale) + 'px';
                 header.style.paddingTop = padV + 'px';
                 header.style.paddingBottom = padV + 'px';
-                header.style.background = showTitle ? (g.headerBgColor || 'rgba(0,0,0,0.4)') : 'transparent';
+                header.style.background = showTitle ? (g.headerBgColor || DEFAULT_HEADER_BG_COLOR) : 'transparent';
             }
             const body = el.querySelector('.xzg-group-body');
             if (body) {
@@ -756,7 +865,7 @@ const Workspace2CanvasGroups = {
 
     getBuiltInStyle() {
         return {
-            fontSize: 14,
+            fontSize: 16,
             colorHue: 48,
             colorSat: 100,
             colorLit: 55,
@@ -768,7 +877,7 @@ const Workspace2CanvasGroups = {
             shadowSize: 0,
             shadowColor: DEFAULT_SHADOW_COLOR,
             contentPadding: DEFAULT_CONTENT_PADDING,
-            headerBgColor: 'rgba(0,0,0,0.4)',
+            headerBgColor: DEFAULT_HEADER_BG_COLOR,
             backgroundFillEnabled: false,
             backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
             titleColor: '#FFD700'
@@ -838,7 +947,7 @@ const Workspace2CanvasGroups = {
             shadowSize: Math.max(0, finiteNumber(group.shadowSize, 0)),
             shadowColor: group.shadowColor || DEFAULT_SHADOW_COLOR,
             contentPadding: group.contentPadding ?? DEFAULT_CONTENT_PADDING,
-            headerBgColor: group.headerBgColor || 'rgba(0,0,0,0.4)',
+            headerBgColor: group.headerBgColor || DEFAULT_HEADER_BG_COLOR,
             backgroundFillEnabled: Boolean(group.backgroundFillEnabled),
             backgroundOpacity: Math.max(0.05, Math.min(0.95, finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY))),
             titleColor: group.titleColor || '#FFD700'
@@ -954,7 +1063,7 @@ const Workspace2CanvasGroups = {
         const style = { ...this.readDefaultStyle(), ...options };
         const p = Math.max(0, Number(style.contentPadding ?? DEFAULT_CONTENT_PADDING) || 0);
         const fs = style?.fontSize || 14;
-        const headerHeight = Math.max(21, Math.round(fs * 1.5));
+        const headerHeight = Math.max(21, Math.round(fs * 1.8));
         const topPad = headerHeight + p;
         return { x: minX - p, y: minY - topPad, w: maxX - minX + p * 2, h: maxY - minY + topPad + p };
     },
@@ -1178,12 +1287,12 @@ const Workspace2CanvasGroups = {
         el.style.cssText = `position:absolute;pointer-events:none;border:${bw}px solid hsla(48,100%,55%,${bo});border-radius:8px;background:transparent;box-sizing:border-box;z-index:5;`;
         const fs = group.fontSize || 14;
         const showTitle = (group.title || '').trim() !== '';
-        const headerHeight = Math.max(21, Math.round(fs * 1.5));
+        const headerHeight = Math.max(21, Math.round(fs * 1.8));
         el.innerHTML = `
             <div class="xzg-group-body" style="position:absolute;left:0;right:0;top:${headerHeight}px;bottom:0;background:transparent;border-radius:0 0 7px 7px;pointer-events:none;z-index:1;"></div>
-            <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || 'rgba(0,0,0,0.4)') : 'transparent'};border-radius:7px 7px 0 0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
-                <div style="flex:1 1 auto;min-width:0;overflow:hidden;">
-                    <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1.4;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
+            <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || DEFAULT_HEADER_BG_COLOR) : 'transparent'};border-radius:7px 7px 0 0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
+                <div style="flex:1 1 auto;min-width:0;overflow:hidden;display:flex;align-items:center;height:100%;">
+                    <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1.4;overflow:hidden;text-overflow:ellipsis;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
                 </div>
                 <div class="xzg-group-header-actions" style="display:flex;align-items:center;gap:3px;flex:0 0 auto;margin-left:4px;">
                     <button class="xzg-group-mode-btn xzg-group-queue-btn" data-group-action="queue" title="${t('groups.actionQueue')}" aria-label="${t('groups.actionQueue')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;">
@@ -1456,8 +1565,8 @@ const Workspace2CanvasGroups = {
         let activePresetIndex = activePresetSnapshot;
 
         const curKey = this.shortcutKey || 'g';
-        const initRgba = group.headerBgColor || 'rgba(0,0,0,0.4)';
-        const initAlpha = Math.max(0.05, Math.min(0.95, parseFloat(initRgba.replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1')) || 0.4));
+        const initRgba = group.headerBgColor || DEFAULT_HEADER_BG_COLOR;
+        const initAlpha = Math.max(MIN_HEADER_OPACITY, Math.min(MAX_HEADER_OPACITY, parseFloat(initRgba.replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1')) || DEFAULT_HEADER_OPACITY));
         const initHex = (() => {
             const m = initRgba.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
             if (m) return '#' + [m[1],m[2],m[3]].map(x => parseInt(x).toString(16).padStart(2,'0')).join('');
@@ -1474,7 +1583,7 @@ const Workspace2CanvasGroups = {
                     <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.name')}</label>
                     <input class="xzg-set-title" value="${group.title}" style="flex:1;height:28px;padding:0 8px;background:#2a2a2a;border:1px solid rgba(255,255,255,0.08);border-radius:4px;color:#fff;font-size:12px;box-sizing:border-box;">
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:2px;">
                     <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.fontSize')}</label>
                     <input class="xzg-set-fontsize" type="range" min="6" max="48" value="${group.fontSize || 14}" style="flex:1;height:28px;margin:0;">
                     <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
@@ -1482,31 +1591,28 @@ const Workspace2CanvasGroups = {
                         <div class="xzg-title-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${group.titleColor || '#FFD700'};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                     </div>
                 </div>
+                <div style="display:flex;align-items:center;gap:6px;min-height:22px;margin-bottom:8px;">
+                    <label style="color:#fff;opacity:0.6;font-size:11px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input class="xzg-set-unified-color" type="checkbox" ${group.useUnifiedColor ? 'checked' : ''} style="margin:0;flex:0 0 auto;"><span>${t('groups.unifyFontBorderColor')}</span></label>
+                </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;">
                     <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.headerOpacity')}</label>
-                    <input class="xzg-set-headeropacity" type="range" min="5" max="95" value="${Math.max(5, Math.min(95, Math.round(initAlpha * 100)))}" style="flex:1;height:28px;margin:0;">
+                    <input class="xzg-set-headeropacity" type="range" min="5" max="50" value="${Math.max(5, Math.min(50, Math.round(initAlpha * 100)))}" style="flex:1;height:28px;margin:0;">
                     <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
-                        <span class="xzg-header-opacity-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.max(5, Math.min(95, Math.round(initAlpha * 100)))}%</span>
+                        <span class="xzg-header-opacity-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.max(5, Math.min(50, Math.round(initAlpha * 100)))}%</span>
                         <div class="xzg-header-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${initHex};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                         <input class="xzg-set-headerbgcolor" type="color" value="${initHex}" style="position:absolute;width:0;height:0;opacity:0;padding:0;border:0;">
                     </div>
                 </div>
-                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-top:8px;">
-                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;display:flex;align-items:center;gap:5px;opacity:.45;" title="${t('groups.backgroundFillDisabledHint')}"><input class="xzg-set-background-fill" type="checkbox" ${group.backgroundFillEnabled ? 'checked' : ''} disabled style="margin:0;flex:0 0 auto;"><span>${t('groups.backgroundFill')}</span></label>
-                    <input class="xzg-set-background-opacity" type="range" min="5" max="95" value="${Math.max(5, Math.min(95, Math.round(finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY) * 100)))}" disabled title="${t('groups.backgroundFillDisabledHint')}" style="flex:1;height:28px;margin:0;opacity:.35;">
-                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
-                        <span class="xzg-background-opacity-val" style="color:#fff;font-size:12px;width:30px;text-align:left;opacity:.45;">${Math.max(5, Math.min(95, Math.round(finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY) * 100)))}%</span>
+                <div style="display:flex;align-items:center;gap:6px;min-height:28px;margin-top:8px;">
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;display:flex;align-items:center;gap:5px;cursor:pointer;"><input class="xzg-set-background-fill" type="checkbox" ${group.backgroundFillEnabled ? 'checked' : ''} style="margin:0;flex:0 0 auto;"><span>${t('groups.backgroundFill')}</span></label>
+                    <div class="xzg-background-swatches" style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+                        ${GROUP_COLOR_PRESETS.map(sw => `<button type="button" class="xzg-bg-swatch" data-hue="${sw.hue}" data-hex="${sw.hex}" title="${t('groups.colorPreset')} H ${sw.hue}°" aria-label="${t('groups.colorPreset')} H ${sw.hue}°" style="width:18px;height:18px;padding:0;border-radius:4px;cursor:pointer;background:${sw.hex};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></button>`).join('')}
                     </div>
                 </div>
             </div>
             <div style="border-top:1px solid rgba(255,255,255,0.1);margin-bottom:12px;padding-top:0;"></div>
             <div style="margin-bottom:12px;">
                 <label class="workspacekit-dialog-section" style="color:#ff8c00;font-size:14px;display:block;margin-bottom:8px;font-weight:600;">${t('groups.borderSettings')}</label>
-                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;display:flex;align-items:center;gap:5px;"><input class="xzg-set-unified-color" type="checkbox" ${group.useUnifiedColor ? 'checked' : ''} style="margin:0;flex:0 0 auto;"><span>${t('groups.unified')}</span></label>
-                    <input class="xzg-set-unified-hue" type="range" min="0" max="360" value="${curH}" ${group.useUnifiedColor ? '' : 'disabled'} style="flex:1;height:28px;margin:0;${group.useUnifiedColor ? '' : 'opacity:.35;'}">
-                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;"><div class="xzg-unified-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:${group.useUnifiedColor ? 'pointer' : 'default'};background:${this.hslToHex(curH, curS, curL)};border:1px solid rgba(255,255,255,0.2);opacity:${group.useUnifiedColor ? '1' : '.35'};flex-shrink:0;"></div></div>
-                </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
                     <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.opacity')}</label>
                     <input class="xzg-set-borderopacity" type="range" min="5" max="100" value="${Math.round((group.borderOpacity??0.65)*100)}" style="flex:1;height:28px;margin:0;">
@@ -1516,18 +1622,18 @@ const Workspace2CanvasGroups = {
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.borderWidth')}</label>
-                    <input class="xzg-set-borderwidth" type="range" min="0" max="5" value="${finiteNumber(group.borderWidth, 2)}" style="flex:1;height:28px;margin:0;">
-                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
-                        <span class="xzg-set-bw-val" style="color:#fff;font-size:12px;text-align:left;">${finiteNumber(group.borderWidth, 2)}px</span>
-                    </div>
-                </div>
-                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
                     <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.shadow')}</label>
                     <input class="xzg-set-shadowsize" type="range" min="0" max="40" value="${Math.max(0, finiteNumber(group.shadowSize, 0))}" style="flex:1;height:28px;margin:0;">
                     <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-set-shadow-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.max(0, finiteNumber(group.shadowSize, 0))}px</span>
                         <div class="xzg-shadow-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${group.shadowColor || DEFAULT_SHADOW_COLOR};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.borderWidth')}</label>
+                    <input class="xzg-set-borderwidth" type="range" min="0" max="5" value="${finiteNumber(group.borderWidth, 2)}" style="flex:1;height:28px;margin:0;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
+                        <span class="xzg-set-bw-val" style="color:#fff;font-size:12px;text-align:left;">${finiteNumber(group.borderWidth, 2)}px</span>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
@@ -1545,8 +1651,6 @@ const Workspace2CanvasGroups = {
                             <option value="rainbow" ${group.effect==='rainbow'?'selected':''}>${t('groups.effect.rainbow')}</option>
                             <option value="pulse" ${group.effect==='pulse'?'selected':''}>${t('groups.effect.pulse')}</option>
                             <option value="glow" ${group.effect==='glow'?'selected':''}>${t('groups.effect.glow')}</option>
-                            <option value="marquee" ${group.effect==='marquee'?'selected':''}>${t('groups.effect.marquee')}</option>
-                            <option value="marqueebreathe" ${group.effect==='marqueebreathe'?'selected':''}>${t('groups.effect.marqueeBreathe')}</option>
                         </select>
                         <input class="xzg-set-speed" type="range" min="1" max="10" value="${group.effectSpeed||3}" style="flex:1;min-width:64px;height:28px;margin:0;">
                     </div>
@@ -1703,9 +1807,8 @@ const Workspace2CanvasGroups = {
         modal.appendChild(titleColorPicker);
         const titleColorSwatch = modal.querySelector('.xzg-title-color-swatch');
         if (titleColorSwatch) {
-            titleColorSwatch.addEventListener('click', () => {
-                if (!group.useUnifiedColor) titleColorPicker.click();
-            });
+            // Font color is always editable now (it is the unified entry point too).
+            titleColorSwatch.addEventListener('click', () => titleColorPicker.click());
         }
         titleColorPicker.addEventListener('input', () => {
             const c = titleColorPicker.value;
@@ -1713,6 +1816,9 @@ const Workspace2CanvasGroups = {
             group.titleColor = c;
             const span = self.groupEls[group.id]?.querySelector('.xzg-group-title-text');
             if (span) span.style.color = c;
+            // T-210c: when unified, the font color also drives the border color
+            // (borderOpacity untouched); when not unified, border data is left alone.
+            if (group.useUnifiedColor) syncBorderColorFromTitle();
         });
 
         // 阴影颜色 - 隐藏颜色选择器
@@ -1740,19 +1846,12 @@ const Workspace2CanvasGroups = {
         hiddenPicker.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;padding:0;border:0;opacity:0;';
         modal.appendChild(hiddenPicker);
         const colorTrigger = modal.querySelector('.xzg-custom-color-trigger');
-        // Keep the unified swatch derived from the same color source as the
-        // title and border controls.  Previously it was only refreshed while
-        // dragging the hue slider, so a color picked from the native picker
-        // left this visible swatch stale.
         const unifiedToggle = modal.querySelector('.xzg-set-unified-color');
-        const unifiedHue = modal.querySelector('.xzg-set-unified-hue');
-        const unifiedSwatch = modal.querySelector('.xzg-unified-color-swatch');
 
         const syncColorFromHSL = (h, s, l) => {
             sel = { h, s, l };
             hiddenPicker.value = this.hslToHex(h, s, l);
             if (colorTrigger) colorTrigger.style.background = hiddenPicker.value;
-            if (unifiedSwatch) unifiedSwatch.style.background = hiddenPicker.value;
             // 实时预览到编组框体
             group.colorHue = h;
             group.colorSat = s;
@@ -1761,60 +1860,51 @@ const Workspace2CanvasGroups = {
         };
         syncColorFromHSL(curH, curS, curL);
 
-        // 七彩条点击→弹出系统颜色选择器
+        // T-210c (2026-07-29): when unified, the font-color control is the single
+        // color entry. It drives titleColor AND the border HSL (colorHue/Sat/Lit),
+        // but never touches borderOpacity. Border color data is only written while
+        // unified is on; turning it off stops the sync and leaves border HSL intact.
+        const syncBorderColorFromTitle = () => {
+            const hsl = this.hexToHsl(titleColorPicker.value);
+            syncColorFromHSL(hsl.h, hsl.s, hsl.l);
+        };
+
+        // 七彩条点击→弹出系统颜色选择器（统一时禁用，颜色由字体颜色驱动）
         if (colorTrigger) {
             colorTrigger.addEventListener('click', () => {
                 if (!group.useUnifiedColor) hiddenPicker.click();
             });
         }
 
-        // 选色后更新
+        // 选色后更新（边框自定义颜色，仅在非统一态可用）
         hiddenPicker.addEventListener('input', () => {
             const hsl = this.hexToHsl(hiddenPicker.value);
             syncColorFromHSL(hsl.h, hsl.s, hsl.l);
-            if (group.useUnifiedColor) {
-                titleColorPicker.value = hiddenPicker.value;
-                titleColorSwatch.style.background = hiddenPicker.value;
-                group.titleColor = hiddenPicker.value;
-            }
         });
 
         const setUnifiedUiState = (enabled) => {
-            unifiedHue.disabled = !enabled;
-            unifiedHue.style.opacity = enabled ? '1' : '.35';
-            unifiedSwatch.style.opacity = enabled ? '1' : '.35';
-            unifiedSwatch.style.cursor = enabled ? 'pointer' : 'default';
-            for (const swatch of [titleColorSwatch, colorTrigger]) {
-                swatch.style.display = 'inline-flex';
-                swatch.style.alignItems = 'center';
-                swatch.style.justifyContent = 'center';
-                swatch.style.cursor = enabled ? 'not-allowed' : 'pointer';
-                swatch.style.border = enabled ? '1.5px solid #ff5d5d' : '1px solid rgba(255,255,255,0.2)';
-                swatch.style.color = enabled ? '#ff5d5d' : '';
-                swatch.style.fontSize = enabled ? '16px' : '';
-                swatch.style.fontWeight = enabled ? '700' : '';
-                swatch.style.lineHeight = '1';
-                swatch.textContent = enabled ? '×' : '';
-                swatch.style.background = enabled ? 'transparent' : (swatch === titleColorSwatch ? titleColorPicker.value : hiddenPicker.value);
+            // The border custom-color trigger is disabled while unified: the font
+            // color owns the border color. Show a clear "locked" affordance.
+            if (colorTrigger) {
+                colorTrigger.style.display = 'inline-flex';
+                colorTrigger.style.alignItems = 'center';
+                colorTrigger.style.justifyContent = 'center';
+                colorTrigger.style.cursor = enabled ? 'not-allowed' : 'pointer';
+                colorTrigger.style.border = enabled ? '1.5px solid #ff5d5d' : '1px solid rgba(255,255,255,0.2)';
+                colorTrigger.style.color = enabled ? '#ff5d5d' : '';
+                colorTrigger.style.fontSize = enabled ? '16px' : '';
+                colorTrigger.style.fontWeight = enabled ? '700' : '';
+                colorTrigger.style.lineHeight = '1';
+                colorTrigger.textContent = enabled ? '×' : '';
+                colorTrigger.style.background = enabled ? 'transparent' : hiddenPicker.value;
             }
-        };
-        const applyUnifiedColor = () => {
-            const h = parseInt(unifiedHue.value) || 0;
-            syncColorFromHSL(h, sel.s, sel.l);
-            const hex = hiddenPicker.value;
-            titleColorPicker.value = hex;
-            titleColorSwatch.style.background = hex;
-            unifiedSwatch.style.background = hex;
-            group.titleColor = hex;
         };
         unifiedToggle.addEventListener('change', () => {
             group.useUnifiedColor = unifiedToggle.checked;
             setUnifiedUiState(group.useUnifiedColor);
-            if (group.useUnifiedColor) applyUnifiedColor();
-        });
-        unifiedHue.addEventListener('input', applyUnifiedColor);
-        unifiedSwatch.addEventListener('click', () => {
-            if (group.useUnifiedColor) hiddenPicker.click();
+            // Turning it on immediately unifies the border to the current font
+            // color; turning it off changes nothing else (border HSL preserved).
+            if (group.useUnifiedColor) syncBorderColorFromTitle();
         });
         setUnifiedUiState(Boolean(group.useUnifiedColor));
 
@@ -1824,13 +1914,33 @@ const Workspace2CanvasGroups = {
         const headerOpacitySlider = modal.querySelector('.xzg-set-headeropacity');
         const headerOpacityVal = modal.querySelector('.xzg-header-opacity-val');
         const backgroundFillToggle = modal.querySelector('.xzg-set-background-fill');
-        const backgroundOpacitySlider = modal.querySelector('.xzg-set-background-opacity');
-        const backgroundOpacityVal = modal.querySelector('.xzg-background-opacity-val');
+        const bgSwatchButtons = Array.from(modal.querySelectorAll('.xzg-bg-swatch'));
         let headerAlpha = initAlpha;
 
         // 缓存 header 元素引用
         const groupEl = this.groupEls[group.id];
         const headerEl = groupEl ? groupEl.querySelector('.xzg-group-header') : null;
+
+        // T-212a: highlight the preset whose title-bar color matches the current
+        // one. A preset can produce a dark-theme OR light-theme title color, so
+        // match against both recipes; a custom color highlights nothing.
+        const refreshBgSwatchSelection = () => {
+            const hex = (headerColorPicker.value || '').toLowerCase();
+            for (const btn of bgSwatchButtons) {
+                const hue = parseInt(btn.dataset.hue, 10) || 0;
+                const darkHex = rgbToHex(computeGroupColorPreset(hue, false).titleRgb).toLowerCase();
+                const lightHex = rgbToHex(computeGroupColorPreset(hue, true).titleRgb).toLowerCase();
+                const match = hex === darkHex || hex === lightHex;
+                btn.style.outline = match ? '2px solid var(--p-primary-color, #0a84ff)' : 'none';
+                btn.style.outlineOffset = match ? '1px' : '0';
+            }
+        };
+
+        // T-210b: the body fill follows the title bar. Whenever the title-bar
+        // color/opacity changes we re-derive the body via groupBodyBackground().
+        const refreshBodyFillPreview = () => {
+            self.updateGroupStyle(group.id);
+        };
 
         const updateHeaderBg = () => {
             const hex = headerColorPicker.value;
@@ -1841,6 +1951,8 @@ const Workspace2CanvasGroups = {
             group.headerBgColor = rgba;
             if (headerColorSwatch) headerColorSwatch.style.background = hex;
             if (headerEl) headerEl.style.background = rgba;
+            refreshBgSwatchSelection();
+            refreshBodyFillPreview();
             self.updatePositions();
         };
 
@@ -1850,50 +1962,46 @@ const Workspace2CanvasGroups = {
         headerColorPicker.addEventListener('input', updateHeaderBg);
         headerColorPicker.addEventListener('change', updateHeaderBg);
 
-        // 透明度滑块
+        // 透明度滑块：标题栏透明度改变时，背景透明度按 50% 自动跟随（派生，无独立滑块）
         headerOpacitySlider.addEventListener('input', () => {
             headerAlpha = parseInt(headerOpacitySlider.value) / 100;
             headerOpacityVal.textContent = headerOpacitySlider.value + '%';
-            // T-203 (2026-07-28): the background-fill controls are temporarily
-            // disabled, so the header-opacity slider no longer syncs the
-            // background-opacity limit. That coupling made the background value
-            // move on its own when the user dragged only the header slider.
-            // Re-enable syncBackgroundOpacityLimit() here when the background
-            // fill UX is redesigned.
             updateHeaderBg();
         });
 
-        const setBackgroundFillUiState = enabled => {
-            backgroundOpacitySlider.disabled = !enabled;
-            backgroundOpacitySlider.style.opacity = enabled ? '1' : '.35';
-            backgroundOpacityVal.style.opacity = enabled ? '1' : '.45';
+        // T-212a: each swatch is a COMPLETE color preset. Clicking one applies a
+        // theme-aware recipe (title bar + font + border) derived from its hue,
+        // keeping the current header opacity, and turns on unified font/border
+        // color. Theme is detected once here (design decision A).
+        const applyColorPreset = hue => {
+            const light = isLightGroupTheme();
+            const { titleRgb, fontHex } = computeGroupColorPreset(hue, light);
+            // Title bar: set RGB, preserve current alpha.
+            headerColorPicker.value = rgbToHex(titleRgb);
+            // Font + border: unify to the preset font color.
+            titleColorPicker.value = fontHex;
+            if (titleColorSwatch) titleColorSwatch.style.background = fontHex;
+            group.titleColor = fontHex;
+            const span = self.groupEls[group.id]?.querySelector('.xzg-group-title-text');
+            if (span) span.style.color = fontHex;
+            unifiedToggle.checked = true;
+            group.useUnifiedColor = true;
+            setUnifiedUiState(true);
+            const hsl = self.hexToHsl(fontHex);
+            syncColorFromHSL(hsl.h, hsl.s, hsl.l);
+            updateHeaderBg();
         };
-        const syncBackgroundOpacityLimit = () => {
-            const max = Math.max(5, Math.min(95, parseInt(headerOpacitySlider.value) || 40));
-            backgroundOpacitySlider.max = String(max);
-            if (parseInt(backgroundOpacitySlider.value) > max) {
-                backgroundOpacitySlider.value = String(max);
-                backgroundOpacityVal.textContent = `${max}%`;
-                group.backgroundOpacity = max / 100;
-            }
-        };
-        // T-203: background fill is disabled for now. Do not wire the toggle or
-        // slider handlers, and keep the controls in their disabled visual
-        // state. The functions above are retained for the future redesign.
-        void setBackgroundFillUiState;
-        void syncBackgroundOpacityLimit;
-
-        // 重置按钮
-        const resetHeaderBgBtn = modal.querySelector('.xzg-reset-headerbg');
-        if (resetHeaderBgBtn) {
-            resetHeaderBgBtn.addEventListener('click', () => {
-                headerColorPicker.value = '#000000';
-                headerAlpha = 0.4;
-                headerOpacitySlider.value = 40;
-                headerOpacityVal.textContent = '40%';
-                updateHeaderBg();
+        for (const btn of bgSwatchButtons) {
+            btn.addEventListener('click', () => {
+                applyColorPreset(parseInt(btn.dataset.hue, 10) || 0);
             });
         }
+
+        // 背景填充开关：启用/关闭内容区填充（颜色与透明度均从标题栏派生）
+        backgroundFillToggle.addEventListener('change', () => {
+            group.backgroundFillEnabled = backgroundFillToggle.checked;
+            refreshBodyFillPreview();
+        });
 
         const rgbaFromHeaderControls = () => {
             const hex = headerColorPicker.value;
@@ -1918,7 +2026,9 @@ const Workspace2CanvasGroups = {
             contentPadding: Math.max(0, parseInt(cpR.value) || 0),
             headerBgColor: rgbaFromHeaderControls(),
             backgroundFillEnabled: Boolean(backgroundFillToggle.checked),
-            backgroundOpacity: Math.max(0.05, Math.min(0.95, (parseInt(backgroundOpacitySlider.value) || 25) / 100)),
+            // T-210b: compat field only. New rendering derives body alpha from the
+            // header alpha; we still write headerAlpha*0.5 so older readers stay close.
+            backgroundOpacity: clamp01(headerAlpha * BODY_TO_HEADER_OPACITY_RATIO),
             titleColor: titleColorPicker.value || '#FFD700',
         });
 
@@ -1935,14 +2045,14 @@ const Workspace2CanvasGroups = {
             }
             const header = self.groupEls[group.id]?.querySelector('.xzg-group-header');
             if (header) {
-                header.style.height = Math.max(21, group.fontSize + 4) + 'px';
-                header.style.background = group.headerBgColor || 'rgba(0,0,0,0.4)';
+                header.style.height = Math.max(21, Math.round((group.fontSize || 14) * 1.8)) + 'px';
+                header.style.background = group.headerBgColor || DEFAULT_HEADER_BG_COLOR;
             }
             self.updatePositions();
             self.updateGroupStyle(group.id);
         };
 
-        const parseRgbaColor = (rgba, fallbackHex = '#000000', fallbackAlpha = 0.4) => {
+        const parseRgbaColor = (rgba, fallbackHex = '#000000', fallbackAlpha = DEFAULT_HEADER_OPACITY) => {
             const m = String(rgba || '').match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/);
             if (!m) return { hex: fallbackHex, alpha: fallbackAlpha };
             const hex = '#' + [m[1], m[2], m[3]].map(x => parseInt(x).toString(16).padStart(2, '0')).join('');
@@ -1957,9 +2067,10 @@ const Workspace2CanvasGroups = {
             if (titleColorSwatch) titleColorSwatch.style.background = titleColorPicker.value;
             syncColorFromHSL(merged.colorHue, merged.colorSat, merged.colorLit);
             unifiedToggle.checked = Boolean(merged.useUnifiedColor);
-            unifiedHue.value = merged.colorHue;
             setUnifiedUiState(unifiedToggle.checked);
-            if (unifiedToggle.checked) applyUnifiedColor();
+            // T-210c: when a preset/default has unified on, re-derive border from
+            // the loaded font color (borderOpacity is applied separately below).
+            if (unifiedToggle.checked) syncBorderColorFromTitle();
             effectSel.value = merged.effect || 'none';
             spdR.value = merged.effectSpeed || 3;
             spdV.textContent = `${spdR.value}X`;
@@ -1973,17 +2084,13 @@ const Workspace2CanvasGroups = {
             if (shadowColorSwatch) shadowColorSwatch.style.background = shadowColorPicker.value;
             cpR.value = merged.contentPadding ?? DEFAULT_CONTENT_PADDING;
             cpV.textContent = `${cpR.value}px`;
-            const header = parseRgbaColor(merged.headerBgColor, '#000000', 0.4);
+            const header = parseRgbaColor(merged.headerBgColor, '#000000', DEFAULT_HEADER_OPACITY);
             headerColorPicker.value = header.hex;
-            headerAlpha = Math.max(0.05, Math.min(0.95, header.alpha));
+            headerAlpha = Math.max(MIN_HEADER_OPACITY, Math.min(MAX_HEADER_OPACITY, header.alpha));
             headerOpacitySlider.value = Math.round(headerAlpha * 100);
             headerOpacityVal.textContent = `${headerOpacitySlider.value}%`;
-            updateHeaderBg();
             backgroundFillToggle.checked = Boolean(merged.backgroundFillEnabled);
-            backgroundOpacitySlider.value = Math.max(5, Math.min(95, Math.round(finiteNumber(merged.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY) * 100)));
-            backgroundOpacityVal.textContent = `${backgroundOpacitySlider.value}%`;
-            syncBackgroundOpacityLimit();
-            setBackgroundFillUiState(backgroundFillToggle.checked);
+            updateHeaderBg();
             applyStyleToGroupPreview(readControlsStyle());
         };
 
@@ -2026,8 +2133,8 @@ const Workspace2CanvasGroups = {
                     }
                     const header = el.querySelector('.xzg-group-header');
                     if (header) {
-                        header.style.height = Math.max(21, targetGroup.fontSize + 4) + 'px';
-                        header.style.background = targetGroup.headerBgColor || 'rgba(0,0,0,0.4)';
+                        header.style.height = Math.max(21, Math.round((targetGroup.fontSize || 14) * 1.8)) + 'px';
+                        header.style.background = targetGroup.headerBgColor || DEFAULT_HEADER_BG_COLOR;
                     }
                     this.updateGroupStyle(targetGroup.id);
                 }
@@ -2486,10 +2593,14 @@ const Workspace2CanvasGroups = {
         const refs = this._ensureRefs(el);
         const bw = finiteNumber(g.borderWidth, 2) * scale;
         const bo = g.borderOpacity ?? 0.65;
-        const showSelection = this.selectedGroupIds.size > 1 && this.selectedGroupIds.has(gid);
+        // T-207 (2026-07-29): keep the selection outline identical to
+        // refreshGroupSelection(). This path runs on drag/zoom/sync and used to
+        // overwrite it with the old "multi-only 2px dashed" rule, which hid the
+        // single-selection outline and reverted multi-selection to dashed.
+        const showSelection = this.selectedGroupIds.has(gid);
         el.classList.toggle('is-xzg-group-selected', showSelection);
-        el.style.outline = showSelection ? '2px dashed var(--p-primary-color, var(--accent-color, #5da9ff))' : 'none';
-        el.style.outlineOffset = showSelection ? '3px' : '0';
+        el.style.outline = showSelection ? '1px solid rgba(180, 180, 180, 0.5)' : 'none';
+        el.style.outlineOffset = showSelection ? '4px' : '0';
 
         if (g.bypassed) {
             el.style.border = `${bw}px solid hsla(280,60%,55%,${bo})`;
@@ -3688,12 +3799,12 @@ const Workspace2CanvasGroups = {
                 const bounds = this.calcBounds(nids) || { x: 0, y: 0, w: 300, h: 200 };
                 this.groups[gid] = fromExtra ? { ...fromExtra, title: normalizeGroupTitle(fromExtra.title) } : {
                     id: gid, title: this.uniqueGroupTitle(undefined, gid), nodeIds: nids, bypassed: false, bounds,
-                    fontSize: 14, colorHue: 48, colorSat: 100, colorLit: 55,
+                    fontSize: 16, colorHue: 48, colorSat: 100, colorLit: 55,
                     effect: 'none', effectSpeed: 3,
                     borderWidth: 2, borderOpacity: 0.65,
                     shadowSize: 0, shadowColor: DEFAULT_SHADOW_COLOR,
                     contentPadding: DEFAULT_CONTENT_PADDING,
-                    headerBgColor: 'rgba(0,0,0,0.4)',
+                    headerBgColor: DEFAULT_HEADER_BG_COLOR,
                     backgroundFillEnabled: false,
                     backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
                     titleColor: '#FFD700'

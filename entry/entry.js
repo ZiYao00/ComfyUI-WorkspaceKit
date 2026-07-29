@@ -450,6 +450,17 @@ const workflowContextMenu = createWorkflowContextMenuRenderer({
 
 // Trash operations remain in this entry module; the renderer only presents
 // rows and forwards user intent through these callbacks.
+const {
+  workspace2Confirm,
+  workspace2Notice,
+  workspace2ConfirmDirtyWorkflowClose,
+  workspace2InlineConfirm,
+} = createWorkspace2Dialogs({
+  t,
+  isolateComfyKeys,
+  closeOverlays: closeWorkspace2OverlaysForConfirm,
+});
+
 const workflowTrash = createWorkflowTrashRenderer({
   state,
   t,
@@ -2293,17 +2304,6 @@ function closeWorkspace2OverlaysForConfirm() {
   try { closeNodeContextMenu(); } catch (error) {}
   try { closeContextMenu(); } catch (error) {}
 }
-
-const {
-  workspace2Confirm,
-  workspace2Notice,
-  workspace2ConfirmDirtyWorkflowClose,
-  workspace2InlineConfirm,
-} = createWorkspace2Dialogs({
-  t,
-  isolateComfyKeys,
-  closeOverlays: closeWorkspace2OverlaysForConfirm,
-});
 
 async function loadLocale() {
   state.locale = await configureI18n(app, FALLBACK_STRINGS);

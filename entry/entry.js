@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
-import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260724_group_settings_theme_feedback_r5";
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260727_group_reverse_conversion_c6_4";
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260722_rgthree_fast_groups_p0";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { publishWorkspaceKitPanelUiTemplate } from "./integrations/panel-ui-template-api.js";
@@ -59,11 +59,11 @@ import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, GROUP_POINTER_MODIFIE
 // Settings controls and sections change their return contracts independently.
 // Keep their cache keys aligned with entry.js to avoid a refreshed entry using
 // an older child module from a long-lived ComfyUI browser session.
-import { createSettingsControls } from "./settings/controls.js?v=20260724_configurable_shortcuts_r2";
+import { createSettingsControls } from "./settings/controls.js?v=20260727_group_settings_r1";
 // Bump this query when the section return contract changes. ComfyUI browser
 // sessions can retain an imported child module after entry.js has refreshed;
 // an old section factory would otherwise omit a newly added section.
-import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260724_settings_compat_r3";
+import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260727_group_reverse_conversion_c6_3";
 import { createSettingsDialogShell } from "./settings/dialog-shell.js";
 import { configureI18n, getLocale, t as translate } from "./core/i18n.js";
 import {
@@ -187,11 +187,18 @@ const FALLBACK_STRINGS = {
     "workspace.tab.templates": "模板",
     "settings.title": "设置",
     "settings.nav.common": "常用",
+    "settings.nav.workflows": "工作流",
+    "settings.nav.templates": "模板",
+    "settings.nav.groups": "编组",
     "settings.nav.shortcuts": "快捷键",
     "settings.nav.appearance": "外观",
     "settings.nav.advanced": "高级",
     "settings.shortcuts": "快捷键",
     "settings.behavior": "打开行为",
+    "settings.workflowSettings": "工作流行为",
+    "settings.templateSettings": "模板行为",
+    "settings.groupSettings": "编组",
+    "settings.groupSettingsHelp": "集中管理 WorkspaceKit 编组的启用、创建、解散和鼠标手势。",
     "settings.recentWorkflows": "打开记录数量",
     "settings.panelOpacity": "面板透明度",
     "settings.panelGlass": "玻璃背景",
@@ -341,6 +348,31 @@ const FALLBACK_STRINGS = {
     "canvasGroups.toggleBypass": "绕过 / 恢复编组",
     "canvasGroups.delete": "删除编组",
     "canvasGroups.confirmDelete": "删除编组“{name}”？不会删除节点。",
+    "groups.headerOpacity": "标题栏",
+    "groups.backgroundFill": "背景",
+    "groups.representation": "当前工作流的编组类型",
+    "groups.representationWorkspaceKit": "WorkspaceKit 编组",
+    "groups.representationNative": "ComfyUI 默认编组",
+    "groups.representationHelp": "只作用于当前工作流。转换前会保留 WorkspaceKit 样式和执行状态归档；转换后由 ComfyUI 原生编组负责显示。",
+    "groups.convertToNative": "转换为 ComfyUI 默认编组",
+    "groups.convertToWorkspaceKit": "转换为 WorkspaceKit 编组",
+    "groups.convertToNativeConfirm": "将当前工作流中的 {count} 个 WorkspaceKit 编组转换为 ComfyUI 默认编组？转换前会保留可恢复归档。",
+    "groups.convertToWorkspaceKitConfirm": "将当前工作流中的 {count} 个 ComfyUI 默认编组转换为 WorkspaceKit 编组？当前几何与成员关系会保留；历史样式会尽可能恢复。",
+    "groups.convertedToNative": "已转换 {count} 个编组。当前工作流现在使用 ComfyUI 默认编组。",
+    "groups.convertedToWorkspaceKit": "已转换 {count} 个编组。当前工作流现在使用 WorkspaceKit 编组。",
+    "groups.convertFailed": "编组转换失败：{message}",
+    "groups.conversionReady": "当前有 {count} 个 WorkspaceKit 编组可转换。",
+    "groups.conversionMixed": "当前有 {workspaceKitCount} 个 WorkspaceKit 编组和 {nativeGroupCount} 个 ComfyUI 默认编组；转换会保留已有默认编组。",
+    "groups.conversionAlreadyNative": "当前工作流已使用 ComfyUI 默认编组（{count} 个）。",
+    "groups.conversionNativeEmpty": "当前工作流没有可转换的 ComfyUI 默认编组。",
+    "groups.conversionEmpty": "当前工作流没有可转换的 WorkspaceKit 编组。",
+    "groups.conversionLoading": "正在读取当前工作流的编组状态。",
+    "groups.convertUnavailableNative": "当前已使用 ComfyUI 默认编组，无需转换。",
+    "groups.convertUnavailableNativeEmpty": "当前没有可转换的 ComfyUI 默认编组。",
+    "groups.convertUnavailableEmpty": "当前没有可转换的 WorkspaceKit 编组。",
+    "groups.convertUnavailableLoading": "编组状态尚未准备完成。",
+    "groups.conversionInProgress": "正在转换编组，请稍候。",
+    "groups.convertSaveRequired": "请保存当前工作流以写入转换结果。",
     "templates.title": "模板",
     "templates.status": "{count} 个模板",
     "templates.searchPlaceholder": "搜索模板",
@@ -389,11 +421,18 @@ const FALLBACK_STRINGS = {
     "workspace.tab.templates": "Templates",
     "settings.title": "Settings",
     "settings.nav.common": "General",
+    "settings.nav.workflows": "Workflows",
+    "settings.nav.templates": "Templates",
+    "settings.nav.groups": "Groups",
     "settings.nav.shortcuts": "Shortcuts",
     "settings.nav.appearance": "Appearance",
     "settings.nav.advanced": "Advanced",
     "settings.shortcuts": "Shortcuts",
     "settings.behavior": "Open behavior",
+    "settings.workflowSettings": "Workflow behavior",
+    "settings.templateSettings": "Template behavior",
+    "settings.groupSettings": "Groups",
+    "settings.groupSettingsHelp": "Manage WorkspaceKit group activation, creation, ungrouping, and pointer gestures in one place.",
     "settings.recentWorkflows": "Open history count",
     "settings.panelOpacity": "Panel opacity",
     "settings.panelGlass": "Glass background",
@@ -543,6 +582,31 @@ const FALLBACK_STRINGS = {
     "canvasGroups.toggleBypass": "Bypass / restore group",
     "canvasGroups.delete": "Delete group",
     "canvasGroups.confirmDelete": "Delete group \"{name}\"? Nodes will not be deleted.",
+    "groups.headerOpacity": "Header",
+    "groups.backgroundFill": "Background",
+    "groups.representation": "Current workflow group representation",
+    "groups.representationWorkspaceKit": "WorkspaceKit groups",
+    "groups.representationNative": "ComfyUI default groups",
+    "groups.representationHelp": "Applies only to the current workflow. WorkspaceKit style and execution metadata are archived before conversion; ComfyUI native groups render the result.",
+    "groups.convertToNative": "Convert to ComfyUI default groups",
+    "groups.convertToWorkspaceKit": "Convert to WorkspaceKit groups",
+    "groups.convertToNativeConfirm": "Convert {count} WorkspaceKit groups in the current workflow to ComfyUI default groups? A recoverable archive will be kept first.",
+    "groups.convertToWorkspaceKitConfirm": "Convert {count} ComfyUI default groups in the current workflow to WorkspaceKit groups? Current geometry and members are preserved; historical styles are restored when available.",
+    "groups.convertedToNative": "Converted {count} groups. This workflow now uses ComfyUI default groups.",
+    "groups.convertedToWorkspaceKit": "Converted {count} groups. This workflow now uses WorkspaceKit groups.",
+    "groups.convertFailed": "Group conversion failed: {message}",
+    "groups.conversionReady": "{count} WorkspaceKit groups are ready to convert.",
+    "groups.conversionMixed": "This workflow has {workspaceKitCount} WorkspaceKit groups and {nativeGroupCount} ComfyUI default groups. Existing default groups will be preserved.",
+    "groups.conversionAlreadyNative": "This workflow already uses ComfyUI default groups ({count}).",
+    "groups.conversionNativeEmpty": "This workflow has no ComfyUI default groups to convert.",
+    "groups.conversionEmpty": "This workflow has no WorkspaceKit groups to convert.",
+    "groups.conversionLoading": "Reading the current workflow group state.",
+    "groups.convertUnavailableNative": "This workflow already uses ComfyUI default groups.",
+    "groups.convertUnavailableNativeEmpty": "There are no ComfyUI default groups to convert.",
+    "groups.convertUnavailableEmpty": "There are no WorkspaceKit groups to convert.",
+    "groups.convertUnavailableLoading": "The group state is not ready yet.",
+    "groups.conversionInProgress": "Converting groups. Please wait.",
+    "groups.convertSaveRequired": "Save the current workflow to write the conversion result.",
     "templates.title": "Templates",
     "templates.status": "{count} templates",
     "templates.searchPlaceholder": "Search templates",
@@ -2421,6 +2485,21 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
     danger: true,
   }),
   buildDataManagementSection: createWorkspaceDataManagementSection,
+  getGroupRepresentationInfo: () => workspace2CanvasGroups.getConversionInfo?.() || { representation: "workspacekit", workspaceKitGroupCount: 0 },
+  convertGroupsToNative: (snapshot) => workspace2CanvasGroups.convertCurrentWorkflowToNative?.(snapshot),
+  convertGroupsToWorkspaceKit: () => workspace2CanvasGroups.convertCurrentWorkflowToWorkspaceKit?.(),
+  confirmConvertGroupsToNative: (info) => workspace2Confirm({
+    title: t("groups.representation"),
+    message: t("groups.convertToNativeConfirm", { count: Number(info?.workspaceKitGroupCount || 0) }),
+    confirmText: t("groups.convertToNative"),
+    danger: true,
+  }),
+  confirmConvertGroupsToWorkspaceKit: (info) => workspace2Confirm({
+    title: t("groups.representation"),
+    message: t("groups.convertToWorkspaceKitConfirm", { count: Number(info?.nativeGroupCount || 0) }),
+    confirmText: t("groups.convertToWorkspaceKit"),
+    danger: true,
+  }),
 });
 
 const { createSettingsDialogShell: buildSettingsDialogShell } = createSettingsDialogShell({
@@ -2447,12 +2526,14 @@ function openWorkspaceSettings() {
 
   const {
     shortcuts,
-    groupPointerShortcuts,
-    behavior,
+    workflowSettings,
+    templateSettings,
+    groupSettings,
     backgroundEffect,
     nodeCache,
     dataManagement,
     integrations,
+    groupRepresentation,
     about,
     versionInfo,
   } = buildSettingsDialogSections();
@@ -2460,11 +2541,16 @@ function openWorkspaceSettings() {
 
   // Keep every section mounted while switching pages. This lets the
   // asynchronous package-version update reach About even before it is opened.
+  // Ordering rationale (T-204, 2026-07-28 user feedback): Appearance and
+  // Advanced sit at the top because they cover global preferences that a
+  // returning user is most likely to adjust; feature pages follow.
   const settingPages = [
-    { id: "common", label: t("settings.nav.common"), sections: [behavior] },
-    { id: "shortcuts", label: t("settings.nav.shortcuts"), sections: [shortcuts, groupPointerShortcuts].filter(Boolean) },
-    { id: "appearance", label: t("settings.nav.appearance"), sections: [backgroundEffect] },
-    { id: "advanced", label: t("settings.nav.advanced"), sections: [integrations, providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
+    { id: "appearance", label: t("settings.nav.appearance"), icon: "palette", sections: [backgroundEffect] },
+    { id: "advanced", label: t("settings.nav.advanced"), icon: "settings", sections: [integrations, providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
+    { id: "workflows", label: t("settings.nav.workflows"), icon: "files", sections: [workflowSettings] },
+    { id: "templates", label: t("settings.nav.templates"), icon: "template", sections: [templateSettings] },
+    { id: "groups", label: t("settings.nav.groups"), icon: "badge", sections: [groupSettings] },
+    { id: "shortcuts", label: t("settings.nav.shortcuts"), icon: "keyboard", sections: [shortcuts].filter(Boolean) },
   ];
   const settingsLayout = document.createElement("div");
   settingsLayout.className = "workspace2-settings-layout";
@@ -2487,7 +2573,15 @@ function openWorkspaceSettings() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "workspace2-settings-nav-button";
-    button.textContent = page.label;
+    if (page.icon) {
+      const icon = iconSvg(page.icon);
+      icon.classList.add("workspace2-settings-nav-icon");
+      button.append(icon);
+    }
+    const label = document.createElement("span");
+    label.className = "workspace2-settings-nav-label";
+    label.textContent = page.label;
+    button.append(label);
     button.addEventListener("click", () => selectSettingsPage(page.id));
     const pageElement = document.createElement("section");
     pageElement.className = "workspace2-settings-page";
@@ -2497,7 +2591,7 @@ function openWorkspaceSettings() {
     pageButtons.set(page.id, button);
     pageElements.set(page.id, pageElement);
   }
-  selectSettingsPage("common");
+  selectSettingsPage("workflows");
   settingsLayout.append(settingsNav, settingsPagesElement);
   dialog.append(header, settingsLayout);
   backdrop.append(dialog);
@@ -3302,11 +3396,14 @@ function styles() {
     .workspace2-settings-nav {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 12px;
       padding: 16px 14px 16px 0;
       border-right: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
     }
     .workspace2-settings-nav-button {
+      display: flex;
+      align-items: center;
+      gap: 9px;
       min-height: 34px;
       padding: 0 12px;
       border: 1px solid transparent;
@@ -3316,6 +3413,21 @@ function styles() {
       cursor: pointer;
       text-align: left;
       font: 600 13px/1 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-settings-nav-icon {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: .85;
+    }
+    .workspace2-settings-nav-label {
+      flex: 1 1 auto;
+      min-width: 0;
     }
     .workspace2-settings-nav-button:hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
@@ -3400,6 +3512,14 @@ function styles() {
     }
     .workspace2-settings-action:hover {
       background: var(--p-list-option-hover-background, rgba(255,255,255,.10));
+    }
+    .workspace2-settings-action:disabled,
+    .workspace2-settings-action.is-disabled {
+      opacity: .52;
+      cursor: not-allowed;
+    }
+    .workspace2-settings-action.is-busy {
+      cursor: progress;
     }
     .workspace2-settings-action svg {
       width: 14px;
@@ -5971,6 +6091,7 @@ function iconSvg(name) {
     starFilled: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z" fill="currentColor"/>',
     settings: '<path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7.1 4l.1.1a1.7 1.7 0 0 0 1.9.3h.1A1.7 1.7 0 0 0 10 2.9V3a2 2 0 1 1 4 0v-.1a1.7 1.7 0 0 0 1 1.6h.1a1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.9 7l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     chevronDown: '<path d="M6 9l6 6 6-6"/>',
+    keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01"/><path d="M10 10h.01"/><path d="M14 10h.01"/><path d="M18 10h.01"/><path d="M8 14h8"/>',
     x: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>',
   };
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");

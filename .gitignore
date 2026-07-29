@@ -81,6 +81,7 @@ tmp/
 # Claude Code local files (personal, not shared)
 CLAUDE.md
 .claude/
+jsconfig.json
 
 # Editors and operating systems
 .vscode/*

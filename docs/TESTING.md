@@ -13,6 +13,12 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/BACKLOG.zh-CN.md` (T-001..T-503).
 
+## 2026-07-29 - entry.js split #1: extract `styles()` CSS to `ui/styles.js`
+
+- Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-styles-css-20260729-115529.zip` (242 files).
+- **Change**: moved the single ~2200-line injected stylesheet function `styles()` (old `entry/entry.js` L3096–5323) verbatim into a new module `entry/ui/styles.js` (exported `styles()`), and replaced it in `entry.js` with `import { styles } from "./ui/styles.js";`. The CSS template literal has zero `${}` interpolation and no entry.js closure references, so the move is behavior-preserving. All five `styles();` call sites are unchanged.
+- **Regression**: `node --check` passes on both `entry/entry.js` and `entry/ui/styles.js`. 64/64 mjs contracts green (unchanged from baseline). `git diff` on `entry.js` shows +1 insertion / -2229 deletions and the intact call sites. No e2e run: a pure static-CSS move exercises no logic branch. `entry.js` dropped from 12,178 to 9,950 lines.
+
 ## 2026-07-28 - Panel Provider lifecycle + example provider (T-013, T-016 partial)
 
 - **T-013 (Batch 2 Provider lifecycle)**: `scripts/e2e/t013-provider-lifecycle.mjs` drives the public `window.WorkspaceKitPanelAPI` on the running test package. Verified: register succeeds and appears in `getProviders()`; re-registering the same object is `already-registered` with no duplicate; a different object with the same id is rejected `duplicate-id`; `setProvidersEnabled(false)` hides the provider from `getProviders()` while retaining it, and re-enabling restores it (not lost); `unregister()` removes it and a second unregister returns `not-found`; `subscribe()` fired `registered`, two `availability-changed`, and `unregistered`. Zero WorkspaceKit console errors. The pure-visual integration placement remains a manual item.

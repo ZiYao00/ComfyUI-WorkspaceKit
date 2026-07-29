@@ -67,10 +67,12 @@ Key: `registerWorkspace2CanvasGroupCommands` (L2637), `activateWorkspace2Tab` (L
 `workspace2Confirm` (L2749), `workspace2Notice` (L2821),
 `workspace2ConfirmDirtyWorkflowClose` (L2887), `workspace2InlineConfirm` (L2961).
 
-### Locale watcher & CSS styles — L3031–5324
-Locale hot-reload, then the entire injected stylesheet. Key: `loadLocale` (L3031),
-`refreshLocaleIfChanged` (L3050), `startLocaleWatcher` (L3064), `DEFAULT_GRAPH` (L3075),
-`styles` (L3096 — single ~2200-line CSS-in-JS template literal to L5324).
+### Locale watcher — L3031–3094
+Locale hot-reload. Key: `loadLocale` (L3031), `refreshLocaleIfChanged` (L3050),
+`startLocaleWatcher` (L3064), `DEFAULT_GRAPH` (L3075). **The `styles` CSS literal
+that used to follow here (old L3096–5324) has been extracted to
+[`entry/ui/styles.js`](../entry/ui/styles.js); entry.js now imports `styles`.**
+All line numbers below this point are ~2228 lower than shown — regenerate.
 
 ### Workflow management — L5325–6075
 Load/open/save/rename/move/trash workflows + folders and trash lifecycle.
@@ -132,7 +134,7 @@ verification (see Step 3 of the large-file plan).
 
 | Candidate | Lines | Why it's extractable |
 | --- | --- | --- |
-| `styles` CSS literal | L3096–5324 | ~2200-line CSS-in-JS with zero logic coupling; move to a `styles.css`/`styles.js` asset |
+| ~~`styles` CSS literal~~ | ~~L3096–5324~~ | ✅ **Extracted** to `entry/ui/styles.js` (2026-07-29) — see MODULE_MAP |
 | `FALLBACK_STRINGS` table | L181–650 | ~470-line static i18n data; belongs in `core/fallback-strings.js` |
 | Official adapter + favorites probing | L1306–1630 | Cohesive reflection-into-ComfyUI feature, no UI; → `integrations/official-node-adapter.js` |
 | Panel appearance / glass / background | L2010–2320 | Self-contained visual subsystem keyed off `panelBackgroundState`; → `ui/panel-appearance.js` |

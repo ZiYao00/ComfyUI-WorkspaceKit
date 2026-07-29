@@ -2,6 +2,248 @@
 
 This document records reproducible test evidence and unresolved errors found while validating WorkspaceKit. Historical endpoint, storage, and implementation names such as `Workspace2` remain in individual records where they identify the compatibility layer. A recorded error is not treated as a confirmed WorkspaceKit root cause until the owning call chain is isolated.
 
+## Current baseline (updated per batch)
+
+- **WorkspaceKit contracts (Node `.mjs`)**: 64/64 passing.
+- **WorkspaceKit contracts (Python `.py`)**: 2/2 passing (`test-workspace-data-bundle.py`, `test-workflow-copy.py`).
+- **Node syntax + locale JSON**: `entry/entry.js`, `entry/settings/*.js`, `entry/workspace2_canvas_groups.js`, `entry/canvas-groups/{conversion-archive,conversion-result,reverse-conversion-plan}.js` and `entry/locales/*.json` all pass.
+- **Playwright real-page smoke** (`scripts/e2e/smoke-workspacekit-sidebar.mjs`): passing on the test package at `http://127.0.0.1:8190/`. Verifies that `window.app.extensions` contains both `comfyui.workspace2` and `WorkspaceKit.ThemeLab`, that `window.WorkspaceKitPanelAPI` and `window.WorkspaceKitPanelUITemplate` are exposed, and that `#workspace2-sidebar-emoji-icon-style` is injected. No WorkspaceKit-related console errors.
+- **Last baseline re-run**: 2026-07-28.
+- **Historical figure `61/61`** in older entries reflects the contract count at that batch; the current figure is `64/64`.
+
+Backlog IDs referenced in entries below map to the internal `.dev-docs/BACKLOG.zh-CN.md` (T-001..T-503).
+
+## 2026-07-28 - Mixed-state reverse conversion merges instead of overwriting (T-206)
+
+- Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-t206-reverse-merge-mixed-20260728-220224.zip`.
+- **Change**: per the user's design, both conversion buttons are now usable whenever the canvas has any group. The reverse conversion `convertCurrentWorkflowToWorkspaceKit` previously returned a no-op unless the graph was pure-native; it now runs from a mixed canvas too, converting the native groups and **merging** them into the existing WorkspaceKit groups rather than overwriting `graph.extra.xzgGroups`. `createNativeToWorkspaceKitConversionPlan` gained a `reservedIds` parameter so a freshly minted `native_<id>` can never collide with (or overwrite) a live WorkspaceKit group id, and a mapped archive id that collides with a live id falls back to a fresh id. `verifyWorkspaceKitConversionResult` now validates the union of pre-existing and freshly converted ids.
+- **Settings enablement (T-201/T-206)**: `directionState` in `dialog-sections.js` now enables a direction whenever groups of the opposite kind exist; disables it when everything is already that kind; disables both on an empty canvas (`groups.convertUnavailableNone`).
+- **Data-safety fixture**: `scripts/e2e/t206-mixed-reverse-conversion.mjs` opens `_wk-t206-mixed.json` (1 live WorkspaceKit group `live-wk-keep-me` + 1 native group `native-to-merge`, representation `workspacekit`) and runs the reverse conversion. Result on real page: `converted:1, mergedGroupCount:2`; post-state has 0 native groups and 2 WorkspaceKit groups; **the pre-existing `live-wk-keep-me` survived** and `native-to-merge` became a WorkspaceKit group with a non-colliding `native_1` id. Zero WorkspaceKit console errors.
+- **Static contracts**: `test-group-reverse-conversion-plan.mjs` extended with reservedIds collision cases; `test-settings-dialog-sections.mjs` updated so mixed state now expects both buttons enabled.
+- **Regression**: 64/64 mjs + 2/2 py; seven e2e scripts (smoke + C5×4 + C6 + T-206) all green.
+- **Safety**: no workflow written back to disk.
+
+## 2026-07-28 - Settings + Groups UX batch (T-201/T-202/T-204/T-205, partial T-203)
+
+- Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-ux-feedback-batch-t201-t204-t205-20260728-185235.zip`.
+- **T-201 (settings convert button)**: replaced the single direction-shifting button with two side-by-side buttons in `entry/settings/dialog-sections.js` — forward "Convert to ComfyUI default groups" and reverse "Convert to WorkspaceKit groups". Each computes its own enabled state and disabled reason. Mixed state (representation `workspacekit` with native groups present) keeps the forward button enabled and disables reverse with a new `groups.convertUnavailableMixed` reason. The static contract `test-settings-dialog-sections.mjs` was rewritten to assert the two-button structure across native/workspacekit/mixed/loading/empty states; passes.
+- **T-204 (settings UX)**: nav order changed to Appearance, Advanced, Workflows, Templates, Groups, Shortcuts (`entry.js`); each nav button now renders a semantic icon (palette/settings/files/template/badge/keyboard) with a new `.workspace2-settings-nav-icon` style and nav gap raised 6px→12px; added help text `settings.recentWorkflowsHelp` and `settings.altCOpenTemplatesHelp`.
+- **T-202 (title descender clipping)**: title span `line-height` 1→1.4 (template and `updatePositions`); header-height formula `max(21, fs+4)` → `max(21, fs*1.5)` in all four call sites so descenders (g/y/p/j) are no longer clipped by the overflow-hidden header.
+- **T-205 (group selection + label)**: `refreshGroupSelection` now outlines any selected group (single or multi) with `1px solid rgba(180,180,180,0.5)` instead of only multi-selection with `2px dashed`; blank-canvas click still clears. Renamed the border-opacity slider label from `groups.color` to a new `groups.opacity` ("透明度"/"Opacity").
+- **T-203 (background slider coupling, step 1)**: root cause is `syncBackgroundOpacityLimit()` enforcing background-opacity ≤ header-opacity, which moved the background value when only the header slider was dragged. Per user request the background-fill checkbox and slider are now disabled (greyed, `groups.backgroundFillDisabledHint` tooltip) and the header slider no longer calls the sync. Step 2 (redesign) deferred.
+- **Verification**: `node --check` on all edited files; locale JSON parses; `64/64` mjs contracts + `2/2` py; six e2e scripts (smoke + C5×4 + C6) all green; real-page Playwright check confirmed nav order + icons and both convert buttons rendered with correct disabled reasons on workflow `001`.
+- **Safety**: no workflow data written. Changes are UI/label/CSS plus one contract rewrite.
+
+## 2026-07-27 - Reverse conversion C6.4: real-page acceptance for added / deleted / mixed / failure (T-005..T-008)
+
+- Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-c6-4-reverse-conversion-fixtures-20260728-100424.zip`.
+- **Fixtures** (generated by `scripts/e2e/fixtures/build-c6-reverse.mjs`):
+  - `_wk-c6-native-added.json`: 2 native groups (bounds `(100,100,300,200)` and `(300,200,300,200)`, partially overlapping). The archive has one mapping (`g_test_c6_archived_ms` → native id 1) with distinctive `colorHue: 300`. Native id 2 has no archive entry.
+  - `_wk-c6-native-deleted.json`: 1 native group on graph (`kept-native`). Archive contains two mappings (`g_test_c6_kept_ms` → 1 and `g_test_c6_orphan_ms` → 2). Native id 2 is absent from the graph — simulating a user-deleted native after forward conversion.
+  - `_wk-c6-native-invalid-bounds.json`: 2 natives, the second has `bounding[2] = 0`. No archive.
+- **Test**: `scripts/e2e/c6-reverse-conversion.mjs`. Uses the shared helper `callConvertToWorkspaceKit` newly added to `lib/wk-runtime.mjs`.
+- **T-005 result (added / T-007 overlap covered here)**: **passed**. `converted:2`, `restoredGroupIds:['g_test_c6_archived_ms']`, `newGroupIds:['native_2']`, `archivedGroupIdsWithoutNativeMatch:[]`. Post-state: the archived-title group carries the archive style (`colorHue: 300`); the freshly-added group carries `DEFAULT_STYLE` (`colorHue: 48`). Both groups' bounds match the current native geometry exactly (validation matrix item 5 mixed/overlap also satisfied via the deliberate bounds overlap).
+- **T-006 result (deleted)**: **passed**. `converted:1`, `restoredGroupIds:['g_test_c6_kept_ms']`, `newGroupIds:[]`, `archivedGroupIdsWithoutNativeMatch:['g_test_c6_orphan_ms']`. The deleted native did **not** silently resurrect as a WorkspaceKit group; the orphan archive id is reported for future UI to surface. The archive on disk still lists both entries so the user could later choose to recover manually.
+- **T-008 result (invalid bounds)**: **passed**. Convert threw `Cannot restore WorkspaceKit groups: native group 2 has invalid bounds` from `entry/canvas-groups/reverse-conversion-plan.js:78`. Failure occurred inside `createNativeToWorkspaceKitConversionPlan` before any mutation, so post-state exactly equals pre-state (`native:2, wk:0, no archive, no overlays, node count unchanged`).
+- **What this closes**: `.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md` C6.4 (reverse-conversion real-page acceptance) except for save/reload after reverse. Reverse pure round-trip already had earlier evidence; combined with C6.1..C6.3 completed, C6 as a whole is now blocked only on the same save/reload maneuvre that is pending on the forward side.
+- **Test-isolation note**: during a full sequential run of all six e2e scripts, the T-004 injection sub-scenario observed a transient `wkOverlayDom` of 2 instead of the expected 1 (once, non-reproducible). `c5-failure-forward-conversion.mjs` now calls `workspace2CanvasGroups.rebuildAllEls()` before its baseline snapshot so a stale overlay from a prior test cannot bias the assertion. Full six-script sequential run after this guard: green.
+- **Safety**: no fixture written back. Route guard blocked mutation POSTs. 64/64 mjs + 2/2 py contracts green before and after.
+
+## 2026-07-27 - Group conversion hardening C5: failure injection (T-004)
+
+- Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-c5-failure-injection-fixture-20260728-095107.zip`.
+- **Disk fixture `_wk-c5-invalid-bounds.json`**: two WorkspaceKit groups, the second has `bounds.w = 0`. **Result**: convert threw `Group "wk-bad-bounds" has invalid bounds.` (from workspace2_canvas_groups.js:3099). Graph and node markers exactly equal to pre-state. No native group added, no overlay DOM change.
+- **Runtime injection scenario**: opened the benign `_wk-c5-mixed.json` fixture (from T-001), then dynamic-imported `workspace2_canvas_groups.js` and pushed the phantom id `"99999"` into the WorkspaceKit group's `nodeIds` array. **Result**: convert threw `Group "wk-convert-me" references a missing node.` (from workspace2_canvas_groups.js:3103). Post-state equal to pre-state after restoring the injected array.
+- **Discovery**: the "missing node reference" branch is unreachable from a disk fixture. On `openWorkflow`, WorkspaceKit's `recomputeMembership` (workspace2_canvas_groups.js:869-914) rewrites `group.nodeIds` by filtering against the current graph's node ids before conversion runs, so any phantom id is silently removed. The pre-validation at line 3101 remains a defense-in-depth for direct callers (feature code that constructs groups without invoking recompute). The e2e test injects the phantom id at that entry point to keep the branch covered.
+- **What this closes**: `.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md` validation matrix item 6 (failure injection). Item 3 (mixed), 4 (empty), 5 (boundary/overlap), 6 (failure) are all closed. C5 as a whole is now blocked only on item 7 (save/reload after conversion), which is a separate acceptance batch.
+- **Safety**: no data written back. The `_wk-c5-missing-node.json` disk fixture built by an earlier draft was removed since it does not exercise the intended branch.
+
+## 2026-07-27 - Group conversion hardening C5: boundary/overlap fixtures and stale-marker bug fix (T-003)
+
+- Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-c5-boundary-overlap-fixture-20260728-090139.zip` (fixture batch) and `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-fix-stale-marker-null-check-20260728-091456.zip` (bug fix batch).
+- **Fixtures** (generated by `scripts/e2e/fixtures/build-c5-boundary.mjs`):
+  - `_wk-c5-overlap.json`: 7 nodes, 0 native, 2 WorkspaceKit overlays with partially overlapping bounds (`(100,100,300,200)` and `(300,200,300,200)`; overlap region `(300,200,100,100)`). Two nodes assigned to each group by nodeIds.
+  - `_wk-c5-shared-member.json`: 7 nodes, 0 native, 2 WorkspaceKit overlays whose bounds do not overlap, but both `nodeIds` arrays list the same node `7`.
+- **Overlap outcome**: **passed on real page**. Convert returned `converted:2` with archive covering both source groups. Both native groups landed with exact `pos` and `size` matching the source bounds (`[100,100]/[300,200]` and `[300,200]/[300,200]`), and native `_bounding` matched. Zero node moved, zero mode changed.
+- **Shared-member outcome**: **first attempt failed** with `Native group conversion validation failed: stale WorkspaceKit node markers remain`. **This exposed a real runtime bug**:
+  - `_clearNodeGroupData` in `entry/workspace2_canvas_groups.js:707` clears `_xzgGroupId` and `_xzgGroupData` by assignment to `null` (not `delete`), on purpose — that keeps the field present so LiteGraph's serializer records the cleared state when persisting an already-native workflow.
+  - `verifyNativeConversionResult` counted a marker as stale when it was `!== undefined`, so `null` (correctly cleared) was flagged as stale.
+  - **Why prior tests never hit this**: T-001 mixed and T-002 empty both had `nodeIds: []`, so `sourceNodeIds` was empty and no node was ever inspected. Shared-member is the first fixture where a source group carries real member nodes that then get cleared.
+- **Fix**: extracted `countStaleWorkspaceKitNodeMarkers(...)` as a pure function in `entry/canvas-groups/conversion-result.js`; `verifyNativeConversionResult` now delegates to it. The pure function uses `!= null` so both `null` and `undefined` count as non-stale; empty string, empty object, and any other value stay stale. Added static contract `scripts/test-group-native-conversion-stale-markers.mjs` that pins:
+  - a node whose fields were set to `null` by `_clearNodeGroupData` is non-stale;
+  - any truthy shell (`""`, `{}`, real ids) is stale;
+  - nodes outside `sourceNodeIds` are ignored;
+  - `sourceNodeIds` accepts either an Array or a Set.
+- **Re-run**: `_wk-c5-shared-member` passed. Both native groups landed at their bounds `[50,50]/[300,200]` and `[500,500]/[300,200]`. Node `5` fell inside group B's bounds and `recomputeInsideNodes()` reported `insideNodeIds: ["5"]` for B; group A's `insideNodeIds` was empty (node `7` sits outside its bounds). Shared node `_xzgGroupId` and `_xzgGroupData` correctly cleared to `null`; the validator passed.
+- **What this closes**: `.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md` validation matrix item 5 (boundary / overlap). Contract count 63 → 64. All prior e2e tests (smoke, T-001, T-002) still pass after the fix; static regression `64/64 mjs + 2/2 py` green.
+- **Safety**: read-only against fixtures. No fixture written back. Route guard blocked mutations.
+
+## 2026-07-27 - Group conversion hardening C5: empty-workflow fixtures (T-002)
+
+- Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-c5-empty-workflow-fixture-20260728-085424.zip`.
+- **Fixtures** (both generated by `scripts/e2e/fixtures/build-c5-empty.mjs`):
+  - `_wk-c5-empty-graph.json`: 0 nodes, 0 native groups, 0 wk overlays, representation `workspacekit`, no archive.
+  - `_wk-c5-nodes-no-groups.json`: 7 nodes (cloned from `New Workflow.json`), 0 native groups, 0 wk overlays, otherwise identical.
+- **Test**: `scripts/e2e/c5-empty-forward-conversion.mjs` (Playwright). Opens each fixture via the same `app.loadGraphData(workflowData, true, true, target, {...})` path WorkspaceKit uses internally, then invokes `convertCurrentWorkflowToNative()`.
+- **Result**: **passed on real page** for both fixtures. Each returned `{converted: 0, representation: 'workspacekit', empty: true}`. No archive was written. Post-conversion graph state was identical to pre-state (0 native, 0 wk, same node count). No confirmation dialog was triggered (call was a pure no-op inside the conversion function). Zero WorkspaceKit-related console errors.
+- **What this closes**: `.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md` validation matrix item 4 (empty workflow).
+- **Refactor note**: this batch introduced `scripts/e2e/lib/wk-runtime.mjs`, a shared helper that centralises `installReadOnlyGuard`, `waitForWorkspaceKitReady`, `openFixture`, `readGraphState`, and `callConvertToNative`. The existing T-001 test `c5-mixed-forward-conversion.mjs` was refactored to use it; re-run remained green. Future C5/C6 fixtures will build on this helper.
+- **Safety**: read-only. Route guard blocks any POST to `/workflow`, `/workflows`, `/api/prompt`, `/api/queue`. Fixtures never written back to disk. Static regression 63/63 mjs + 2/2 py + Playwright smoke all remained green.
+
+## 2026-07-27 - Group conversion hardening C5: mixed-groups fixture (T-001)
+
+- Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-c5-mixed-groups-fixture-20260727-233300.zip`.
+- **Fixture**: `G:\AIGC\ComfyUI_test\ComfyUI\user\default\workflows\_wk-c5-mixed.json`, generated deterministically by `scripts/e2e/fixtures/build-c5-mixed.mjs` from `New Workflow.json`. Initial state: 7 nodes, 1 native ComfyUI group titled `native-keep-me`, 1 WorkspaceKit overlay group titled `wk-convert-me`, `extra.workspacekit.groupRepresentation = 'workspacekit'`, no pre-existing `groupConversion` archive.
+- **Test**: `scripts/e2e/c5-mixed-forward-conversion.mjs` (Playwright headless Chromium against the test package). The script asserts the fixture on disk, opens it through `app.loadGraphData(workflowData, true, true, target, {...})` — the same signature WorkspaceKit's `openWorkflowFromOfficialStore` uses — then dynamic-imports the served `workspace2_canvas_groups.js` module and invokes `convertCurrentWorkflowToNative()`.
+- **Result**: **passed on real page**. Pre-conversion state exactly matched the fixture. `convertCurrentWorkflowToNative()` returned `{converted: 1, representation: 'native', archive: {schemaVersion: 1, source: 'workspacekit', groups: {g_test_c5_mixed_wk_…: {title: 'wk-convert-me', bounds: {x: 400, y: 50, w: 300, h: 200}, …}}}, nativeGroupIds: {g_test_c5_mixed_wk_…: 2}}`. Post state: 2 native groups (`native-keep-me` preserved unchanged and `wk-convert-me` newly created), 0 WorkspaceKit overlays in `graph.extra.xzgGroups`, 0 `.xzg-group-box` DOM overlays, `groupRepresentation === 'native'`, one-entry archive under `extra.workspacekit.groupConversion`.
+- **What this closes and does not close**: closes `.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md` validation matrix item 3 (mixed representation). Empty workflow, boundary/overlapping nodes, and failure injection remain their own C5 fixtures (T-002/T-003/T-004).
+- **Safety**: the test does not save, does not touch queue/prompt endpoints, and installs a route guard that aborts any POST to `/workflow`, `/workflows`, `/api/prompt`, `/api/queue`. The fixture on disk was never written back. Static regression 63/63 mjs + 2/2 py + Playwright smoke all remained green before and after.
+
+## 2026-07-27 - Backup script alignment (T-302/T-303/T-304/T-305)
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-backup-script-align-20260727-232055.zip` (SHA-256 `2A4E06CA5F589A89C57746A5E8C9CA445FB4B013B347463310FE8F928E662D77`, 1.46 MiB, 224 files).
+- Root cause: `scripts/create-project-backup.ps1` used `[System.IO.Path]::GetRelativePath()` and enum members that Windows PowerShell 5.1 cannot resolve at script-load time. A separate defect in the script's forbidden-path regex (`\\.git`) meant the safety check had never actually matched entries whose separators had already been normalised to `/`.
+- Fix: replaced the relative-path computation with a `Substring`-based helper, resolved enum values through `[System.Enum]::Parse([Type]"…", "Create")`, and corrected the regex to `\.git` etc. Extended `ValidateSet` to seven categories (`00-legacy-workspace2 … 90-full-snapshots`), matching the sibling Layout repository and the categories already used on disk (17 archives under `50-integrations/`, 4+ under `00-legacy-workspace2/`).
+- Verification: `powershell.exe -File …` and `pwsh -File …` each produced a 224-file archive; `Compare-Object` on their entry name lists reported `entries_identical=yes`. Four transient verification archives were removed after the run and are not retained as rollback points.
+- Documentation: `docs/BACKUP_CONVENTION.md` rewritten to list all seven categories, show both `powershell.exe` and `pwsh` invocations, and note that empty categories do not create their target directory until first use.
+- Regression: full contract suite `63/63` passed; both Python contracts passed; Playwright real-page smoke (`scripts/e2e/smoke-workspacekit-sidebar.mjs`) passed with zero WorkspaceKit-related console errors.
+
+## 2026-07-27 - Reverse conversion C6.3/C6.4: real-page native-to-WorkspaceKit acceptance
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-reverse-conversion-c6-3-20260727-170300.zip` (SHA-256 `407466F92AF51D7D013577B5579F151C91F088532DE520E1B3D031ACE71CB495`).
+- Settings now exposes an enabled **Convert to WorkspaceKit groups** action only when the current native graph contains groups. It uses the existing destructive-confirmation component, reuses the conversion lock and reports the required manual-save notice on success. The same source handles English and Chinese labels.
+- **Recorded failure and isolated root cause:** the first real execution on `New Workflow.json` reported `Cannot restore WorkspaceKit groups: native group 1 has invalid bounds`. The saved native workflow proved that group `1` had a valid `bounding: [843.5, 434.63802083333337, 300, 200]`. Source review of the installed LiteGraph typings and existing plugin code confirmed that runtime `_bounding` is a `Vector4` iterable, not necessarily a JavaScript `Array`. The snapshot code incorrectly used `Array.isArray()` and discarded valid coordinates. It now copies any iterable vector into a plain array; the reverse-conversion contract covers that guard.
+- Focused static checks passed: `test-settings-dialog-sections.mjs`, `test-group-reverse-conversion-plan.mjs`, `test-group-native-conversion-contract.mjs`, JavaScript syntax checks and `git diff --check`.
+- **Real retry, test package `http://127.0.0.1:8190/`:** opened the C5 fixture `New Workflow.json` after its previous WorkspaceKit-to-native save. The Groups page showed one native group and an enabled reverse action. Confirmation succeeded; the page reported one converted group, the action became **Convert to ComfyUI native groups**, and the visible save action appeared without an error.
+- Saved through WorkspaceKit, then inspected `G:\AIGC\ComfyUI_test\ComfyUI\user\default\workflows\New Workflow.json`: `groupRepresentation=workspacekit`, persisted WorkspaceKit group count `1`, native `groups` count `0`, and the native conversion archive retained one group. Switched to `002`, reopened `New Workflow`, and the Groups page still reported one WorkspaceKit group with the forward action available and no dirty/save action.
+- **C6.4 pure round-trip:** from that reopened WorkspaceKit state, converted the same fixture back to one ComfyUI native group, saved, reopened the native state, then converted back to WorkspaceKit and saved again. The final browser refresh restored `New Workflow` with one `.xzg-group-box` and no dirty/save action. The final file has `groupRepresentation=workspacekit`, one `xzgGroups` record, zero native `groups`, and a `nativeGroupConversion` snapshot containing the one native group with its valid `bounding` vector.
+- This closes the pure native reverse path and pure round-trip only. Native groups added/deleted after forward conversion, mixed groups, boundary membership and rollback injection remain C6.4 fixtures; they are not claimed as passed.
+
+## 2026-07-27 - Reverse conversion C6.2 transaction implementation
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-reverse-conversion-c6-2-20260727-165200.zip` (SHA-256 `8B1BA0A1D1A2F1C9F3E038FA503653DC6F1610FB49F049F39012FF3F24FB5C99`).
+- Added `convertCurrentWorkflowToWorkspaceKit()` but intentionally did not expose it in Settings. It creates a C6.1 plan from the live native groups, removes the participating native groups, restores WorkspaceKit group data/markers/overlays, writes `groupRepresentation=workspacekit` and records a current-native snapshot under `nativeGroupConversion`.
+- The transaction validates representation, removed native groups, active/persisted WorkspaceKit IDs and overlay count before it can return success. Any thrown error clears newly built overlays, restores `graph.extra`, re-adds original native groups, restores node markers and rebuilds the native view.
+- Static transaction and planner contracts passed. Test package startup at `http://127.0.0.1:8190/` still exposed the WorkspaceKit entry after the cache-busted module loaded. No reverse conversion was executed because C6.3 has not yet exposed an audited user-facing confirmation path.
+
+## 2026-07-27 - Reverse conversion C6.1 data-plan baseline
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-reverse-conversion-c6-1-20260727-164100.zip` (SHA-256 `887F30A034B4AE38507CCCD6B51D77A01A78FFCBCACB15956230768E492A1462`).
+- Read-only inspection of the positive C5 fixture confirmed the forward archive contract in a real file: `nativeGroupIds` maps WorkspaceKit ID `g_ms33gssordln9p` to native ID `1`, while the archive retains the complete WorkspaceKit group style.
+- Added the pure `canvas-groups/reverse-conversion-plan.js` planner. It deliberately does not touch the active graph or Settings UI. Current native geometry/title/member IDs override archived equivalents; a mapped archive contributes WorkspaceKit style/execution data; new native groups receive the existing WorkspaceKit default style.
+- The pure contract covers a mapped group whose native title, bounds, color and members changed, a new native group without archive history, missing native groups and invalid archives. No reverse conversion command has been exposed or executed in this batch.
+
+## 2026-07-27 - Group conversion hardening C5: positive save/reload acceptance
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-conversion-hardening-c5-20260727-163000.zip` (SHA-256 `0C2098AD20D5F50C497519FC6E6E04FB44CE887B3FBAF8F180483AB0C88AF364`).
+- Test package: `http://127.0.0.1:8190/`. Created the isolated root workflow `New Workflow.json` through WorkspaceKit and created one empty WorkspaceKit group through the real canvas context menu entry `🧩 新建空白编组`.
+- Before conversion, the Groups Settings page reported one convertible WorkspaceKit group, an enabled action and one `.xzg-group-box` overlay. The real confirmation dialog showed the expected one-group warning.
+- After confirmation, the page reported one converted group and the required save notice; the action became disabled and the WorkspaceKit overlay count became zero. Used WorkspaceKit's visible “保存当前工作流” action; its dirty marker and save action both disappeared.
+- Reload acceptance: opened `002`, then reopened `New Workflow`. The Groups Settings page reported one ComfyUI native group, the conversion action remained disabled with the native-state explanation, WorkspaceKit overlay count was zero, and the reopened workflow had no dirty marker or save action.
+- Read-only saved-file verification at `G:\AIGC\ComfyUI_test\ComfyUI\user\default\workflows\New Workflow.json`: `groupRepresentation=native`, archive schema `1`, archive source `workspacekit`, archive group count `1`, persisted WorkspaceKit group count `0`, native group count `1`.
+- C5 is partially complete: the positive conversion/save/reload and pure-native path are now real-page evidence. Mixed groups, empty workflow, boundary-node geometry and injected runtime rollback remain separate fixtures; no claim is made for those cases yet.
+
+## 2026-07-27 - Group conversion hardening C4
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-conversion-hardening-c4-20260727-162000.zip` (SHA-256 `7AB0E31219934D3624A77B9FE58E4B277E0CDA021E4CF4AE451EE6A085507161`).
+- Expanded Settings conversion regression coverage for all visible state classes: ready WorkspaceKit groups, native groups, no WorkspaceKit groups, mixed native/WorkspaceKit groups and loading state. It also covers cancelled confirmation, confirmation-time state change, a forced conversion error and the existing default Settings page contract.
+- The forced-error test exposed a real UI bug: the `finally` refresh immediately overwrote the failure notice with a ready-state notice. Fixed it by preserving terminal success, stale-state and failure messages while still refreshing the action's disabled state.
+- Live test package: `http://127.0.0.1:8190/`, workflow `002`. The native workflow reported 4 ComfyUI groups and the conversion action stayed disabled with its explanatory title. No conversion was performed.
+- Full WorkspaceKit contract suite, JavaScript syntax checks, locale JSON parsing and `git diff --check` passed. Positive conversion plus save/reload remains C5 real-page acceptance.
+
+## 2026-07-27 - Group conversion hardening C3
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-conversion-hardening-c3-20260727-161100.zip` (SHA-256 `2D08C3F70B64EC0C65DAD771196B48577E3E5D5D1859E7A8184E874F9BA63368`).
+- Added the pure `canvas-groups/conversion-result.js` post-condition validator. A conversion can return success only when the archived data is valid, the native representation is written, every source group has a new native-group mapping, all prior native groups remain, the expected native count is present, and WorkspaceKit data, node markers and overlay elements are gone.
+- The validator runs inside the existing transaction before success is returned. A failed post-condition throws into the existing catch path, which removes newly added native groups and restores the previous graph metadata, nodes and WorkspaceKit groups.
+- The success message continues to state that the user must save the current workflow; conversion does not claim automatic persistence.
+- Unit coverage proves both a complete valid result and two failure cases: a missing converted native group and a remaining WorkspaceKit node marker.
+- Live test package: `http://127.0.0.1:8190/`, workflow `002`. It remained in native mode with 4 groups; the action was safely disabled, no confirmation was open, and no workflow data was changed. A real positive conversion + save/reload remains C5 acceptance work.
+- Focused C3 contracts, full WorkspaceKit contract suite, JavaScript syntax checks, locale JSON parsing and `git diff --check` passed.
+
+## 2026-07-27 - Group conversion hardening C2
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-conversion-hardening-c2-20260727-160200.zip` (SHA-256 `AC94F532A353D2DDE302D0D7A001D1B4F21D03DED029F231A764DF155E07AB3F`).
+- Before opening the confirmation dialog, Settings captures the active graph reference, WorkspaceKit group count, native-group count and a serialized WorkspaceKit-group signature. After confirmation it re-reads all four values; any mismatch cancels the command with an explanatory status.
+- The execution layer independently rejects an obsolete snapshot and exposes an in-progress lock, so a caller outside the Settings button cannot create duplicate native groups from an old request.
+- Focused contract test injects a group-count change during the asynchronous confirmation step. It proves that the conversion function is not called and the state-changed notice is shown.
+- Live test package: `http://127.0.0.1:8190/`, workflow `002`. The current native state still reported 4 ComfyUI groups and the conversion action remained disabled with its explanatory title. No conversion was executed and no workflow data was changed during C2 verification.
+- Focused C2 contracts, JavaScript syntax checks, locale JSON parsing and `git diff --check` passed. Full suite is run after this log update.
+
+## 2026-07-27 - Group conversion hardening C1
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-conversion-hardening-c1-20260727-153500.zip` (SHA-256 `B98C0E9D4423E943A13E06B4CD3D2C62412F141D1F3FAB5DDEB99EEFC856F7BC`).
+- Settings now opens the existing `workflows` page rather than the removed `common` page.
+- Conversion status now distinguishes active WorkspaceKit groups from native ComfyUI groups. A native workflow no longer presents a clickable no-op conversion action.
+- Live test package: `http://127.0.0.1:8190/`, workflow `002`. Settings opened on “工作流”; the “编组” page reported “当前工作流已使用 ComfyUI 默认编组（4 个）”. The conversion action had `disabled=true`, `aria-disabled=true`, its reason stated that conversion was unnecessary, and no confirmation dialog was present.
+- This C1 batch did not execute a conversion command and did not change the tested workflow data.
+- Focused static verification passed: settings dialog contract, native conversion contract, JavaScript syntax checks, locale JSON parsing, and `git diff --check`.
+
+## 2026-07-27 - Group conversion silent-action diagnosis
+
+- Source inspection confirmed that the Settings conversion action returns silently when the current representation is native or `workspaceKitGroupCount` is zero. It refreshes the status text but does not show a disabled state, explanatory notice, or confirmation dialog.
+- The current state counter uses active WorkspaceKit overlay groups; native ComfyUI groups are counted separately and are not shown in the current status text. This can make a canvas with visible native groups look like a no-op conversion action.
+- The Settings navigation was recently renamed to `workflows / templates / groups / shortcuts / appearance / advanced`, while the dialog still selects the removed `common` page as its initial page. This is a separate confirmed settings-shell defect.
+- No conversion algorithm was changed during diagnosis. The controlled remediation plan is tracked in `.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md`.
+
+## 2026-07-27 - Settings persistence batch 2
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-settings-persistence-batch2-20260727-150748.zip` (SHA-256 `72191D61ADBF9EDF054EBF0C327733B1A199676401D64ED3417C433376D8EEE2`).
+- Live test package: `http://127.0.0.1:8190/`.
+- Workflows: changed `打开记录数量` from 5 to 8; after a real page reload and reopening Settings, the value remained 8.
+- Templates: turned `Alt+C 保存后自动打开模板` off; after reload it remained off, then restored it to on in the UI.
+- Groups: turned `启用 WorkspaceKit 编组` off; after reload it remained off, then restored it to on in the UI.
+- Shortcuts: turned `Shift + 1` off; after reload it remained off, then restored all four module shortcuts to on in the UI.
+- The final post-restore reload did not show the WorkspaceKit entry during the observation window, so the restored-on state after that reload remains unverified. Console evidence showed a Vite preload error and `ComfyApp graph accessed before initialization`; these are runtime evidence, not attributed to settings persistence without a reproducible owning call chain.
+- No production source code was changed in this batch; this entry records real UI persistence evidence and the remaining reload-boundary uncertainty.
+
+## 2026-07-27 - Settings domain classification batch 1
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-settings-domain-batch1-20260727-135204.zip` (SHA-256 `F67E73B9B9B7A5DA9C36DE6C4D66D8772EF0D1F9F436A152E5311C9EAF5C7E91`).
+- Workflows and Templates now have independent settings sections: Open history count belongs to Workflows; Alt+C auto-open belongs to Templates.
+- Groups now has its own settings page containing WorkspaceKit group activation and current-workflow representation/conversion. Group pointer gestures remain under Shortcuts.
+- The Advanced page continues to hold integrations, node cache, data management, and About until the next migration batch.
+- Static verification passed: 61/61 WorkspaceKit contracts, locale JSON parsing, JavaScript syntax checks, and `git diff --check`.
+- Live test-package acceptance passed after a fresh reload at `http://127.0.0.1:8190/`: the Settings dialog showed `工作流 / 模板 / 编组 / 快捷键 / 外观 / 高级`; Workflows contained `打开记录数量`, Templates contained `Alt+C 保存后自动打开模板`, Groups contained group activation and representation/conversion, and Shortcuts retained `编组鼠标手势`. Advanced contained integrations, node cache, data management, and About, without a duplicate Groups section.
+
+## 2026-07-27 - Native conversion residue fix and unified group settings
+
+- Pre-change full backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-settings-and-conversion-fix-r1-20260727-133348.zip` (SHA-256 `EF5C6E1C0ACBBCB812EA5BDD73DFB082C89C1B5E69B23A0ACB442EA84E6944D7`).
+- Confirmed residue cause: older workflow/node snapshots could retain the direct `_xzgGroup` marker even after `_xzgGroupData` and `properties._xzgGroup` were cleared. The native-mode restore path could then reconstruct a stale DOM WorkspaceKit group that did not follow LiteGraph zoom/pan.
+- `_clearNodeGroupData()` now removes all three legacy marker locations, the native restore path clears stale markers before rebuilding, and `rebuildAllEls()` removes unknown stale `.xzg-group-box` elements as well as entries in `groupEls`.
+- Settings now place WorkspaceKit group activation, Ctrl+G/Shift+G information, modifier gestures, and group-representation conversion under one Advanced → Groups category. The generic Shortcuts page retains only non-group shortcuts.
+- Added bilingual labels and cache-busted settings-module imports so a long-lived browser session cannot silently keep the previous section layout.
+- Static verification passed: 61/61 WorkspaceKit contracts, JSON parsing, JavaScript syntax, and `git diff --check`.
+- Live test-package page verification after reload: Advanced shows one `编组` category containing the enable checkbox, Ctrl+G/Shift+G information, all three modifier selectors, and the representation conversion area. The already-native workflow reported `ComfyUI 默认编组 · 0`, with zero `.xzg-group-box` elements and zero stale node group markers.
+- A fresh conversion from a still-WorkspaceKit workflow must remain a separate acceptance step; the current test package no longer contains an untouched WorkspaceKit-group fixture after the earlier conversion run.
+
+## 2026-07-27 - First transactional WorkspaceKit-to-native conversion batch
+
+- Pre-change source-only backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-native-group-conversion-r1-20260727-121335.zip` (SHA-256 `54F3CF742C0F2DFB81BD3230B65CD0D5C41722D8733DEF4DB6264F21D3EB538F`).
+- Added the current-workflow conversion command and Advanced settings action. It validates native-group support, source bounds, and member-node references before creating any native group.
+- Existing native groups are preserved. New native groups are removed on failure; graph metadata, node WorkspaceKit fields, and the in-memory overlay state are restored in the rollback path.
+- On success, the source archive is stored under `extra.workspacekit.groupConversion`, `groupRepresentation` becomes `native`, active `xzgGroups` data is disabled, and the DOM overlay is removed. No reverse conversion is included in this batch.
+- Static verification passed: native-conversion contract, settings-section regression, all existing `test-*.mjs` contracts, JavaScript syntax checks, JSON parsing, and `git diff --check`.
+- **Previous live-page boundary superseded:** the first browser attempt was blocked by Layout's legacy `#alignment-buttons` overlay. The overlay fix is recorded in the Layout testing log below; it is no longer a blocker.
+
+## 2026-07-27 - Live acceptance: Layout overlay fix and native conversion
+
+- Test package: `http://127.0.0.1:8190/`, fresh page load after the cache-busted Layout import.
+- Layout overlay evidence: when `.workspace2-panel` exists, both legacy `#alignment-buttons` instances reported `visibility: hidden` and `pointer-events: none`; the WorkspaceKit panel reported `overlay: 0` for `.workspace2-group-overlay` after conversion.
+- Settings evidence: the WorkspaceKit Settings dialog opened through the real Settings button; the Advanced section was reachable without the legacy toolbar intercepting the click.
+- Conversion target: disposable test workflow `Zimage/002.json`, containing four WorkspaceKit groups.
+- Conversion evidence: the confirmation dialog stated that a recoverable archive would be kept; after confirmation the UI reported `Converted 4 groups. This workflow now uses ComfyUI default groups.`
+- Save/reload evidence: `Ctrl+S` saved the workflow. A direct read of `Zimage/002.json` then showed `extra.workspacekit.groupRepresentation = native`, four native `groups`, and the conversion archive. After a page reload, Advanced reported `Current workflow group representation: ComfyUI default groups · 0`.
+- Result: the first real test-package acceptance of the transactional WorkspaceKit-to-native path passed. Reverse conversion remains intentionally out of scope for this batch.
+
+## 2026-07-27 - Reversible group-conversion archive layer
+
+- Pre-change source-only backup: `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-group-conversion-archive-r1-20260727-121027.zip` (SHA-256 `72FA8E606518CF0E50852C5EFFE2818CC58A5D3BA0BB3209CB4641A594C1A863`).
+- Added the pure `canvas-groups/conversion-archive.js` data layer. It creates a detached, schema-versioned archive without changing the active canvas representation.
+- The archive preserves the serialized WorkspaceKit group payload, including `backgroundFillEnabled` and `backgroundOpacity`; validation rejects mismatched schema, source, group IDs, node lists, or bounds before any future conversion mutation.
+- `workspace2CanvasGroups.createConversionArchive()` exposes the preparation step for the later transactional native-group conversion. No conversion command or `graph.extra` representation switch is performed in this batch.
+- Static verification passed: archive contract, all existing `test-*.mjs` contracts, JavaScript syntax checks, and `git diff --check`.
+
 ## 2026-07-27 - Public documentation synchronization
 
 - Reworked the Chinese README and synchronized the English public metadata.
@@ -42,7 +284,7 @@ This document records reproducible test evidence and unresolved errors found whi
 
 - Complete WorkspaceKit and Layout snapshots were created before this bounded
   visual-source batch. The exact archive paths and SHA-256 values are recorded
-  in `PANEL_UI_TEMPLATE_IMPLEMENTATION.md`, Batch 4.1.
+  in `.dev-docs/PANEL_UI_TEMPLATE_IMPLEMENTATION.md`, Batch 4.1.
 - Template v1.1.0 maps its shared tokens to WorkspaceKit's existing product
   surface, tab, control, hover, glass-border, and glass-shadow variables, with
   ComfyUI tokens retained only for an independently installed Layout Vendor

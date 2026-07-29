@@ -3,6 +3,8 @@
 Version: 1.0  
 Date: 2026-07-15
 
+> **Scope vs Roadmap**: this file states *what* the product is, *for whom*, and *why*. Feature-level design intent with acceptance criteria lives in [`ROADMAP.md`](ROADMAP.md); public status lives in [`../ROADMAP.md`](../ROADMAP.md). Outstanding-work tracking lives in the internal `.dev-docs/` tree, which is not published to Git.
+
 ## Product family
 
 - `ComfyUI-WorkspaceKit`: modular workspace, sidebar, panel host, workflow and node organization.

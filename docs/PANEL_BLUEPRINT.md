@@ -2,6 +2,8 @@
 
 Status: **active staged migration**
 
+> **Relationship to other docs**: this file records the visual/structural design intent for panels. The **runtime implementation contract** (versioned UI template, vendor export, host capability protocol) is tracked in [`PANEL_UI_TEMPLATE.md`](PANEL_UI_TEMPLATE.md); the batch-level execution log lives in the internal `.dev-docs/` tree (not published). The Provider surface is in [`PANEL_PROVIDER_API.md`](PANEL_PROVIDER_API.md).
+
 ## Product anatomy
 
 Every WorkspaceKit panel follows the same vertical order:

@@ -14,7 +14,7 @@ current Provider API v1 contract or promise that an existing Provider already
 uses these components.
 
 Execution status, backups, batch boundaries, and acceptance evidence are
-tracked separately in [Panel UI Template implementation tracker](PANEL_UI_TEMPLATE_IMPLEMENTATION.md).
+tracked separately in the batch-level implementation log under `.dev-docs/` (not published).
 
 ## 1. Product goal
 

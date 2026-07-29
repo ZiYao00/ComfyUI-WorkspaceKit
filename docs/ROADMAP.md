@@ -2,6 +2,8 @@
 
 This document records planned product work. A listed item is a design intent, not a released feature or compatibility promise.
 
+> **Scope**: internal feature-level requirements and acceptance criteria. For the public-facing status list see [`../ROADMAP.md`](../ROADMAP.md). Outstanding-work tracking (backlog, tech debt, per-batch dashboard) is maintained in the internal `.dev-docs/` tree, which is not published to Git.
+
 ## P0 — WorkspaceKit Panel UI Template v1
 
 Status: **architecture approved; implementation not started.**
@@ -38,14 +40,18 @@ Required acceptance before release:
 3. A sidebar DOM remount does not create duplicate WorkspaceKit entries.
 4. The health record identifies the failed startup stage without exposing user data.
 
-## P1 — Normalize a workflow to ComfyUI native groups
+## P1 — Reversible WorkspaceKit / ComfyUI native group representation
 
-WorkspaceKit currently uses its own overlay-group representation to support header actions, modifier gestures, multi-group selection, and its visual settings. A future workflow-level command will provide **Use ComfyUI default groups**.
+Status: **first WorkspaceKit-to-native command implemented; real-page acceptance and reverse conversion remain.**
+
+WorkspaceKit currently uses its own overlay-group representation to support header actions, modifier gestures, multi-group selection, and its visual settings. A future workflow-level command will provide **WorkspaceKit groups / Use ComfyUI default groups** for the current workflow only.
 
 - The command operates on every WorkspaceKit group in the current workflow, not on one arbitrary group.
 - It converts those groups to real ComfyUI/LiteGraph native groups so the result uses the client’s default group appearance and behavior.
 - If the workflow already contains a mixture of native ComfyUI groups and WorkspaceKit groups, **Normalize to ComfyUI native groups** converts the remaining WorkspaceKit groups and leaves existing native groups intact. The resulting workflow has one group representation.
-- Before conversion, WorkspaceKit must retain the source group metadata needed to offer a deliberate restore path. Native groups do not provide WorkspaceKit-only header actions, modifier gestures, multi-selection, or visual controls.
+- Before conversion, WorkspaceKit must retain a complete source archive under a dedicated conversion record, including title, member node IDs, bounds, execution-mode snapshots, title/background colors, font size, borders, shadows, padding, animation, and animation speed. The archive must remain available after the active representation changes.
+- When `groupRepresentation` is `native`, the archived `xzgGroups` data is recovery-only and must not be read as an active overlay layer; otherwise the canvas would show duplicate WorkspaceKit and native groups.
+- Restoring WorkspaceKit groups uses the current native structure first: native title, bounds, and actual node membership win; the archive supplies WorkspaceKit-only style and execution metadata. New native groups receive defaults, while deleted native groups require an explicit restore decision.
 - Conversion must be transactional: validate source bounds, titles, node membership, and serialization first; if any conversion fails, do not leave a partially mixed workflow.
 
 Required acceptance before release:
@@ -58,7 +64,9 @@ Required acceptance before release:
 
 ## P1 — WorkspaceKit group content fill
 
-WorkspaceKit overlay groups currently keep their body fully transparent; only the title bar has a background color and opacity. A future opt-in content fill will preserve the existing transparent default.
+Status: **first version implemented; visual polish deferred.**
+
+WorkspaceKit overlay groups now support an opt-in body fill while preserving the existing transparent default. The fill is drawn through ComfyUI's background pass so it remains beneath node pixels; the DOM overlay is retained only for the title bar and actions.
 
 - Add **Enable group background fill** to the group settings.
 - The fill uses the same RGB color source as the title-bar background. It does not introduce a second unrelated color picker.
@@ -124,6 +132,17 @@ Required acceptance before release:
 2. A known browser or ComfyUI-reserved binding shows a clear warning and is not applied by default.
 3. A valid binding persists across refresh and does not break text editing or canvas gestures.
 4. Reset restores the documented defaults exactly.
+
+## P1 — Settings information architecture
+
+Status: **design approved; implementation not started.**
+
+Reorganize Settings by product domain: Workflows, Nodes, Templates, Groups,
+Shortcuts, Appearance, Extensions, Data and maintenance, and About. Template
+behavior owns Alt+C auto-open; workflow behavior owns recent-history count;
+group representation and conversion receive their own Groups page; group
+pointer gestures remain under Shortcuts. The detailed Chinese plan and staged
+acceptance rules are documented in the internal `.dev-docs/` tree (not published).
 
 ## P1 — Workflows Browse two-pane layout
 

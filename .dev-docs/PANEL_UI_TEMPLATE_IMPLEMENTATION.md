@@ -1,8 +1,8 @@
 # Panel UI Template v1 — Implementation Tracker
 
 Status: **active implementation program**  
-Architecture reference: [Panel UI Template v1](PANEL_UI_TEMPLATE.md)
-Panel-structure migration: [Panel Blueprint v1](PANEL_BLUEPRINT.md)
+Architecture reference: [Panel UI Template v1](../docs/PANEL_UI_TEMPLATE.md)
+Panel-structure migration: [Panel Blueprint v1](../docs/PANEL_BLUEPRINT.md)
 
 This document is the execution record for the Panel UI Template program. It is
 not a release note: each batch must record its actual evidence before the next

@@ -2,6 +2,8 @@
 
 This roadmap is for public GitHub readers. It tracks broad product direction, not private development notes.
 
+> **Related internal docs**: [`docs/ROADMAP.md`](docs/ROADMAP.md) — feature-level P0/P1 requirements with acceptance criteria (internal, not for public readers). Development state (backlog, tech debt, per-batch dashboard) is tracked locally under `.dev-docs/` and is not published to Git; see `docs/BACKUP_CONVENTION.md` for why.
+
 ## Completed
 
 - Fixed Canvas Groups changing a zero-argument `loadGraphData()` call and triggering an `extra` read failure while restoring the previous workflow in multi-extension setups.
@@ -13,6 +15,7 @@ This roadmap is for public GitHub readers. It tracks broad product direction, no
 - Templates first-open path: idle prefetch, per-session request sharing, phase timing, and deferral of stale node-definition refresh while Templates is active.
 - Canvas Groups enhancements, including WorkspaceKit group shortcuts and title-bar style settings.
 - Canvas Group header actions: queue this group's output nodes, bypass, and disable, with per-node execution-mode snapshot and restore.
+- Added optional Canvas Group body fill: the body can reuse the title-bar color with an independent opacity slider, while remaining transparent by default.
 - Title2 visual title / annotation node.
 - WorkspaceKit settings panel first version.
 - English/Chinese localization infrastructure and the Group Settings / Transparent Title dialog localization pass.

@@ -14,6 +14,18 @@
 - Kept `workspace2` references where they identify compatibility storage keys,
   runtime identifiers, or historical test evidence.
 
+### Changed
+
+- Added optional WorkspaceKit group body fill. The new `背景` control reuses the
+  title-bar color, while its opacity is independent from the `标题栏` opacity;
+  legacy groups keep their existing header color and opacity.
+- Added the first reversible group-conversion archive layer. It records a
+  detached, schema-versioned WorkspaceKit snapshot (including background
+  fields) without activating native-group conversion yet.
+- Added the first confirmed-scope WorkspaceKit-to-native conversion command for
+  the current workflow, with preflight validation and rollback protection;
+  reverse conversion and real-page acceptance remain pending.
+
 ## 0.2.4 - 2026-07-22
 
 ### Fixed

@@ -13,6 +13,12 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/BACKLOG.zh-CN.md` (T-001..T-503).
 
+## 2026-07-29 - entry.js split #2: extract `FALLBACK_STRINGS` to `core/fallback-strings.js`
+
+- Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-fallback-strings-20260729-121348.zip` (243 files).
+- **Change**: moved the ~470-line static i18n fallback table `FALLBACK_STRINGS` (old `entry/entry.js` L182–651) verbatim into a new module `entry/core/fallback-strings.js` (exported `FALLBACK_STRINGS`), and replaced it in `entry.js` with `import { FALLBACK_STRINGS } from "./core/fallback-strings.js";`. It is pure data with a single consumer, `configureI18n(app, FALLBACK_STRINGS)`; no other module referenced it. Lookup/merge logic remains in `core/i18n.js`.
+- **Regression**: `node --check` passes on both files. 64/64 mjs contracts green. `git diff` on `entry.js` shows +1 insertion / -470 deletions; the `configureI18n` call site is unchanged. No e2e run: a pure static-data move exercises no logic branch. `entry.js` dropped from 9,950 to 9,480 lines.
+
 ## 2026-07-29 - entry.js split #1: extract `styles()` CSS to `ui/styles.js`
 
 - Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-styles-css-20260729-115529.zip` (242 files).

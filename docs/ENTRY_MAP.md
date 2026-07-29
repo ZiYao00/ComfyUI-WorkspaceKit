@@ -25,11 +25,14 @@ ES-module imports of already-extracted sibling modules (`core/`, `nodes/`,
 `templates/`, `ui/`, `workflows/`, `settings/`, `canvas-groups/`, `integrations/`).
 Key: `app` (L1), `workspace2CanvasGroups` (L3), `EXTENSION_NAME` + perf helpers (L9–13, L109–159).
 
-### Constants & config keys — L161–722
-localStorage keys, i18n fallback strings, node-category taxonomy tables.
-Key: `FALLBACK_STRINGS` (L181, ~470-line i18n table), `WORKSPACE2_MENU_MARK` (L179),
-`CORE_NODE_MODULES` (L651), `NODE_SOURCE` (L652), `ESSENTIALS_CATEGORY_ORDER/NODES/MAP/RANK` (L659–688),
-`COMFY_CATEGORY_LABEL_KEYS` (L689), `COMFY_CATEGORY_ORDER_KEYS` (L711).
+### Constants & config keys — L161–252 (approx, post-split)
+localStorage keys, node-category taxonomy tables. **The `FALLBACK_STRINGS`
+i18n table (old L182–651) has been extracted to
+[`entry/core/fallback-strings.js`](../entry/core/fallback-strings.js); entry.js
+now imports it.** Key: `WORKSPACE2_MENU_MARK` (L180), `CORE_NODE_MODULES`,
+`NODE_SOURCE`, `ESSENTIALS_CATEGORY_ORDER/NODES/MAP/RANK`, `COMFY_CATEGORY_LABEL_KEYS`,
+`COMFY_CATEGORY_ORDER_KEYS`. All line numbers below are now ~2700 lower than the
+original map — regenerate.
 
 ### Global state & service wiring — L723–1305
 Constructs extracted-module service instances and shared mutable state. The
@@ -135,7 +138,7 @@ verification (see Step 3 of the large-file plan).
 | Candidate | Lines | Why it's extractable |
 | --- | --- | --- |
 | ~~`styles` CSS literal~~ | ~~L3096–5324~~ | ✅ **Extracted** to `entry/ui/styles.js` (2026-07-29) — see MODULE_MAP |
-| `FALLBACK_STRINGS` table | L181–650 | ~470-line static i18n data; belongs in `core/fallback-strings.js` |
+| ~~`FALLBACK_STRINGS` table~~ | ~~L181–650~~ | ✅ **Extracted** to `entry/core/fallback-strings.js` (2026-07-29) — see MODULE_MAP |
 | Official adapter + favorites probing | L1306–1630 | Cohesive reflection-into-ComfyUI feature, no UI; → `integrations/official-node-adapter.js` |
 | Panel appearance / glass / background | L2010–2320 | Self-contained visual subsystem keyed off `panelBackgroundState`; → `ui/panel-appearance.js` |
 | Node drag/drop cluster | L8297–8992 | Self-contained pointer/canvas DnD engine; → `nodes/drag-drop.js` (mirrors `templates/drag-drop.js`) |

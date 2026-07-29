@@ -26,6 +26,7 @@ the same pull request as any module ownership change.
 | --- | --- | --- | --- |
 | `core/api.js` | WorkspaceKit HTTP helpers | UI lifecycle | Endpoint callers and Python routes |
 | `core/i18n.js` | Locale configuration and translation lookup | Panel rendering | Locale asset and fallback checks |
+| `core/fallback-strings.js` | The static built-in i18n fallback string table (`FALLBACK_STRINGS`), used when no locale asset is loaded | Lookup/merge logic, locale detection, or rendering (those stay in `core/i18n.js`) | Syntax check passed; 64/64 contracts green after extraction; sole consumer is `configureI18n(app, FALLBACK_STRINGS)` |
 | `core/performance.js` | Performance spans and measurements | Business behavior | Instrumentation smoke checks |
 | `core/startup-stage.js` | Isolated optional-startup stage runner and concise failure recording | Sidebar registration, feature behavior, UI rendering, or error presentation | Sidebar-startup resilience contract and test-package served-source check passed |
 

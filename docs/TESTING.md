@@ -13,6 +13,16 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/BACKLOG.zh-CN.md` (T-001..T-503).
 
+## 2026-07-29 - INCIDENT: dialogs factory TDZ crash (split #3 regression) + fix
+
+- **Symptom**: after splits #1-#4, a real ComfyUI restart showed the WorkspaceKit 🧩 sidebar tab had vanished entirely (no entry at all). Backend loaded fine (`Loading: WorkspaceKit (0.2.4)`, no IMPORT FAILED); the browser console showed `[vite:preloadError]` with no expanded detail.
+- **Bisection**: via `git checkout` of each split commit + hard browser reload — baseline `db7547a` OK; #1 `8ba7e95` OK; #2 `8c06ce5` OK; #3 `7c87c6f` **broken**. Root cause isolated to split #3.
+- **Root cause**: split #3 replaced hoisted `function workspace2Confirm/Notice/InlineConfirm/ConfirmDirtyWorkflowClose` declarations with a `const { ... } = createWorkspace2Dialogs(...)` binding placed at ~L2297. But `workspace2InlineConfirm` is referenced at module top level far earlier (L472, passed into `createWorkflowTrashRenderer`). `const` is not hoisted, so module evaluation hit the temporal dead zone: `Cannot access 'workspace2InlineConfirm' before initialization`. That aborted the whole entry.js module, so `app.registerExtension` never ran and the tab disappeared.
+- **Why tests missed it**: `node --check` only checks syntax; the 64 mjs contracts import individual sibling modules, never evaluating entry.js as a whole in a browser. This is a module-top-level execution-order fault that ONLY surfaces when a real browser evaluates the module. **Lesson: converting a hoisted `function` to a non-hoisted `const` factory binding requires checking every reference site is textually after the binding — or placing the binding above all consumers.**
+- **Fix** (`0372c8c`): moved the `createWorkspace2Dialogs(...)` binding above its earliest consumer (before `createWorkflowTrashRenderer`, ~L453). Injected deps (`t`, `isolateComfyKeys`, `closeWorkspace2OverlaysForConfirm`) are function declarations and stay hoisted; the factory body only defines closures and does not call the deps at creation time, so early evaluation is safe. Split #4's `createNodeSearch` factory was audited and is safe (its outputs are used only after its binding).
+- **Verified**: 64/64 contracts green; real-page reload confirmed the 🧩 tab is restored and clickable.
+- **Deployment note**: the test package at `G:\AIGC\ComfyUI_test\ComfyUI\custom_nodes\ComfyUI-WorkspaceKit` is a **symlink to `G:\GitHub\ComfyUI-WorkspaceKit`** — edits to the repo are live in the test package immediately (a hard browser reload is enough; no file copy needed). The earlier "sync to `G:\AIGC\ComfyUI\...`" copies targeted a *different, non-test* ComfyUI and were never what the user was running.
+
 ## 2026-07-29 - entry.js split #4: extract search/scoring to `core/search-scoring.js` + `nodes/search.js`
 
 - Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-search-20260729-130418.zip` (245 files).

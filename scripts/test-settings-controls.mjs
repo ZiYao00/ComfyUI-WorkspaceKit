@@ -42,7 +42,7 @@ assert.equal(section.children[0].textContent, "Title");
 assert.equal(section.children[1].textContent, "Help");
 
 const grid = controls.settingsShortcutGrid();
-assert.equal(grid.children.length, 8);
+assert.equal(grid.children.length, 5);
 assert.equal(grid.children[0].children[0].textContent, "Shift + 1");
 assert.equal(grid.children[0].children[1].textContent, "t:settings.shortcuts.workflow");
 assert.equal(grid.children[3].children[0].textContent, "Shift + 4");

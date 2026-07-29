@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createSettingsDialogSections } from "../entry/settings/dialog-sections.js";
 
 class FakeElement {
@@ -9,9 +10,20 @@ class FakeElement {
 const updates = [];
 const actions = [];
 const modeRows = [];
+let conversionInfo = { representation: "workspacekit", workspaceKitGroupCount: 2, nativeGroupCount: 0, isReady: true };
+let conversionCalls = 0;
+let reverseConversionCalls = 0;
+let changeConversionStateDuringConfirm = false;
+let confirmConversion = true;
+let conversionFailure = null;
 const factory = createSettingsDialogSections({
   document: { createElement: () => new FakeElement() },
-  t: (key, values = {}) => values.count ?? values.time ?? values.version ?? key,
+  t: (key, values = {}) => {
+    if (key === "settings.cacheCount") return values.count;
+    if (key === "settings.cacheUpdated") return values.time;
+    if (key === "settings.version") return values.version;
+    return key;
+  },
   toolbarButton: (icon, label, onClick) => ({ icon, label, onClick }),
   settingsActionButton: (icon, label, onClick, options) => ({ kind: "action", icon, label, onClick, options }),
   settingsCheckbox: (label, checked, onChange) => ({ kind: "checkbox", label, checked, onChange }),
@@ -54,10 +66,29 @@ const factory = createSettingsDialogSections({
   clearNodeCache: async () => actions.push(["clearCache"]),
   confirmClearNodeCache: async () => true,
   buildDataManagementSection: () => ({ kind: "data-management" }),
+  getGroupRepresentationInfo: () => conversionInfo,
+  confirmConvertGroupsToNative: async () => {
+    if (changeConversionStateDuringConfirm) {
+      conversionInfo = { representation: "workspacekit", workspaceKitGroupCount: 3, nativeGroupCount: 0, isReady: true };
+    }
+    return confirmConversion;
+  },
+  convertGroupsToNative: async () => {
+    conversionCalls += 1;
+    if (conversionFailure) throw conversionFailure;
+    conversionInfo = { representation: "native", workspaceKitGroupCount: 0, nativeGroupCount: 2, isReady: true };
+    return { converted: 2 };
+  },
+  convertGroupsToWorkspaceKit: async () => {
+    reverseConversionCalls += 1;
+    conversionInfo = { representation: "workspacekit", workspaceKitGroupCount: 2, nativeGroupCount: 0, isReady: true };
+    return { converted: 2 };
+  },
+  confirmConvertGroupsToWorkspaceKit: async () => true,
 });
 
 const sections = factory.buildSettingsDialogSections();
-assert.deepEqual(Object.keys(sections), ["shortcuts", "groupPointerShortcuts", "behavior", "backgroundEffect", "nodeCache", "dataManagement", "integrations", "about", "versionInfo"]);
+assert.deepEqual(Object.keys(sections), ["shortcuts", "groupPointerShortcuts", "workflowSettings", "templateSettings", "groupSettings", "backgroundEffect", "nodeCache", "dataManagement", "integrations", "about", "versionInfo"]);
 assert.equal(sections.shortcuts.children[2].checked, true);
 assert.equal(sections.shortcuts.children[3].checked, false);
 sections.shortcuts.children[2].onChange(false);
@@ -65,11 +96,31 @@ assert.deepEqual(actions.shift(), ["workflowShortcut", false]);
 assert.equal(sections.groupPointerShortcuts.children[1].kind, "select");
 sections.groupPointerShortcuts.children[1].onChange("group.toggleDisable");
 assert.deepEqual(actions.shift(), ["groupPointer", "group.toggleDisable"]);
-sections.shortcuts.children[4].onChange(false);
+assert.equal(sections.groupSettings.children[1].checked, true);
+sections.groupSettings.children[1].onChange(false);
 assert.deepEqual(actions.shift(), ["ctrlG", false]);
-assert.equal(sections.behavior.children[0].checked, false);
-sections.behavior.children[1].value = 9;
-sections.behavior.children[1].options.onChange(9);
+const conversionSection = sections.groupSettings.children[3];
+const conversionStatus = conversionSection.children[1];
+// T-201: the representation section now renders two buttons in a container
+// instead of one direction-shifting button. children[2] is the buttons row;
+// [0] is "convert to native" (forward), [1] is "convert to WorkspaceKit"
+// (reverse).
+const forwardButton = (section) => section.children[2].children[0];
+const reverseButton = (section) => section.children[2].children[1];
+// Initial state: workspacekit with 2 groups. Forward enabled, reverse disabled.
+assert.equal(forwardButton(conversionSection).disabled, false);
+assert.equal(forwardButton(conversionSection).label, "groups.convertToNative");
+assert.equal(reverseButton(conversionSection).disabled, true);
+assert.equal(reverseButton(conversionSection).label, "groups.convertToWorkspaceKit");
+await forwardButton(conversionSection).onClick();
+assert.equal(conversionCalls, 1);
+// After converting to native, forward is now disabled and reverse enabled.
+assert.equal(forwardButton(conversionSection).disabled, true);
+assert.equal(reverseButton(conversionSection).disabled, false);
+assert.match(String(conversionStatus.textContent), /groups\.convertedToNative/);
+assert.equal(sections.templateSettings.children[0].checked, false);
+sections.workflowSettings.children[0].value = 9;
+sections.workflowSettings.children[0].options.onChange(9);
 assert.deepEqual(actions.shift(), ["recent", 9]);
 assert.equal(modeRows.length, 2);
 modeRows[1].options.onSelect("glass");
@@ -85,5 +136,82 @@ assert.equal(sections.integrations.children[0].checked, true);
 sections.integrations.children[0].onChange(false);
 assert.deepEqual(actions.shift(), ["panelIntegrations", false]);
 assert.equal(sections.versionInfo.text, "settings.versionLoading");
+
+const nativeSections = factory.buildSettingsDialogSections();
+const nativeConversionSection = nativeSections.groupSettings.children[3];
+// Native state: reverse enabled, forward disabled.
+assert.equal(reverseButton(nativeConversionSection).disabled, false);
+assert.equal(reverseButton(nativeConversionSection).label, "groups.convertToWorkspaceKit");
+assert.equal(forwardButton(nativeConversionSection).disabled, true);
+await reverseButton(nativeConversionSection).onClick();
+assert.equal(reverseConversionCalls, 1);
+assert.match(String(nativeConversionSection.children[1].textContent), /groups\.convertedToWorkspaceKit/);
+
+// The confirmation dialog is asynchronous. A changed workflow/group state must
+// cancel the pending action instead of converting a stale target.
+conversionInfo = { representation: "workspacekit", workspaceKitGroupCount: 2, nativeGroupCount: 0, isReady: true };
+conversionCalls = 0;
+changeConversionStateDuringConfirm = true;
+const staleSections = factory.buildSettingsDialogSections();
+const staleConversionSection = staleSections.groupSettings.children[3];
+await forwardButton(staleConversionSection).onClick();
+assert.equal(conversionCalls, 0);
+assert.equal(staleConversionSection.children[1].textContent, "groups.conversionStateChanged");
+changeConversionStateDuringConfirm = false;
+
+// All visible conversion states must have deterministic, safe controls.
+const getConversionSection = (info) => {
+  conversionInfo = info;
+  return factory.buildSettingsDialogSections().groupSettings.children[3];
+};
+const loadingConversion = getConversionSection({ representation: "workspacekit", workspaceKitGroupCount: 2, nativeGroupCount: 0, isReady: false });
+assert.equal(forwardButton(loadingConversion).disabled, true);
+assert.equal(reverseButton(loadingConversion).disabled, true);
+assert.equal(loadingConversion.children[1].textContent, "groups.conversionLoading");
+const emptyConversion = getConversionSection({ representation: "workspacekit", workspaceKitGroupCount: 0, nativeGroupCount: 0, isReady: true });
+assert.equal(forwardButton(emptyConversion).disabled, true);
+assert.equal(reverseButton(emptyConversion).disabled, true);
+assert.equal(emptyConversion.children[1].textContent, "groups.conversionEmpty");
+// Mixed state (T-206): both directions are available — forward converts the
+// remaining WorkspaceKit groups to native, reverse converts native groups and
+// merges them into the existing WorkspaceKit groups.
+const mixedConversion = getConversionSection({ representation: "workspacekit", workspaceKitGroupCount: 2, nativeGroupCount: 1, isReady: true });
+assert.equal(forwardButton(mixedConversion).disabled, false);
+assert.equal(reverseButton(mixedConversion).disabled, false);
+assert.equal(mixedConversion.children[1].textContent, "groups.conversionMixed");
+// Pure native with groups: reverse enabled, forward disabled.
+const pureNative = getConversionSection({ representation: "native", workspaceKitGroupCount: 0, nativeGroupCount: 3, isReady: true });
+assert.equal(reverseButton(pureNative).disabled, false);
+assert.equal(forwardButton(pureNative).disabled, true);
+assert.equal(pureNative.children[1].textContent, "groups.conversionAlreadyNative");
+// Native but empty: both disabled.
+const nativeEmpty = getConversionSection({ representation: "native", workspaceKitGroupCount: 0, nativeGroupCount: 0, isReady: true });
+assert.equal(reverseButton(nativeEmpty).disabled, true);
+assert.equal(forwardButton(nativeEmpty).disabled, true);
+assert.equal(nativeEmpty.children[1].textContent, "groups.conversionNativeEmpty");
+
+// A cancelled confirmation must not call the conversion command.
+conversionInfo = { representation: "workspacekit", workspaceKitGroupCount: 2, nativeGroupCount: 0, isReady: true };
+conversionCalls = 0;
+confirmConversion = false;
+const cancelledConversion = factory.buildSettingsDialogSections().groupSettings.children[3];
+await forwardButton(cancelledConversion).onClick();
+assert.equal(conversionCalls, 0);
+assert.equal(cancelledConversion.children[1].textContent, "groups.conversionReady");
+confirmConversion = true;
+
+// A conversion failure must surface an error instead of reporting success.
+conversionInfo = { representation: "workspacekit", workspaceKitGroupCount: 2, nativeGroupCount: 0, isReady: true };
+conversionCalls = 0;
+conversionFailure = new Error("forced conversion failure");
+const failedConversion = factory.buildSettingsDialogSections().groupSettings.children[3];
+await forwardButton(failedConversion).onClick();
+assert.equal(conversionCalls, 1);
+assert.match(String(failedConversion.children[1].textContent), /groups\.convertFailed/);
+conversionFailure = null;
+
+const entry = await readFile(new URL("../entry/entry.js", import.meta.url), "utf8");
+assert.match(entry, /selectSettingsPage\("workflows"\)/);
+assert.doesNotMatch(entry, /selectSettingsPage\("common"\)/);
 
 console.log("Settings dialog sections contract passed.");

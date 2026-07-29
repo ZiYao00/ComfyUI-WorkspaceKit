@@ -13,6 +13,12 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/BACKLOG.zh-CN.md` (T-001..T-503).
 
+## 2026-07-29 - entry.js split #3: extract dialog primitives to `ui/dialogs.js`
+
+- Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-dialogs-20260729-123347.zip` (244 files).
+- **Change**: moved the four themed modal primitives (`workspace2Confirm`, `workspace2Notice`, `workspace2ConfirmDirtyWorkflowClose`, `workspace2InlineConfirm`) and their private single-open-dialog state into `entry/ui/dialogs.js`, exposed through a `createWorkspace2Dialogs({ t, isolateComfyKeys, closeOverlays })` factory. The function bodies are verbatim except the internal `closeWorkspace2OverlaysForConfirm()` call, now the injected `closeOverlays()`. entry.js destructures the four functions from one factory call placed after its dependencies are defined. `isolateComfyKeys` stays in entry.js (13 call sites, not dialog-specific) and is injected. All 23 dialog call sites are unchanged.
+- **Regression**: `node --check` passes on both files. 64/64 mjs contracts green. `git diff` on `entry.js`: +11 insertions / -284 deletions, confined to the dialog region plus the import; one stray blank-line collapse outside the region was reverted so the diff stays minimal. No e2e run added; the existing `test-settings-dialog-*` contracts remain green. `entry.js` dropped from 9,480 to ~9,205 lines.
+
 ## 2026-07-29 - entry.js split #2: extract `FALLBACK_STRINGS` to `core/fallback-strings.js`
 
 - Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-fallback-strings-20260729-121348.zip` (243 files).

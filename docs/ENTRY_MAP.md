@@ -65,10 +65,13 @@ Key: `exportWorkspaceDataBundle` (L2371), `importWorkspaceDataBundle` (L2384),
 `buildSettingsDialogShell` (L2505), `openWorkspaceSettings` (L2523).
 
 ### Dialogs & confirm/notice overlays — L2637–3030
-Tab activation and modal confirm/notice/inline-confirm primitives.
-Key: `registerWorkspace2CanvasGroupCommands` (L2637), `activateWorkspace2Tab` (L2666),
-`workspace2Confirm` (L2749), `workspace2Notice` (L2821),
-`workspace2ConfirmDirtyWorkflowClose` (L2887), `workspace2InlineConfirm` (L2961).
+Tab activation. **The modal confirm/notice/inline-confirm primitives
+(`workspace2Confirm`, `workspace2Notice`, `workspace2ConfirmDirtyWorkflowClose`,
+`workspace2InlineConfirm`) have been extracted to
+[`entry/ui/dialogs.js`](../entry/ui/dialogs.js) via the
+`createWorkspace2Dialogs` factory; entry.js wires them with injected `t`,
+`isolateComfyKeys`, and `closeWorkspace2OverlaysForConfirm`.**
+Key: `registerWorkspace2CanvasGroupCommands`, `activateWorkspace2Tab`.
 
 ### Locale watcher — L3031–3094
 Locale hot-reload. Key: `loadLocale` (L3031), `refreshLocaleIfChanged` (L3050),
@@ -143,6 +146,6 @@ verification (see Step 3 of the large-file plan).
 | Panel appearance / glass / background | L2010–2320 | Self-contained visual subsystem keyed off `panelBackgroundState`; → `ui/panel-appearance.js` |
 | Node drag/drop cluster | L8297–8992 | Self-contained pointer/canvas DnD engine; → `nodes/drag-drop.js` (mirrors `templates/drag-drop.js`) |
 | Node search/scoring | L7375–7609 | Pure pinyin + fuzzy + official scoring; → `nodes/search.js` (parallels `workflows/search.js`) |
-| Confirm/notice/inline-confirm dialogs | L2749–3030 | Generic modal primitives, no domain coupling; → `ui/dialogs.js` |
+| ~~Confirm/notice/inline-confirm dialogs~~ | ~~L2749–3030~~ | ✅ **Extracted** to `entry/ui/dialogs.js` (2026-07-29) via `createWorkspace2Dialogs` factory — see MODULE_MAP |
 
 _Last generated: 2026-07-29. Regenerate after large edits — line numbers drift._

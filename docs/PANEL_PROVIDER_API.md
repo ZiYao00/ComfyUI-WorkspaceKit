@@ -63,3 +63,27 @@ Providers are retained in memory rather than discarded; `setProvidersEnabled(tru
 emits `availability-changed` and makes them hostable again without another
 plugin load. This is a product preference for sidebar composition, not a
 security boundary.
+
+## CSS scope rules for third-party providers
+
+Providers own only the DOM they append to the supplied hosts. To keep the
+shared sidebar stable across releases:
+
+- Prefix every custom selector with your provider's own root class (for
+  example `.example-panel-provider`). Install styles once, keyed by a unique
+  `<style>` id.
+- Never target WorkspaceKit internal classes (`workspace2-*`, `xzg-*`) or use
+  broad global selectors (bare element selectors, `*`, or `body`-level rules).
+  Those classes are private and may change without notice.
+- Feature-specific visuals stay with the provider. Use the optional `ui`
+  Panel UI Template primitives for shared chrome (header/section/controls)
+  instead of re-styling WorkspaceKit's.
+
+## Copyable example
+
+A complete, dependency-free example provider lives in
+`examples/minimal-panel-provider/`. It shows load-order-safe registration
+(register now, or queue on `window.WorkspaceKitPanelProviderRegistry`), a
+`render()`/`dispose()` pair that appends a single scoped root, optional use of
+the `ui` capability with a local fallback, and scoped styling. Its contract is
+covered on the running test package by `scripts/e2e/t016-example-provider.mjs`.

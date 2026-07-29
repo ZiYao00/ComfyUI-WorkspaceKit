@@ -2544,13 +2544,16 @@ function openWorkspaceSettings() {
   // Ordering rationale (T-204, 2026-07-28 user feedback): Appearance and
   // Advanced sit at the top because they cover global preferences that a
   // returning user is most likely to adjust; feature pages follow.
+  // Nav order and grouping (user request 2026-07-29): Appearance on top, then
+  // the feature group (Groups/Workflows/Templates), then Shortcuts/Advanced.
+  // `dividerBefore` renders a separator line above that entry.
   const settingPages = [
     { id: "appearance", label: t("settings.nav.appearance"), icon: "palette", sections: [backgroundEffect] },
-    { id: "advanced", label: t("settings.nav.advanced"), icon: "settings", sections: [integrations, providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
+    { id: "groups", label: t("settings.nav.groups"), icon: "badge", dividerBefore: true, sections: [groupSettings] },
     { id: "workflows", label: t("settings.nav.workflows"), icon: "files", sections: [workflowSettings] },
     { id: "templates", label: t("settings.nav.templates"), icon: "template", sections: [templateSettings] },
-    { id: "groups", label: t("settings.nav.groups"), icon: "badge", sections: [groupSettings] },
-    { id: "shortcuts", label: t("settings.nav.shortcuts"), icon: "keyboard", sections: [shortcuts].filter(Boolean) },
+    { id: "shortcuts", label: t("settings.nav.shortcuts"), icon: "keyboard", dividerBefore: true, sections: [shortcuts].filter(Boolean) },
+    { id: "advanced", label: t("settings.nav.advanced"), icon: "settings", sections: [integrations, providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
   ];
   const settingsLayout = document.createElement("div");
   settingsLayout.className = "workspace2-settings-layout";
@@ -2570,6 +2573,12 @@ function openWorkspaceSettings() {
     }
   };
   for (const page of settingPages) {
+    if (page.dividerBefore) {
+      const divider = document.createElement("div");
+      divider.className = "workspace2-settings-nav-divider";
+      divider.setAttribute("role", "separator");
+      settingsNav.append(divider);
+    }
     const button = document.createElement("button");
     button.type = "button";
     button.className = "workspace2-settings-nav-button";
@@ -3399,6 +3408,11 @@ function styles() {
       gap: 12px;
       padding: 16px 14px 16px 0;
       border-right: 1px solid color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
+    }
+    .workspace2-settings-nav-divider {
+      height: 1px;
+      margin: 2px 4px;
+      background: color-mix(in srgb, var(--workspace2-border, rgba(255,255,255,.14)) 70%, transparent);
     }
     .workspace2-settings-nav-button {
       display: flex;

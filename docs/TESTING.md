@@ -13,6 +13,12 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/BACKLOG.zh-CN.md` (T-001..T-503).
 
+## 2026-07-28 - Panel Provider lifecycle + example provider (T-013, T-016 partial)
+
+- **T-013 (Batch 2 Provider lifecycle)**: `scripts/e2e/t013-provider-lifecycle.mjs` drives the public `window.WorkspaceKitPanelAPI` on the running test package. Verified: register succeeds and appears in `getProviders()`; re-registering the same object is `already-registered` with no duplicate; a different object with the same id is rejected `duplicate-id`; `setProvidersEnabled(false)` hides the provider from `getProviders()` while retaining it, and re-enabling restores it (not lost); `unregister()` removes it and a second unregister returns `not-found`; `subscribe()` fired `registered`, two `availability-changed`, and `unregistered`. Zero WorkspaceKit console errors. The pure-visual integration placement remains a manual item.
+- **T-016 (Batch 5, partial)**: added `examples/minimal-panel-provider/` — a dependency-free, copyable third-party provider (load-order-safe registration, scoped CSS, `render()`/`dispose()`, optional `ui` with fallback). `scripts/e2e/t016-example-provider.mjs` reproduces its provider object on the real page and verifies register → single scoped `.example-panel-provider` root appended to the host → click updates local state → `dispose()` empties the host → `unregister()` removes it. `docs/PANEL_PROVIDER_API.md` gained CSS scope rules and an example pointer; `docs/PANEL_UI_TEMPLATE.md` Batch 5 marks docs/example delivered. Remaining Batch 5 work: Vendor export contributor guide and the visual release matrix (manual).
+- **Regression**: 64/64 mjs contracts; the two new e2e scripts pass. No workflow data written.
+
 ## 2026-07-28 - Mixed-state reverse conversion merges instead of overwriting (T-206)
 
 - Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-t206-reverse-merge-mixed-20260728-220224.zip`.

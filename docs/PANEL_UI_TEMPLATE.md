@@ -276,10 +276,17 @@ but not visual language; no network request or local absolute path is required.
 
 - Update the Provider API document with final UI capability signatures,
   compatibility guarantees, CSS scope rules, and a complete copyable example.
+  **Done (2026-07-28):** `docs/PANEL_PROVIDER_API.md` now documents CSS scope
+  rules and points to the copyable `examples/minimal-panel-provider/`, whose
+  contract is verified on the test package by
+  `scripts/e2e/t016-example-provider.mjs`.
 - Add a contributor guide for exporting the Vendor runtime and a release check
   that reports source/manifest mismatch.
 - Publish the Template only after both family modes and a minimal third-party
-  Provider pass the visual and lifecycle matrix.
+  Provider pass the visual and lifecycle matrix. The lifecycle half is covered
+  by the Provider-lifecycle and example-provider e2e checks; the visual matrix
+  (dark/light/transparent/frosted, standalone) remains a manual acceptance
+  item.
 
 ## 10. Release acceptance matrix
 

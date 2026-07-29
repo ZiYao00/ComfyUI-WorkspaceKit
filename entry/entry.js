@@ -70,6 +70,12 @@ import { createSettingsDialogShell } from "./settings/dialog-shell.js";
 import { configureI18n, getLocale, t as translate } from "./core/i18n.js";
 import { FALLBACK_STRINGS } from "./core/fallback-strings.js";
 import {
+  compactSearchFields,
+  compareSearchScores,
+  genericSearchScores,
+} from "./core/search-scoring.js";
+import { createNodeSearch } from "./nodes/search.js";
+import {
   closeOfficialWorkflow,
   getActiveOfficialWorkflow,
   getOfficialWorkflowByPath,
@@ -772,6 +778,18 @@ const { renderNodeTopSection } = createNodeTopSectionRenderer({
   renderNodeRow,
   buildOfficialNodeTree,
   renderOfficialNodeTree,
+});
+
+const {
+  officialNodeSearchScores,
+  packNodeSearchScores,
+  compareNodeSearchResults,
+  sortNodeSearchResults,
+} = createNodeSearch({
+  splitCamelCase,
+  nodeGroupLabel,
+  officialNodeCategoryParts,
+  getNodeFrequencyByName: (name) => Number(nodesState.nodeFrequencyLookup?.[name] || 0),
 });
 
 const { projectNodeCategories } = createNodeCategoryProjection({
@@ -4421,219 +4439,6 @@ function splitCamelCase(value) {
   return String(value || "")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2");
-}
-
-function pinyinText(value, mode = "full") {
-  const text = String(value || "");
-  if (!text || !/[\u3400-\u9fff]/.test(text)) {
-    return "";
-  }
-  try {
-    return pinyinPro(text, {
-      pattern: mode === "initial" ? "first" : "pinyin",
-      toneType: "none",
-      type: "string",
-    }).replace(/\s/g, "").toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-function pinyinSearchText(values) {
-  return values
-    .flatMap((value) => [pinyinText(value, "full"), pinyinText(value, "initial")])
-    .filter(Boolean)
-    .join(" ");
-}
-
-function nodePinyinSearchText(node, groupName = "") {
-  const values = [
-    node?.title,
-    node?.alias,
-    node?.category,
-    nodeGroupLabel(node),
-    ...officialNodeCategoryParts(node),
-    groupName,
-    ...(Array.isArray(node?.searchAliases) ? node.searchAliases : []),
-  ];
-  return pinyinSearchText(values);
-}
-
-function fuzzySearchMatch(value, query) {
-  const haystack = String(value || "").replace(/\s+/g, "");
-  const needle = String(query || "").replace(/\s+/g, "");
-  if (!haystack || !needle) {
-    return false;
-  }
-  let index = 0;
-  for (const char of haystack) {
-    if (char === needle[index]) {
-      index += 1;
-      if (index === needle.length) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
-const nodeSearchFieldCache = new WeakMap();
-
-function compactSearchFields(values, pinyinValues = []) {
-  const fields = values.filter((value) => String(value || "").trim());
-  const pinyin = pinyinSearchText(pinyinValues);
-  if (pinyin) {
-    fields.push(pinyin);
-  }
-  return fields;
-}
-
-function getNodeFrequencyByName(nodeName) {
-  return Number(nodesState.nodeFrequencyLookup?.[nodeName] || 0);
-}
-
-function officialSearchWords(value) {
-  return String(value || "")
-    .split(/ |\b|(?<=[a-z])(?=[A-Z])|(?=[A-Z][a-z])/)
-    .map((item) => item.toLocaleLowerCase())
-    .filter(Boolean);
-}
-
-function officialCalcAuxSingle(query, item, score = 0) {
-  const text = String(item || "").toLocaleLowerCase();
-  const itemWords = officialSearchWords(item);
-  const queryParts = String(query || "").split(" ").filter(Boolean);
-  let main = 9;
-  let aux1 = 0;
-  let aux2 = 0;
-
-  if (text === query) {
-    main = 0;
-  } else if (text.startsWith(query)) {
-    main = 1;
-    aux2 = text.length;
-  } else if (itemWords.includes(query)) {
-    main = 2;
-    aux1 = text.indexOf(query) + text.length * 0.5;
-    aux2 = text.length;
-  } else if (text.includes(query)) {
-    main = 3;
-    aux1 = text.indexOf(query) + text.length * 0.5;
-    aux2 = text.length;
-  } else if (queryParts.length && queryParts.every((part) => itemWords.includes(part))) {
-    const indexes = queryParts.map((part) => itemWords.indexOf(part));
-    const min = Math.min(...indexes);
-    const max = Math.max(...indexes);
-    main = 4;
-    aux1 = max - min + max * 0.5 + text.length * 0.5;
-    aux2 = text.length;
-  } else if (queryParts.length && queryParts.every((part) => text.includes(part))) {
-    const min = Math.min(...queryParts.map((part) => text.indexOf(part)));
-    const max = Math.max(...queryParts.map((part) => text.indexOf(part) + part.length));
-    main = 5;
-    aux1 = max - min + max * 0.5 + text.length * 0.5;
-    aux2 = text.length;
-  }
-
-  const lengthPenalty = 0.2 * (1 - Math.min(text.length, query.length) / Math.max(text.length, query.length));
-  return [main, aux1, aux2, score + (Number.isFinite(lengthPenalty) ? lengthPenalty : 0)];
-}
-
-function compareSearchScores(a, b) {
-  for (let index = 0; index < Math.min(a.length, b.length); index += 1) {
-    if (a[index] !== b[index]) {
-      return a[index] - b[index];
-    }
-  }
-  return a.length - b.length;
-}
-
-function genericSearchScores(fields, query, frequencyScore = 0) {
-  const normalized = String(query || "").trim().toLocaleLowerCase();
-  if (!normalized) {
-    return [0, frequencyScore, 0, 0, 0];
-  }
-  const scores = fields
-    .map((value) => officialCalcAuxSingle(normalized, value, 0))
-    .sort(compareSearchScores);
-  const best = scores[0] || [9, 0, 0, 1];
-  const deprecatedPenalty = fields
-    .some((value) => String(value || "").toLocaleLowerCase().includes("deprecated")) && best[0] !== 0 ? 5 : 0;
-  return [best[0] + deprecatedPenalty, frequencyScore, ...best.slice(1)];
-}
-
-function officialNodeSearchFields(node, groupName = "") {
-  let fieldsByGroup = nodeSearchFieldCache.get(node);
-  if (!fieldsByGroup) {
-    fieldsByGroup = new Map();
-    nodeSearchFieldCache.set(node, fieldsByGroup);
-  }
-  const cacheKey = String(groupName || "");
-  if (fieldsByGroup.has(cacheKey)) {
-    return fieldsByGroup.get(cacheKey);
-  }
-  const aliases = Array.isArray(node?.searchAliases) ? node.searchAliases : [];
-  const fields = compactSearchFields([
-    node?.type,
-    splitCamelCase(node?.type),
-    node?.title,
-    node?.alias,
-    ...aliases,
-  ], [
-    node?.title,
-    node?.alias,
-    node?.category,
-    nodeGroupLabel(node),
-    ...officialNodeCategoryParts(node),
-    groupName,
-    ...aliases,
-  ]);
-  fieldsByGroup.set(cacheKey, fields);
-  return fields;
-}
-
-function officialNodeSearchScores(node, query, groupName = "") {
-  return genericSearchScores(officialNodeSearchFields(node, groupName), query, -getNodeFrequencyByName(node?.type));
-}
-
-function packNodeSearchScores(scores) {
-  return scores.reduce((total, score, index) => total + score * Math.pow(1000, Math.max(0, 5 - index)), 0);
-}
-
-function compareNodeSearchResults(a, b, query, groupName = "") {
-  const normalized = String(query || "").trim().toLocaleLowerCase();
-  if (!normalized) {
-    const freqDiff = getNodeFrequencyByName(b.type) - getNodeFrequencyByName(a.type);
-    return freqDiff || a.title.localeCompare(b.title);
-  }
-  return compareSearchScores(
-    officialNodeSearchScores(a, normalized, groupName),
-    officialNodeSearchScores(b, normalized, groupName),
-  ) || a.title.localeCompare(b.title);
-}
-
-function sortNodeSearchResults(nodes, query, groupName = "") {
-  const normalized = String(query || "").trim().toLocaleLowerCase();
-  if (!normalized) {
-    return nodes.sort((a, b) => compareNodeSearchResults(a, b, ""));
-  }
-  return nodes.sort((a, b) => compareNodeSearchResults(a, b, normalized, groupName));
-}
-
-function nodeSearchText(node, groupName = "") {
-  return [
-    node.title,
-    node.type,
-    splitCamelCase(node.type),
-    node.alias,
-    node.category,
-    node.pythonModule,
-    groupName,
-    nodePinyinSearchText(node, groupName),
-    ...(node.searchAliases || []),
-  ]
-    .filter(Boolean)
-    .join(" ");
 }
 
 function favoriteDisplayNode(favorite, nodeMap) {

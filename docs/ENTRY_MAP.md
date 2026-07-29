@@ -93,11 +93,14 @@ groups & trash. Key: `iconSvg` (L6076), `toolbarButton` (L6118), `createTemplate
 `addTemplateToCanvas` (L6682), `deleteTemplate` (L6858), `renderTemplateTrashBody` (L6903),
 `openTemplateGroupContextMenu` (L7016).
 
-### Node library: definitions, search, favorites — L7032–7815
-Node-definition parsing/wrapping, search scoring (incl. pinyin), favorite/group CRUD.
-Key: `restoreNodeLibraryFromFile` (L7061), `wrapObjectInfoNode` (L7281), `getNodeDefinitions` (L7339),
-`pinyinText` (L7396), `officialNodeSearchScores` (L7565), `sortNodeSearchResults` (L7585),
-`createNodeGroup` (L7621), `addFavoriteNode` (L7716), `moveFavoriteToGroup` (L7739).
+### Node library: definitions, favorites — L7032–7815
+Node-definition parsing/wrapping and favorite/group CRUD. **Search scoring
+(`pinyinText`, `officialNodeSearchScores`, `sortNodeSearchResults`, etc.) has
+been extracted to [`core/search-scoring.js`](../entry/core/search-scoring.js)
+(generic primitives) and [`nodes/search.js`](../entry/nodes/search.js)
+(node-specific, via `createNodeSearch`); entry.js imports/injects them.**
+Key: `restoreNodeLibraryFromFile`, `wrapObjectInfoNode`, `getNodeDefinitions`,
+`createNodeGroup`, `addFavoriteNode`, `moveFavoriteToGroup`.
 
 ### Node grouping, imports & drag/drop — L7816–8992
 Node grouping/labels, N-Sidebar & official-favorites import, node pointer/canvas
@@ -145,7 +148,7 @@ verification (see Step 3 of the large-file plan).
 | Official adapter + favorites probing | L1306–1630 | Cohesive reflection-into-ComfyUI feature, no UI; → `integrations/official-node-adapter.js` |
 | Panel appearance / glass / background | L2010–2320 | Self-contained visual subsystem keyed off `panelBackgroundState`; → `ui/panel-appearance.js` |
 | Node drag/drop cluster | L8297–8992 | Self-contained pointer/canvas DnD engine; → `nodes/drag-drop.js` (mirrors `templates/drag-drop.js`) |
-| Node search/scoring | L7375–7609 | Pure pinyin + fuzzy + official scoring; → `nodes/search.js` (parallels `workflows/search.js`) |
+| ~~Node search/scoring~~ | ~~L7375–7609~~ | ✅ **Extracted** (2026-07-29): generic primitives → `core/search-scoring.js`, node-specific → `nodes/search.js` via `createNodeSearch` factory. Dead `fuzzySearchMatch`/`nodeSearchText`/`nodePinyinSearchText` removed. See MODULE_MAP |
 | ~~Confirm/notice/inline-confirm dialogs~~ | ~~L2749–3030~~ | ✅ **Extracted** to `entry/ui/dialogs.js` (2026-07-29) via `createWorkspace2Dialogs` factory — see MODULE_MAP |
 
 _Last generated: 2026-07-29. Regenerate after large edits — line numbers drift._

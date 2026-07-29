@@ -13,6 +13,13 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/BACKLOG.zh-CN.md` (T-001..T-503).
 
+## 2026-07-29 - entry.js split #4: extract search/scoring to `core/search-scoring.js` + `nodes/search.js`
+
+- Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-node-search-20260729-130418.zip` (245 files).
+- **Change (plan A, two modules)**: the ~210-line search cluster split by layer. Generic primitives shared by Workflow/Template/Node search (`pinyinText`, `pinyinSearchText`, `compactSearchFields`, `officialSearchWords`, `officialCalcAuxSingle`, `compareSearchScores`, `genericSearchScores`) moved to `entry/core/search-scoring.js` (imports `pinyinPro` directly). Node-specific scoring (`officialNodeSearchFields`, `officialNodeSearchScores`, `packNodeSearchScores`, `compareNodeSearchResults`, `sortNodeSearchResults` + the private field-cache WeakMap) moved to `entry/nodes/search.js` behind a `createNodeSearch({ splitCamelCase, nodeGroupLabel, officialNodeCategoryParts, getNodeFrequencyByName })` factory. entry.js imports the three primitives it injects into the workflow/template factories, and destructures the node functions from one factory call placed before `createNodeCategoryProjection` (which consumes `sortNodeSearchResults`). The injected deps are function declarations (hoisted) / `nodesState` (defined earlier), so the factory call is time-safe. `splitCamelCase` stays in entry.js (also used elsewhere) and is injected.
+- **Dead code removed** (zero callers repo-wide, confirmed): `fuzzySearchMatch`, `nodeSearchText`, and its only-caller-was-dead helper `nodePinyinSearchText`.
+- **Regression**: `node --check` on all three files. 64/64 mjs contracts green; `test-node-category-projection` and `test-template-search` exercise the search paths. Runtime sanity confirmed identical ordering for prefix ("ksam"→KSampler), pinyin ("jiazai"→加载图像), and exact-match score 0. `git diff` on `entry.js`: +18 / -213, confined to imports, the factory call, and the cluster deletion. `entry.js` dropped from ~9,205 to 8,996 lines.
+
 ## 2026-07-29 - entry.js split #3: extract dialog primitives to `ui/dialogs.js`
 
 - Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-dialogs-20260729-123347.zip` (244 files).

@@ -27,6 +27,7 @@ the same pull request as any module ownership change.
 | `core/api.js` | WorkspaceKit HTTP helpers | UI lifecycle | Endpoint callers and Python routes |
 | `core/i18n.js` | Locale configuration and translation lookup | Panel rendering | Locale asset and fallback checks |
 | `core/fallback-strings.js` | The static built-in i18n fallback string table (`FALLBACK_STRINGS`), used when no locale asset is loaded | Lookup/merge logic, locale detection, or rendering (those stay in `core/i18n.js`) | Syntax check passed; 64/64 contracts green after extraction; sole consumer is `configureI18n(app, FALLBACK_STRINGS)` |
+| `core/search-scoring.js` | Generic text search-scoring primitives shared by Workflow/Template/Node search: `pinyinText`, `pinyinSearchText`, `compactSearchFields`, `officialSearchWords`, `officialCalcAuxSingle`, `compareSearchScores`, `genericSearchScores`. Imports `pinyinPro` directly | Node/workflow/template-shaped field construction, state, DOM, or persistence | Syntax check passed; 64/64 contracts green; runtime score-equivalence sanity checked; injected into workflow/template/node factories |
 | `core/performance.js` | Performance spans and measurements | Business behavior | Instrumentation smoke checks |
 | `core/startup-stage.js` | Isolated optional-startup stage runner and concise failure recording | Sidebar registration, feature behavior, UI rendering, or error presentation | Sidebar-startup resilience contract and test-package served-source check passed |
 
@@ -80,6 +81,7 @@ the same pull request as any module ownership change.
 | `nodes/panel-state.js` | Visible-section and custom-order local preferences | Storage keys, section filters, storage | Network, DOM, official Store | Storage contract passed; browser panel check pending |
 | `nodes/library-normalizer.js` | Empty library defaults, group/favorite repair, server-cache payload shaping | Default group id, translation, clock | Fetch, IndexedDB, timers, rendering | Data contract passed; browser panel check pending |
 | `nodes/library-loader.js` | Initial parallel library/cache/signature load and cache-choice decision | State, request helpers, cache helpers, render/refresh callbacks | `/object_info` implementation, lock, scheduler, renderer implementation | Lifecycle contract passed; test-package resource/UI recheck pending |
+| `nodes/search.js` | Node-specific relevance scoring via `createNodeSearch({splitCamelCase, nodeGroupLabel, officialNodeCategoryParts, getNodeFrequencyByName})`: cached searchable fields, `officialNodeSearchScores`, `packNodeSearchScores`, `compareNodeSearchResults`, `sortNodeSearchResults`; imports generic primitives from `core/search-scoring.js` | Node library state, node-shaped helpers, or DOM (all injected/imported) | Syntax check passed; 64/64 contracts green; `test-node-category-projection` exercises the sort path; runtime sanity confirmed prefix/pinyin/exact ordering |
 | `nodes/object-info-state.js` | Applying cached/fresh object-info and invalidating derived definitions | Nodes state, clock | Fetch, IndexedDB, scheduling, rendering | State contract passed; test-package resource/UI recheck pending |
 
 ## Templates modules

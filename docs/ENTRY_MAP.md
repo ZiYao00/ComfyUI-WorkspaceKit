@@ -53,10 +53,13 @@ Key: `detectLocale` (L1636), `workspacePanelProviders` (L1668),
 `setupWorkspacePanelProviderLifecycle` (L1701), `t` (L1747),
 `setupWorkspaceKeyIsolation` (L1772), `setupWorkspaceShortcuts` (L1795), `openWorkspace2Module` (L1970).
 
-### Panel appearance / glass / background — L2010–2320
-Panel opacity, glass-blur overlay, background compositing. Key: `isPanelGlassEnabled` (L2021),
-`disposeWorkspace2SidebarSurface` (L2055), `applyWorkspaceBackgroundEffect` (L2157),
-`syncWorkspaceGlassOverlay` (L2256), `setPanelOpacity` (L2301), `setGlassBlur` (L2314).
+### Panel appearance / glass / background — EXTRACTED
+Panel opacity, glass-blur overlay, and background compositing have been
+extracted to [`entry/ui/panel-appearance.js`](../entry/ui/panel-appearance.js)
+via the `createPanelAppearance` factory (2026-07-29). entry.js injects
+`workspaceState`, `t`, `WORKSPACE2_TAB_ID`, `isElementVisible`, and the
+`panelBackgroundState` getters/setters. `isElementVisible` stays in entry.js
+(it also serves panel-open detection). See MODULE_MAP.
 
 ### Settings dialog & data management — L2320–2636
 Import/export of the workspace data bundle; settings dialog assembly.
@@ -146,7 +149,7 @@ verification (see Step 3 of the large-file plan).
 | ~~`styles` CSS literal~~ | ~~L3096–5324~~ | ✅ **Extracted** to `entry/ui/styles.js` (2026-07-29) — see MODULE_MAP |
 | ~~`FALLBACK_STRINGS` table~~ | ~~L181–650~~ | ✅ **Extracted** to `entry/core/fallback-strings.js` (2026-07-29) — see MODULE_MAP |
 | Official adapter + favorites probing | L1306–1630 | Cohesive reflection-into-ComfyUI feature, no UI; → `integrations/official-node-adapter.js` |
-| Panel appearance / glass / background | L2010–2320 | Self-contained visual subsystem keyed off `panelBackgroundState`; → `ui/panel-appearance.js` |
+| ~~Panel appearance / glass / background~~ | ~~L2010–2320~~ | ✅ **Extracted** to `entry/ui/panel-appearance.js` (2026-07-29) via `createPanelAppearance` factory — see MODULE_MAP |
 | Node drag/drop cluster | L8297–8992 | Self-contained pointer/canvas DnD engine; → `nodes/drag-drop.js` (mirrors `templates/drag-drop.js`) |
 | ~~Node search/scoring~~ | ~~L7375–7609~~ | ✅ **Extracted** (2026-07-29): generic primitives → `core/search-scoring.js`, node-specific → `nodes/search.js` via `createNodeSearch` factory. Dead `fuzzySearchMatch`/`nodeSearchText`/`nodePinyinSearchText` removed. See MODULE_MAP |
 | ~~Confirm/notice/inline-confirm dialogs~~ | ~~L2749–3030~~ | ✅ **Extracted** to `entry/ui/dialogs.js` (2026-07-29) via `createWorkspace2Dialogs` factory — see MODULE_MAP |

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Internal
+
+- Modularized `entry/entry.js` in five verified splits (12,178 → ~8,730 lines):
+  extracted `ui/styles.js`, `core/fallback-strings.js`, `ui/dialogs.js`,
+  `core/search-scoring.js` + `nodes/search.js`, and `ui/panel-appearance.js`.
+  Fixed a temporal-dead-zone regression from the dialogs split and consolidated
+  the docs to reduce per-change update burden. No user-visible behavior change.
+
 ### Documentation
 
 - Reworked the Chinese README around the unified workspace concept and clarified

@@ -13,6 +13,14 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.zh-CN.md` (T-xxx).
 
+## 2026-07-29 - entry.js split #5: extract panel appearance to `ui/panel-appearance.js`
+
+- Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-panel-appearance-clean-20260729-220024.zip` (246 files). Started from a clean tree after the other session's group-colors feature (`73bd797`) was committed; baseline was 65/65 contracts.
+- **Change**: moved the panel appearance / glass / background subsystem (8 public functions plus private helpers `cleanupWorkspacePanelAncestors`, `markWorkspacePanelAncestors`, `setupWorkspacePanelOpacityCleanup`, `disposeWorkspace2SidebarSurface`, `findClosestSidebarTabButton`, `isWorkspace2SidebarTabButton`) into `entry/ui/panel-appearance.js` behind a `createPanelAppearance({...})` factory. Two non-contiguous blocks (old L1583–1592 + L1606–1880) were moved verbatim; `isElementVisible` (old L1594) stayed in entry.js because a non-appearance caller (`isWorkspace2PanelOpen`) uses it, and is injected. The unrelated neighbors (`isWorkspacePanelIntegrationsEnabled`/`setWorkspacePanelIntegrationsEnabled`, `closeWorkspaceSettings`) stayed. All injected deps use identical identifier names so the function bodies are unchanged.
+- **Shared state**: `workspaceState` (glassPortalElement, renderTarget, opacityCleanupReady, glassOverlayTrackingReady) is injected rather than privatized, because panel-open detection and rendering also read/write those fields.
+- **TDZ guard** (lesson from split #3): the `const { ... } = createPanelAppearance(...)` binding was placed at old cluster position (~L1595), and every returned function's first actual usage was confirmed to be later (earliest L1770). Injected deps are all defined earlier or are hoisted function declarations.
+- **Regression**: `node --check` on both files; 65/65 mjs contracts green; DOM-mock runtime sanity confirmed the factory returns all 8 functions, `isPanelGlassEnabled()` reports glass mode, `applyWorkspaceBackgroundEffect`/`setupWorkspaceGlassOverlayTracking`/`setPanelBackgroundMode` run without throwing, and shared-state mutation flows through the injected object. `git diff` on `entry.js`: +23 / -286. `entry.js` dropped from 9,013 to ~8,730 lines. **Real-page glass/opacity/blur + sidebar-tab check pending user** (contract tests cannot cover the DOM/glass behavior).
+
 ## 2026-07-29 - INCIDENT: dialogs factory TDZ crash (split #3 regression) + fix
 
 - **Symptom**: after splits #1-#4, a real ComfyUI restart showed the WorkspaceKit 🧩 sidebar tab had vanished entirely (no entry at all). Backend loaded fine (`Loading: WorkspaceKit (0.2.4)`, no IMPORT FAILED); the browser console showed `[vite:preloadError]` with no expanded detail.

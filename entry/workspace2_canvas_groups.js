@@ -19,6 +19,12 @@ import {
     marqueeRectFromPoints,
     shouldStartGroupMarquee,
 } from "./canvas-groups/marquee-selection.js?v=20260724_group_ctrl_marquee_r1";
+import {
+    createWorkspaceKitGroupConversionArchive,
+    validateWorkspaceKitGroupConversionArchive,
+} from "./canvas-groups/conversion-archive.js?v=20260727_group_conversion_archive_r1";
+import { validateNativeGroupConversionResult, countStaleWorkspaceKitNodeMarkers } from "./canvas-groups/conversion-result.js?v=20260727_group_conversion_result_c3";
+import { createNativeToWorkspaceKitConversionPlan } from "./canvas-groups/reverse-conversion-plan.js?v=20260727_group_reverse_conversion_c6_2";
 
 const MODE_ALWAYS = 0;
 const MODE_BYPASS = 4;
@@ -27,6 +33,7 @@ const PRESET_STYLE_KEY = 'workspace2.canvasGroups.stylePresets';
 const ACTIVE_PRESET_KEY = 'workspace2.canvasGroups.activePreset';
 const PRESET_COUNT = 4;
 const DEFAULT_CONTENT_PADDING = 12;
+const DEFAULT_BACKGROUND_OPACITY = 0.25;
 const DEFAULT_SHADOW_COLOR = '#000000';
 const DEFAULT_GROUP_TITLE_KEY = 'groups.defaultTitle';
 
@@ -49,11 +56,33 @@ const finiteNumber = (value, fallback) => {
     return Number.isFinite(n) ? n : fallback;
 };
 
+// The body fill deliberately reuses the title-bar RGB value.  Only its alpha
+// is independent, so users do not have to maintain a second color swatch.
+const parseRgbaRgb = (value, fallback = { r: 0, g: 0, b: 0 }) => {
+    const m = String(value || '').match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+    if (!m) return fallback;
+    return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
+};
+
+const parseRgbaAlpha = (value, fallback = 0.4) => {
+    const m = String(value || '').match(/rgba?\([\d,\.\s]+,\s*([\d.]+)\)$/i);
+    return m ? finiteNumber(m[1], fallback) : fallback;
+};
+
+const groupBodyBackground = group => {
+    if (!group?.backgroundFillEnabled) return 'transparent';
+    const rgb = parseRgbaRgb(group.headerBgColor);
+    const headerAlpha = Math.max(0.05, Math.min(0.95, parseRgbaAlpha(group.headerBgColor)));
+    const alpha = Math.min(headerAlpha, Math.max(0.05, Math.min(0.95, finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY))));
+    return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
+};
+
 const Workspace2CanvasGroups = {
     initialized: false,
-    version: "20260724-group-delete-key-r1",
+    version: "20260727-group-background-underlay-r1",
     groups: {},       // groupId → {id, title, nodeIds, bypassed, bounds, fontSize}
     groupEls: {},
+    _nativeRepresentation: false,
     selectedGroupIds: new Set(), // transient canvas-only selection; never serialized
     lastCanvasContextPoint: null,
     canvasMarquee: null,
@@ -123,6 +152,69 @@ const Workspace2CanvasGroups = {
         o.style.cssText = 'position:fixed;pointer-events:none;z-index:10;overflow:visible;';
         document.body.appendChild(o);
         this.overlay = o;
+    },
+
+    /*
+     * Draw optional group fills in LiteGraph's background pass. The DOM
+     * overlay remains above the canvas for title-bar actions; putting the body
+     * fill in that overlay would paint it over node pixels.
+     */
+    setupBackgroundRenderer() {
+        const canvas = app?.canvas;
+        if (!canvas) return;
+        if (this._backgroundRendererCanvas === canvas && canvas.__workspace2GroupBackgroundHook) return;
+
+        const previous = typeof canvas.onDrawBackground === 'function'
+            ? canvas.onDrawBackground
+            : null;
+        const self = this;
+        canvas.onDrawBackground = function(ctx, visibleArea) {
+            if (previous) previous.apply(this, arguments);
+            self.drawGroupBackgrounds(ctx, visibleArea);
+        };
+        canvas.__workspace2GroupBackgroundHook = true;
+        this._backgroundRendererCanvas = canvas;
+        console.log('[Workspace2 Canvas Groups] 背景填充已接入 ComfyUI onDrawBackground');
+    },
+
+    drawGroupBackgrounds(ctx, visibleArea = null) {
+        if (!ctx) return;
+        const groups = Object.values(this.groups)
+            .filter(group => group?.backgroundFillEnabled && (group._previewBounds || group.bounds))
+            .sort((a, b) => {
+                const ab = a._previewBounds || a.bounds;
+                const bb = b._previewBounds || b.bounds;
+                return (bb.w * bb.h) - (ab.w * ab.h);
+            });
+        if (!groups.length) return;
+
+        ctx.save();
+        for (const group of groups) {
+            const b = group._previewBounds || group.bounds;
+            const headerHeight = Math.max(21, Math.round((group.fontSize || 14) * 1.5));
+            const x = b.x;
+            const y = b.y + headerHeight;
+            const w = Math.max(0, b.w);
+            const h = Math.max(0, b.h - headerHeight);
+            if (!w || !h) continue;
+            if (Array.isArray(visibleArea) && visibleArea.length >= 4) {
+                const [vx, vy, vw, vh] = visibleArea;
+                if (x + w < vx || y + h < vy || x > vx + vw || y > vy + vh) continue;
+            }
+
+            const radius = Math.min(7, w / 2, h / 2);
+            ctx.fillStyle = groupBodyBackground(group);
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + w, y);
+            ctx.lineTo(x + w, y + h - radius);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+            ctx.lineTo(x + radius, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
     },
 
     syncOverlayPosition() {
@@ -278,12 +370,15 @@ const Workspace2CanvasGroups = {
     },
 
     refreshGroupSelection() {
-        const hasMultiSelection = this.selectedGroupIds.size > 1;
+        // T-205 (2026-07-28): both single and multi selection show the same
+        // outline so a single selected group is visibly selected. The line is
+        // a very thin, low-key solid rule (1px) rather than the old 2px dashed
+        // marquee, and a blank-canvas click still clears it via clearSelection.
         for (const [gid, el] of Object.entries(this.groupEls)) {
-            const showSelection = hasMultiSelection && this.selectedGroupIds.has(gid);
+            const showSelection = this.selectedGroupIds.has(gid);
             el.classList.toggle('is-xzg-group-selected', showSelection);
-            el.style.outline = showSelection ? '2px dashed var(--p-primary-color, var(--accent-color, #5da9ff))' : 'none';
-            el.style.outlineOffset = showSelection ? '3px' : '0';
+            el.style.outline = showSelection ? '1px solid rgba(180, 180, 180, 0.5)' : 'none';
+            el.style.outlineOffset = showSelection ? '2px' : '0';
         }
     },
 
@@ -292,6 +387,7 @@ const Workspace2CanvasGroups = {
         const self = this;
         const loop = () => {
             self.syncOverlayPosition();
+            self.setupBackgroundRenderer();
             // 有未恢复的编组数据且 graph 有节点时立即恢复（不依赖 canvas）
             if (self._needRestore && self._pendingGroups && app?.graph?._nodes?.length) {
                 self.restoreGroups();
@@ -366,6 +462,7 @@ const Workspace2CanvasGroups = {
         if (!el._xzgRefs) {
             el._xzgRefs = {
                 title: el.querySelector('.xzg-group-title-text'),
+                body: el.querySelector('.xzg-group-body'),
                 delBtn: el.querySelector('.xzg-delete-btn'),
                 rpath: el.querySelector('.xzg-resize-handle svg path')
             };
@@ -412,7 +509,7 @@ const Workspace2CanvasGroups = {
             // 标题文字/栏高度跟随画布缩放（无标题时保留最小操作区域）
             const fs = (g.fontSize || 14) * scale;
             const showTitle = (g.title || '').trim() !== '';
-            const headerHeight = Math.max(21 * scale, fs + 4 * scale);
+            const headerHeight = Math.max(21 * scale, fs * 1.5);
             const header = el.querySelector('.xzg-group-header');
             if (header) {
                 const padV = 2 * scale;
@@ -424,9 +521,20 @@ const Workspace2CanvasGroups = {
                 header.style.paddingBottom = padV + 'px';
                 header.style.background = showTitle ? (g.headerBgColor || 'rgba(0,0,0,0.4)') : 'transparent';
             }
+            const body = el.querySelector('.xzg-group-body');
+            if (body) {
+                body.style.top = headerHeight + 'px';
+                // Body fill is rendered by onDrawBackground, beneath nodes.
+                body.style.background = 'transparent';
+            }
             const span = el.querySelector('.xzg-group-title-text');
             if (span) {
                 span.style.fontSize = fs + 'px';
+                // T-202 (2026-07-28): line-height must leave room for
+                // descenders (g/y/p/j). line-height:1 clipped them against the
+                // overflow-hidden header. 1.4 matches the roomier system-default
+                // group title proportions the user accepted.
+                span.style.lineHeight = '1.4';
                 span.style.color = g.titleColor || '#FFD700';
                 span.style.display = showTitle ? '' : 'none';
             }
@@ -608,6 +716,14 @@ const Workspace2CanvasGroups = {
         if (!n) return;
         n._xzgGroupId = null;
         n._xzgGroupData = null;
+        // Older workflow snapshots also carried the complete group object on
+        // the direct `_xzgGroup` field.  Clearing only `_xzgGroupData` and
+        // `properties._xzgGroup` left that legacy copy behind; after a native
+        // conversion, restoreGroups() could read it back and recreate a
+        // non-scaling WorkspaceKit overlay.  Native conversion must remove
+        // every WorkspaceKit node marker, not just the current serializer's
+        // preferred fields.
+        delete n._xzgGroup;
         if (n.properties) {
             delete n.properties._xzgGroup;
         }
@@ -653,6 +769,8 @@ const Workspace2CanvasGroups = {
             shadowColor: DEFAULT_SHADOW_COLOR,
             contentPadding: DEFAULT_CONTENT_PADDING,
             headerBgColor: 'rgba(0,0,0,0.4)',
+            backgroundFillEnabled: false,
+            backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
             titleColor: '#FFD700'
         };
     },
@@ -721,6 +839,8 @@ const Workspace2CanvasGroups = {
             shadowColor: group.shadowColor || DEFAULT_SHADOW_COLOR,
             contentPadding: group.contentPadding ?? DEFAULT_CONTENT_PADDING,
             headerBgColor: group.headerBgColor || 'rgba(0,0,0,0.4)',
+            backgroundFillEnabled: Boolean(group.backgroundFillEnabled),
+            backgroundOpacity: Math.max(0.05, Math.min(0.95, finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY))),
             titleColor: group.titleColor || '#FFD700'
         };
     },
@@ -754,6 +874,11 @@ const Workspace2CanvasGroups = {
         if (!graph?._nodes) return;
         if (!bounds) return;
 
+        const persistedIds = Array.isArray(group.nodeIds) ? [...group.nodeIds] : [];
+        if (!Array.isArray(group.nodeIds)) group.nodeIds = [];
+        // 新节点仍要求完全进入编组才自动收纳；已经保存为成员的节点，
+        // 允许少量越界时继续保留，避免边缘像素变化造成成员抖动。
+        const retainedOverlapThreshold = 0.2;
         const inBounds = new Set();
         const inBoundsNodes = [];
 
@@ -762,9 +887,12 @@ const Workspace2CanvasGroups = {
             if (!n?.pos || typeof n.pos[0] !== 'number' || typeof n.pos[1] !== 'number') return;
             const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
             if (typeof nw !== 'number' || typeof nh !== 'number') return;
-            // 完全位于框体边界内才归入编组
-            if (n.pos[0] >= bounds.x && n.pos[0] + nw <= bounds.x + bounds.w &&
-                n.pos[1] >= bounds.y && n.pos[1] + nh <= bounds.y + bounds.h) {
+            const nodeBounds = { x: n.pos[0], y: n.pos[1], w: nw, h: nh };
+            const fullyContained = this._isFullyContained(bounds, nodeBounds);
+            const wasPersisted = this._idInArray(persistedIds, n.id);
+            const stillOverlaps = wasPersisted &&
+                this._getOverlapRatio(bounds, nodeBounds) >= retainedOverlapThreshold;
+            if (fullyContained || stillOverlaps) {
                 inBounds.add(n.id);
                 inBoundsNodes.push(n);
                 if (!this._idInArray(group.nodeIds, n.id)) {
@@ -826,7 +954,7 @@ const Workspace2CanvasGroups = {
         const style = { ...this.readDefaultStyle(), ...options };
         const p = Math.max(0, Number(style.contentPadding ?? DEFAULT_CONTENT_PADDING) || 0);
         const fs = style?.fontSize || 14;
-        const headerHeight = Math.max(21, fs + 4);
+        const headerHeight = Math.max(21, Math.round(fs * 1.5));
         const topPad = headerHeight + p;
         return { x: minX - p, y: minY - topPad, w: maxX - minX + p * 2, h: maxY - minY + topPad + p };
     },
@@ -1050,11 +1178,12 @@ const Workspace2CanvasGroups = {
         el.style.cssText = `position:absolute;pointer-events:none;border:${bw}px solid hsla(48,100%,55%,${bo});border-radius:8px;background:transparent;box-sizing:border-box;z-index:5;`;
         const fs = group.fontSize || 14;
         const showTitle = (group.title || '').trim() !== '';
-        const headerHeight = Math.max(21, fs + 4);
+        const headerHeight = Math.max(21, Math.round(fs * 1.5));
         el.innerHTML = `
+            <div class="xzg-group-body" style="position:absolute;left:0;right:0;top:${headerHeight}px;bottom:0;background:transparent;border-radius:0 0 7px 7px;pointer-events:none;z-index:1;"></div>
             <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || 'rgba(0,0,0,0.4)') : 'transparent'};border-radius:7px 7px 0 0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
                 <div style="flex:1 1 auto;min-width:0;overflow:hidden;">
-                    <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
+                    <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1.4;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
                 </div>
                 <div class="xzg-group-header-actions" style="display:flex;align-items:center;gap:3px;flex:0 0 auto;margin-left:4px;">
                     <button class="xzg-group-mode-btn xzg-group-queue-btn" data-group-action="queue" title="${t('groups.actionQueue')}" aria-label="${t('groups.actionQueue')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;">
@@ -1272,6 +1401,8 @@ const Workspace2CanvasGroups = {
             fontSize: target.fontSize,
             titleColor: target.titleColor,
             headerBgColor: target.headerBgColor,
+            backgroundFillEnabled: Boolean(target.backgroundFillEnabled),
+            backgroundOpacity: target.backgroundOpacity,
             colorHue: target.colorHue, colorSat: target.colorSat, colorLit: target.colorLit,
             useUnifiedColor: Boolean(target.useUnifiedColor),
             effect: target.effect, effectSpeed: target.effectSpeed,
@@ -1289,6 +1420,8 @@ const Workspace2CanvasGroups = {
                 fontSize: _snapshot.fontSize,
                 titleColor: _snapshot.titleColor,
                 headerBgColor: _snapshot.headerBgColor,
+                backgroundFillEnabled: _snapshot.backgroundFillEnabled,
+                backgroundOpacity: _snapshot.backgroundOpacity,
                 colorHue: _snapshot.colorHue, colorSat: _snapshot.colorSat, colorLit: _snapshot.colorLit,
                 useUnifiedColor: _snapshot.useUnifiedColor,
                 effect: _snapshot.effect, effectSpeed: _snapshot.effectSpeed,
@@ -1324,7 +1457,7 @@ const Workspace2CanvasGroups = {
 
         const curKey = this.shortcutKey || 'g';
         const initRgba = group.headerBgColor || 'rgba(0,0,0,0.4)';
-        const initAlpha = parseFloat(initRgba.replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1')) || 0.4;
+        const initAlpha = Math.max(0.05, Math.min(0.95, parseFloat(initRgba.replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1')) || 0.4));
         const initHex = (() => {
             const m = initRgba.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
             if (m) return '#' + [m[1],m[2],m[3]].map(x => parseInt(x).toString(16).padStart(2,'0')).join('');
@@ -1350,12 +1483,19 @@ const Workspace2CanvasGroups = {
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;">
-                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.background')}</label>
-                    <input class="xzg-set-headeropacity" type="range" min="0" max="100" value="${Math.round((group.headerBgColor || 'rgba(0,0,0,0.4)').replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1') * 100)}" style="flex:1;height:28px;margin:0;">
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.headerOpacity')}</label>
+                    <input class="xzg-set-headeropacity" type="range" min="5" max="95" value="${Math.max(5, Math.min(95, Math.round(initAlpha * 100)))}" style="flex:1;height:28px;margin:0;">
                     <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
-                        <span class="xzg-header-opacity-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.round((group.headerBgColor || 'rgba(0,0,0,0.4)').replace(/^rgba?\([\d,.\s]+,\s*([\d.]+)\)$/,'$1') * 100)}%</span>
+                        <span class="xzg-header-opacity-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.max(5, Math.min(95, Math.round(initAlpha * 100)))}%</span>
                         <div class="xzg-header-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:pointer;background:${initHex};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></div>
                         <input class="xzg-set-headerbgcolor" type="color" value="${initHex}" style="position:absolute;width:0;height:0;opacity:0;padding:0;border:0;">
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-top:8px;">
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;display:flex;align-items:center;gap:5px;opacity:.45;" title="${t('groups.backgroundFillDisabledHint')}"><input class="xzg-set-background-fill" type="checkbox" ${group.backgroundFillEnabled ? 'checked' : ''} disabled style="margin:0;flex:0 0 auto;"><span>${t('groups.backgroundFill')}</span></label>
+                    <input class="xzg-set-background-opacity" type="range" min="5" max="95" value="${Math.max(5, Math.min(95, Math.round(finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY) * 100)))}" disabled title="${t('groups.backgroundFillDisabledHint')}" style="flex:1;height:28px;margin:0;opacity:.35;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
+                        <span class="xzg-background-opacity-val" style="color:#fff;font-size:12px;width:30px;text-align:left;opacity:.45;">${Math.max(5, Math.min(95, Math.round(finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY) * 100)))}%</span>
                     </div>
                 </div>
             </div>
@@ -1368,7 +1508,7 @@ const Workspace2CanvasGroups = {
                     <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;"><div class="xzg-unified-color-swatch" style="width:18px;height:18px;border-radius:4px;cursor:${group.useUnifiedColor ? 'pointer' : 'default'};background:${this.hslToHex(curH, curS, curL)};border:1px solid rgba(255,255,255,0.2);opacity:${group.useUnifiedColor ? '1' : '.35'};flex-shrink:0;"></div></div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
-                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.color')}</label>
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.opacity')}</label>
                     <input class="xzg-set-borderopacity" type="range" min="5" max="100" value="${Math.round((group.borderOpacity??0.65)*100)}" style="flex:1;height:28px;margin:0;">
                     <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;gap:5px;height:28px;">
                         <span class="xzg-set-bo-val" style="color:#fff;font-size:12px;width:22px;text-align:left;">${Math.round((group.borderOpacity??0.65)*100)}%</span>
@@ -1683,6 +1823,9 @@ const Workspace2CanvasGroups = {
         const headerColorSwatch = modal.querySelector('.xzg-header-color-swatch');
         const headerOpacitySlider = modal.querySelector('.xzg-set-headeropacity');
         const headerOpacityVal = modal.querySelector('.xzg-header-opacity-val');
+        const backgroundFillToggle = modal.querySelector('.xzg-set-background-fill');
+        const backgroundOpacitySlider = modal.querySelector('.xzg-set-background-opacity');
+        const backgroundOpacityVal = modal.querySelector('.xzg-background-opacity-val');
         let headerAlpha = initAlpha;
 
         // 缓存 header 元素引用
@@ -1698,6 +1841,7 @@ const Workspace2CanvasGroups = {
             group.headerBgColor = rgba;
             if (headerColorSwatch) headerColorSwatch.style.background = hex;
             if (headerEl) headerEl.style.background = rgba;
+            self.updatePositions();
         };
 
         if (headerColorSwatch) {
@@ -1710,8 +1854,34 @@ const Workspace2CanvasGroups = {
         headerOpacitySlider.addEventListener('input', () => {
             headerAlpha = parseInt(headerOpacitySlider.value) / 100;
             headerOpacityVal.textContent = headerOpacitySlider.value + '%';
+            // T-203 (2026-07-28): the background-fill controls are temporarily
+            // disabled, so the header-opacity slider no longer syncs the
+            // background-opacity limit. That coupling made the background value
+            // move on its own when the user dragged only the header slider.
+            // Re-enable syncBackgroundOpacityLimit() here when the background
+            // fill UX is redesigned.
             updateHeaderBg();
         });
+
+        const setBackgroundFillUiState = enabled => {
+            backgroundOpacitySlider.disabled = !enabled;
+            backgroundOpacitySlider.style.opacity = enabled ? '1' : '.35';
+            backgroundOpacityVal.style.opacity = enabled ? '1' : '.45';
+        };
+        const syncBackgroundOpacityLimit = () => {
+            const max = Math.max(5, Math.min(95, parseInt(headerOpacitySlider.value) || 40));
+            backgroundOpacitySlider.max = String(max);
+            if (parseInt(backgroundOpacitySlider.value) > max) {
+                backgroundOpacitySlider.value = String(max);
+                backgroundOpacityVal.textContent = `${max}%`;
+                group.backgroundOpacity = max / 100;
+            }
+        };
+        // T-203: background fill is disabled for now. Do not wire the toggle or
+        // slider handlers, and keep the controls in their disabled visual
+        // state. The functions above are retained for the future redesign.
+        void setBackgroundFillUiState;
+        void syncBackgroundOpacityLimit;
 
         // 重置按钮
         const resetHeaderBgBtn = modal.querySelector('.xzg-reset-headerbg');
@@ -1747,6 +1917,8 @@ const Workspace2CanvasGroups = {
             shadowColor: shadowColorPicker.value || DEFAULT_SHADOW_COLOR,
             contentPadding: Math.max(0, parseInt(cpR.value) || 0),
             headerBgColor: rgbaFromHeaderControls(),
+            backgroundFillEnabled: Boolean(backgroundFillToggle.checked),
+            backgroundOpacity: Math.max(0.05, Math.min(0.95, (parseInt(backgroundOpacitySlider.value) || 25) / 100)),
             titleColor: titleColorPicker.value || '#FFD700',
         });
 
@@ -1766,6 +1938,7 @@ const Workspace2CanvasGroups = {
                 header.style.height = Math.max(21, group.fontSize + 4) + 'px';
                 header.style.background = group.headerBgColor || 'rgba(0,0,0,0.4)';
             }
+            self.updatePositions();
             self.updateGroupStyle(group.id);
         };
 
@@ -1802,10 +1975,15 @@ const Workspace2CanvasGroups = {
             cpV.textContent = `${cpR.value}px`;
             const header = parseRgbaColor(merged.headerBgColor, '#000000', 0.4);
             headerColorPicker.value = header.hex;
-            headerAlpha = Math.max(0, Math.min(1, header.alpha));
+            headerAlpha = Math.max(0.05, Math.min(0.95, header.alpha));
             headerOpacitySlider.value = Math.round(headerAlpha * 100);
             headerOpacityVal.textContent = `${headerOpacitySlider.value}%`;
             updateHeaderBg();
+            backgroundFillToggle.checked = Boolean(merged.backgroundFillEnabled);
+            backgroundOpacitySlider.value = Math.max(5, Math.min(95, Math.round(finiteNumber(merged.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY) * 100)));
+            backgroundOpacityVal.textContent = `${backgroundOpacitySlider.value}%`;
+            syncBackgroundOpacityLimit();
+            setBackgroundFillUiState(backgroundFillToggle.checked);
             applyStyleToGroupPreview(readControlsStyle());
         };
 
@@ -2094,17 +2272,36 @@ const Workspace2CanvasGroups = {
         }
         const childGroupIds = new Set(childGroups.map(g => g.id));
 
-        // 收集所有完全位于当前框体内的节点（多个框体能同时控制同一节点）
+        // 已保存的 nodeIds 是拖动时的权威成员列表；只有旧数据没有成员列表时，
+        // 才回退到几何判断。这样节点边缘少量越界也不会在拖动时脱离编组。
         const nodeStarts = [];
         const self = this;
-        graph._nodes.forEach(n => {
+        const persistedIds = Array.isArray(group.nodeIds) ? group.nodeIds : [];
+        const persistedSet = new Set(persistedIds.map(id => String(id)));
+        const childMemberIds = new Set(
+            childGroups.flatMap(child => Array.isArray(child.nodeIds) ? child.nodeIds : [])
+                .map(id => String(id))
+        );
+        const addNodeStart = n => {
             if (!n?.pos) return;
-            const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
-            if (n.pos[0] >= b.x && n.pos[0] + nw <= b.x + b.w &&
-                n.pos[1] >= b.y && n.pos[1] + nh <= b.y + b.h) {
-                nodeStarts.push({ node: n, x: n.pos[0], y: n.pos[1] });
-            }
-        });
+            nodeStarts.push({ node: n, x: n.pos[0], y: n.pos[1] });
+        };
+        if (persistedSet.size > 0) {
+            graph._nodes.forEach(n => {
+                if (persistedSet.has(String(n?.id)) && !childMemberIds.has(String(n.id))) {
+                    addNodeStart(n);
+                }
+            });
+        } else {
+            graph._nodes.forEach(n => {
+                if (!n?.pos || childMemberIds.has(String(n.id))) return;
+                const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
+                if (n.pos[0] >= b.x && n.pos[0] + nw <= b.x + b.w &&
+                    n.pos[1] >= b.y && n.pos[1] + nh <= b.y + b.h) {
+                    addNodeStart(n);
+                }
+            });
+        }
 
         // 子编组：收集完全落在当前框体内的节点（大框体外部的节点不受大框体控制）
         const childGroupData = childGroups.map(cg => ({
@@ -2167,9 +2364,13 @@ const Workspace2CanvasGroups = {
         const onUp = () => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
+            self._suspendMembershipSync = false;
+            const el = self.groupEls[group.id];
+            if (el) el._xzgSyncFrame = 10;
             self.syncGroupsToExtra();
             graph.change?.();
         };
+        this._suspendMembershipSync = true;
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
     },
@@ -2316,6 +2517,15 @@ const Workspace2CanvasGroups = {
     },
 
     rebuildAllEls() {
+        // Remove every known and unknown WorkspaceKit element.  This is
+        // important after representation changes: an older module instance or
+        // a stale group map may have rendered an element that is no longer in
+        // `groupEls`, which otherwise survives conversion and does not follow
+        // LiteGraph zoom/pan.
+        this.overlay?.querySelectorAll?.('.xzg-group-box')?.forEach(el => {
+            el._xzgRefs = null;
+            el.parentElement?.removeChild(el);
+        });
         for (const el of Object.values(this.groupEls)) {
             delete el._xzgRefs;
             el?.parentElement?.removeChild(el);
@@ -2728,8 +2938,375 @@ const Workspace2CanvasGroups = {
             shadowColor: g.shadowColor || DEFAULT_SHADOW_COLOR,
             contentPadding: g.contentPadding ?? DEFAULT_CONTENT_PADDING,
             headerBgColor: g.headerBgColor,
+            backgroundFillEnabled: Boolean(g.backgroundFillEnabled),
+            backgroundOpacity: Math.max(0.05, Math.min(0.95, finiteNumber(g.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY))),
             titleColor: g.titleColor,
         };
+    },
+
+    // Stage 3: prepare a reversible archive without switching the active
+    // representation. The later conversion command will persist this record
+    // transactionally before creating native LiteGraph groups.
+    createConversionArchive(timestamp = new Date().toISOString()) {
+        return createWorkspaceKitGroupConversionArchive(
+            this.groups,
+            group => this.serializeGroup(group),
+            timestamp
+        );
+    },
+
+    getGroupRepresentation(graph = app?.graph) {
+        return this._nativeRepresentation || graph?.extra?.workspacekit?.groupRepresentation === 'native'
+            ? 'native'
+            : 'workspacekit';
+    },
+
+    getConversionInfo() {
+        const graph = app?.graph;
+        const workspaceKitGroups = Object.values(this.groups || {}).filter(Boolean);
+        // This is an in-memory concurrency token, not persisted workflow data.
+        // It lets Settings prove that the confirmed action still targets the
+        // same graph and the same WorkspaceKit group payload.
+        const conversionSignature = workspaceKitGroups
+            .map(group => JSON.stringify(this.serializeGroup(group)))
+            .sort()
+            .join('|');
+        const nativeGroupCount = Array.isArray(graph?._groups) ? graph._groups.length : 0;
+        const representation = this.getGroupRepresentation(graph);
+        const restoring = Boolean(this._needRestore && this._pendingGroups);
+        return {
+            graph,
+            conversionSignature,
+            representation,
+            workspaceKitGroupCount: workspaceKitGroups.length,
+            nativeGroupCount,
+            isReady: Boolean(graph) && !restoring && !this._conversionInProgress,
+            isConverting: Boolean(this._conversionInProgress),
+            isMixed: representation !== 'native' && workspaceKitGroups.length > 0 && nativeGroupCount > 0,
+            hasConversionArchive: Boolean(graph?.extra?.workspacekit?.groupConversion),
+        };
+    },
+
+    isConversionSnapshotCurrent(snapshot) {
+        if (!snapshot || snapshot.graph !== app?.graph) return false;
+        const current = this.getConversionInfo();
+        return current.isReady
+            && current.representation === 'workspacekit'
+            && current.workspaceKitGroupCount > 0
+            && current.workspaceKitGroupCount === Number(snapshot.workspaceKitGroupCount || 0)
+            && current.nativeGroupCount === Number(snapshot.nativeGroupCount || 0)
+            && current.conversionSignature === snapshot.conversionSignature;
+    },
+
+    verifyNativeConversionResult({ graph, originalNativeGroups, sourceGroups, nativeGroupIds, archive }) {
+        const sourceNodeIds = new Set(sourceGroups.flatMap(group => group.nodeIds || []).map(String));
+        // Stale-marker judgement lives in the pure conversion-result module so
+        // the T-003 shared-member fixture and its static contract stay aligned.
+        const staleNodeMarkerCount = countStaleWorkspaceKitNodeMarkers({
+            nodes: graph._nodes || [],
+            sourceNodeIds,
+        });
+        const result = validateNativeGroupConversionResult({
+            nativeGroups: graph._groups || [],
+            originalNativeGroups,
+            sourceGroupIds: sourceGroups.map(group => group.id),
+            nativeGroupIds,
+            representation: graph.extra?.workspacekit?.groupRepresentation,
+            archive: graph.extra?.workspacekit?.groupConversion || archive,
+            workspaceKitGroupCount: Object.values(this.groups || {}).filter(Boolean).length,
+            persistedWorkspaceKitGroupCount: Object.keys(graph.extra?.xzgGroups || {}).length,
+            staleNodeMarkerCount,
+        });
+        if (!result.valid) throw new Error(`Native group conversion validation failed: ${result.reason}`);
+        if (Object.keys(this.groupEls || {}).length) {
+            throw new Error("Native group conversion validation failed: WorkspaceKit overlay elements remain");
+        }
+        return result;
+    },
+
+    getNativeGroupConversionSnapshot(graph = app?.graph) {
+        // LiteGraph's Vector4 is array-like/iterable in current ComfyUI builds,
+        // but is not guaranteed to satisfy Array.isArray().  Normalize it here
+        // before handing the data to the portable reverse-conversion planner.
+        const copyVector = value => {
+            if (!value || typeof value[Symbol.iterator] !== "function") return null;
+            const copied = [...value];
+            return copied.length >= 4 ? copied : null;
+        };
+        return (graph?._groups || []).map(group => ({
+            id: group.id,
+            title: group.title,
+            pos: Array.isArray(group.pos) ? [...group.pos] : null,
+            size: Array.isArray(group.size) ? [...group.size] : null,
+            bounding: copyVector(group._bounding) || copyVector(group.bounding),
+            color: group.color,
+            nodeIds: Array.isArray(group._nodes) ? group._nodes.map(node => String(node.id)) : [],
+        }));
+    },
+
+    verifyWorkspaceKitConversionResult({ graph, plan, existingIds = [], removedNativeGroups }) {
+        const persistedGroups = graph.extra?.xzgGroups || {};
+        // T-206: after a mixed-state reverse conversion the result is the union
+        // of the pre-existing WorkspaceKit groups and the freshly converted ones.
+        const expectedIds = [...new Set([...existingIds, ...Object.keys(plan.groups || {})])].map(String).sort();
+        const activeIds = Object.keys(this.groups || {}).sort();
+        const persistedIds = Object.keys(persistedGroups).sort();
+        if (graph.extra?.workspacekit?.groupRepresentation !== 'workspacekit') {
+            throw new Error('WorkspaceKit conversion validation failed: representation was not set to WorkspaceKit');
+        }
+        if ((graph._groups || []).some(group => removedNativeGroups.includes(group))) {
+            throw new Error('WorkspaceKit conversion validation failed: native groups remain');
+        }
+        if (JSON.stringify(activeIds) !== JSON.stringify(expectedIds) || JSON.stringify(persistedIds) !== JSON.stringify(expectedIds)) {
+            throw new Error('WorkspaceKit conversion validation failed: restored group data does not match the plan');
+        }
+        if (Object.keys(this.groupEls || {}).length !== expectedIds.length) {
+            throw new Error('WorkspaceKit conversion validation failed: overlay elements do not match restored groups');
+        }
+        return true;
+    },
+
+    /**
+     * Convert the current workflow's active WorkspaceKit overlays to native
+     * LiteGraph groups. Existing native groups are preserved. The archive is
+     * written only after every source group and native constructor capability
+     * has been validated; any mutation failure removes all newly added groups
+     * and restores the graph metadata and node snapshots.
+     */
+    convertCurrentWorkflowToNative(expectedSnapshot = null) {
+        const graph = app?.graph;
+        const GroupCtor = globalThis.LiteGraph?.LGraphGroup || globalThis.LGraphGroup;
+        if (!graph || typeof graph.add !== 'function' || typeof graph.remove !== 'function' || typeof GroupCtor !== 'function') {
+            throw new Error('This ComfyUI frontend does not expose native canvas-group support.');
+        }
+        if (this._conversionInProgress) {
+            return { converted: 0, representation: this.getGroupRepresentation(graph), inProgress: true };
+        }
+        if (expectedSnapshot && !this.isConversionSnapshotCurrent(expectedSnapshot)) {
+            return { converted: 0, representation: this.getGroupRepresentation(graph), stale: true };
+        }
+        if (this._nativeRepresentation || graph.extra?.workspacekit?.groupRepresentation === 'native') {
+            return { converted: 0, representation: 'native', alreadyNative: true };
+        }
+
+        const sourceGroups = Object.values(this.groups || {}).filter(Boolean);
+        if (!sourceGroups.length) {
+            return { converted: 0, representation: 'workspacekit', empty: true };
+        }
+        const archive = this.createConversionArchive();
+        const archiveCheck = validateWorkspaceKitGroupConversionArchive(archive);
+        if (!archiveCheck.valid) throw new Error(`Cannot archive WorkspaceKit groups: ${archiveCheck.reason}`);
+        const nodeIds = new Set((graph._nodes || []).map(node => String(node.id)));
+        for (const group of sourceGroups) {
+            const b = group.bounds;
+            if (!b || ![b.x, b.y, b.w, b.h].every(value => Number.isFinite(Number(value))) || Number(b.w) <= 0 || Number(b.h) <= 0) {
+                throw new Error(`Group "${group.title || group.id}" has invalid bounds.`);
+            }
+            for (const nodeId of group.nodeIds || []) {
+                if (!nodeIds.has(String(nodeId))) {
+                    throw new Error(`Group "${group.title || group.id}" references a missing node.`);
+                }
+            }
+        }
+
+        const originalExtra = graph.extra ? JSON.parse(JSON.stringify(graph.extra)) : undefined;
+        const originalNativeGroups = [...(graph._groups || [])];
+        const originalNativeRepresentation = this._nativeRepresentation;
+        const originalGroups = this.groups;
+        const originalNodeData = new Map();
+        const sourceNodeIds = new Set(sourceGroups.flatMap(group => group.nodeIds || []).map(id => String(id)));
+        for (const node of graph._nodes || []) {
+            if (!sourceNodeIds.has(String(node.id))) continue;
+            originalNodeData.set(node, {
+                groupId: node._xzgGroupId,
+                groupData: node._xzgGroupData,
+                propertyGroup: node.properties?._xzgGroup,
+            });
+        }
+
+        const addedGroups = [];
+        this._conversionInProgress = true;
+        try {
+            const nativeGroupIds = {};
+            for (const source of sourceGroups) {
+                const bounds = source.bounds;
+                const native = new GroupCtor(source.title || 'Group');
+                native.pos = [Number(bounds.x), Number(bounds.y)];
+                native.size = [Math.max(140, Number(bounds.w)), Math.max(80, Number(bounds.h))];
+                if (source.headerBgColor) native.color = source.headerBgColor;
+                graph.add(native);
+                addedGroups.push(native);
+                nativeGroupIds[source.id] = native.id;
+            }
+            for (const native of addedGroups) {
+                native.recomputeInsideNodes?.();
+            }
+
+            const workspacekit = graph.extra?.workspacekit && typeof graph.extra.workspacekit === 'object'
+                ? JSON.parse(JSON.stringify(graph.extra.workspacekit))
+                : {};
+            workspacekit.groupRepresentation = 'native';
+            workspacekit.groupConversion = {
+                ...archive,
+                nativeGroupIds,
+            };
+            graph.extra = graph.extra || {};
+            graph.extra.workspacekit = workspacekit;
+            graph.extra.xzgGroups = {};
+
+            for (const node of graph._nodes || []) {
+                if (sourceNodeIds.has(String(node.id))) this._clearNodeGroupData(node);
+            }
+            this.groups = {};
+            this.groupEls = {};
+            this.selectedGroupIds = new Set();
+            this._pendingGroups = null;
+            this._needRestore = false;
+            this._nativeRepresentation = true;
+            this.rebuildAllEls();
+            graph.setDirtyCanvas?.(true, true);
+            graph.change?.();
+            this.syncGroupsToExtra();
+            this.verifyNativeConversionResult({
+                graph,
+                originalNativeGroups,
+                sourceGroups,
+                nativeGroupIds,
+                archive,
+            });
+            console.log('[Workspace2 Canvas Groups] 已转换为 ComfyUI 原生编组:', addedGroups.length);
+            return {
+                converted: addedGroups.length,
+                representation: 'native',
+                archive,
+                nativeGroupIds,
+            };
+        } catch (error) {
+            for (const native of addedGroups.reverse()) {
+                try { graph.remove(native); } catch {}
+            }
+            if (originalExtra === undefined) delete graph.extra;
+            else graph.extra = originalExtra;
+            for (const [node, state] of originalNodeData) {
+                node._xzgGroupId = state.groupId;
+                node._xzgGroupData = state.groupData;
+                node.properties = node.properties || {};
+                if (state.propertyGroup === undefined) delete node.properties._xzgGroup;
+                else node.properties._xzgGroup = state.propertyGroup;
+            }
+            this.groups = originalGroups;
+            this._nativeRepresentation = originalNativeRepresentation;
+            this.rebuildAllEls();
+            graph.setDirtyCanvas?.(true, true);
+            throw error;
+        } finally {
+            this._conversionInProgress = false;
+        }
+    },
+
+    /**
+     * Convert all current native LiteGraph groups back to active WorkspaceKit
+     * groups. Current native geometry/title/member IDs are authoritative;
+     * forward-conversion archives contribute the original visual/execution
+     * style only. This method is intentionally not exposed in Settings until
+     * the transaction and real-page acceptance batches are complete.
+     */
+    convertCurrentWorkflowToWorkspaceKit() {
+        const graph = app?.graph;
+        if (!graph || typeof graph.add !== 'function' || typeof graph.remove !== 'function') {
+            throw new Error('This ComfyUI frontend does not expose native canvas-group support.');
+        }
+        if (this._conversionInProgress) {
+            return { converted: 0, representation: this.getGroupRepresentation(graph), inProgress: true };
+        }
+        // T-206 (2026-07-28): the reverse conversion now works from a mixed
+        // canvas too. Existing WorkspaceKit overlay groups are preserved and the
+        // current native groups are converted and merged into them, instead of
+        // the old "pure native only" guard that returned a no-op. A pure
+        // WorkspaceKit canvas with no native groups is still a no-op.
+        const existingGroups = this.groups && typeof this.groups === 'object' ? this.groups : {};
+        const existingIds = Object.keys(existingGroups);
+        const hasNativeGroups = Array.isArray(graph._groups) && graph._groups.length > 0;
+        if (!hasNativeGroups) {
+            return { converted: 0, representation: this.getGroupRepresentation(graph), alreadyWorkspaceKit: true };
+        }
+        const archive = graph.extra?.workspacekit?.groupConversion;
+        const nativeGroupIds = archive?.nativeGroupIds;
+        const nativeGroups = this.getNativeGroupConversionSnapshot(graph);
+        const plan = createNativeToWorkspaceKitConversionPlan({ archive, nativeGroupIds, nativeGroups, reservedIds: existingIds });
+        // Merge: keep the live WorkspaceKit groups, add the newly converted ones.
+        // The planner reserved existingIds so plan.groups cannot collide.
+        const mergedGroups = { ...JSON.parse(JSON.stringify(existingGroups)), ...JSON.parse(JSON.stringify(plan.groups)) };
+        const originalExtra = graph.extra ? JSON.parse(JSON.stringify(graph.extra)) : undefined;
+        const originalNativeGroups = [...(graph._groups || [])];
+        const originalNativeRepresentation = this._nativeRepresentation;
+        const originalGroups = this.groups;
+        const originalNodeData = new Map((graph._nodes || []).map(node => [node, {
+            groupId: node._xzgGroupId,
+            groupData: node._xzgGroupData,
+            propertyGroup: node.properties?._xzgGroup,
+        }]));
+
+        this._conversionInProgress = true;
+        try {
+            for (const native of originalNativeGroups) graph.remove(native);
+            const workspacekit = graph.extra?.workspacekit && typeof graph.extra.workspacekit === 'object'
+                ? JSON.parse(JSON.stringify(graph.extra.workspacekit))
+                : {};
+            workspacekit.groupRepresentation = 'workspacekit';
+            workspacekit.nativeGroupConversion = {
+                schemaVersion: 1,
+                source: 'native',
+                convertedAt: new Date().toISOString(),
+                groups: nativeGroups,
+            };
+            graph.extra = graph.extra || {};
+            graph.extra.workspacekit = workspacekit;
+            graph.extra.xzgGroups = JSON.parse(JSON.stringify(mergedGroups));
+
+            this._nativeRepresentation = false;
+            this._pendingGroups = null;
+            this._needRestore = false;
+            this.groups = JSON.parse(JSON.stringify(mergedGroups));
+            this.groupEls = {};
+            this.selectedGroupIds = new Set();
+            this.rebuildAllEls();
+            this.writeGroupDataToNodes(mergedGroups);
+            this.syncGroupsToExtra();
+            graph.setDirtyCanvas?.(true, true);
+            graph.change?.();
+            this.verifyWorkspaceKitConversionResult({ graph, plan, existingIds, removedNativeGroups: originalNativeGroups });
+            console.log('[Workspace2 Canvas Groups] 已转换回 WorkspaceKit 编组:', Object.keys(plan.groups).length, '合并后共', Object.keys(mergedGroups).length);
+            return {
+                converted: Object.keys(plan.groups).length,
+                representation: 'workspacekit',
+                plan,
+                mergedGroupCount: Object.keys(mergedGroups).length,
+            };
+        } catch (error) {
+            this.groups = {};
+            this.groupEls = {};
+            this.rebuildAllEls();
+            if (originalExtra === undefined) delete graph.extra;
+            else graph.extra = originalExtra;
+            for (const native of originalNativeGroups) {
+                if (!(graph._groups || []).includes(native)) graph.add(native);
+            }
+            for (const [node, state] of originalNodeData) {
+                node._xzgGroupId = state.groupId;
+                node._xzgGroupData = state.groupData;
+                node.properties = node.properties || {};
+                if (state.propertyGroup === undefined) delete node.properties._xzgGroup;
+                else node.properties._xzgGroup = state.propertyGroup;
+            }
+            this.groups = originalGroups;
+            this._nativeRepresentation = originalNativeRepresentation;
+            this.rebuildAllEls();
+            graph.setDirtyCanvas?.(true, true);
+            throw error;
+        } finally {
+            this._conversionInProgress = false;
+        }
     },
 
     writeGroupDataToNodes(groupData = null) {
@@ -2868,7 +3445,9 @@ const Workspace2CanvasGroups = {
                 const c = LG.LGraph.prototype.configure;
                 if (c) {
                     LG.LGraph.prototype.configure = function(d) {
-                        const pendingFromTop = d?._xzgGroups || d?.extra?.xzgGroups || null;
+                        const nativeRepresentation = d?.extra?.workspacekit?.groupRepresentation === 'native';
+                        self._nativeRepresentation = nativeRepresentation;
+                        const pendingFromTop = nativeRepresentation ? null : (d?._xzgGroups || d?.extra?.xzgGroups || null);
                         if (pendingFromTop) console.log('[Workspace2 Canvas Groups] LGraph.configure检测到编组数据:', Object.keys(pendingFromTop).length, '个');
                         c.apply(this, arguments);
                         if (app?.graph !== this) return;
@@ -2890,6 +3469,8 @@ const Workspace2CanvasGroups = {
                                 shadowColor: g.shadowColor,
                                 contentPadding: g.contentPadding,
                                 headerBgColor: g.headerBgColor,
+                                backgroundFillEnabled: Boolean(g.backgroundFillEnabled),
+                                backgroundOpacity: g.backgroundOpacity,
                                 titleColor: g.titleColor,
                             };
                         }
@@ -2968,7 +3549,9 @@ const Workspace2CanvasGroups = {
             const origLoad = app.loadGraphData;
             app.loadGraphData = async function(data, ...args) {
                 // 从加载的数据中提取编组信息
-                const groups = data?.extra?.xzgGroups || data?._xzgGroups || null;
+                const nativeRepresentation = data?.extra?.workspacekit?.groupRepresentation === 'native';
+                self._nativeRepresentation = nativeRepresentation;
+                const groups = nativeRepresentation ? null : (data?.extra?.xzgGroups || data?._xzgGroups || null);
                 if (groups && Object.keys(groups).length) {
                     self._pendingGroups = groups;
                     self._needRestore = true;
@@ -2987,8 +3570,8 @@ const Workspace2CanvasGroups = {
                 self.syncGroupsToExtra();
                 // 同时备份到 localStorage
                 try {
-                    const gd = serializeGroups();
-                    if (Object.keys(gd).length) {
+                    const gd = self._nativeRepresentation ? {} : serializeGroups();
+                    if (Object.keys(gd).length && !self._nativeRepresentation) {
                         localStorage.setItem('xzg_groups_backup', JSON.stringify(gd));
                     } else {
                         localStorage.removeItem('xzg_groups_backup');
@@ -3000,7 +3583,7 @@ const Workspace2CanvasGroups = {
         // ── 方案4：从 localStorage 恢复（兜底） ──
         try {
             const backup = localStorage.getItem('xzg_groups_backup');
-            if (backup) {
+            if (backup && !this._nativeRepresentation) {
                 const gd = JSON.parse(backup);
                 if (gd && Object.keys(gd).length && !this._pendingGroups) {
                     this._pendingGroups = gd;
@@ -3027,6 +3610,19 @@ const Workspace2CanvasGroups = {
     restoreGroups() {
         if (!app?.graph) return;
         this._needRestore = false;
+
+        if (this._nativeRepresentation || app.graph.extra?.workspacekit?.groupRepresentation === 'native') {
+            this._nativeRepresentation = true;
+            this._pendingGroups = null;
+            this.groups = {};
+            // Native groups are now the only active representation.  Clear
+            // stale WorkspaceKit node markers before rebuilding the overlay;
+            // otherwise the legacy fallback scan below can resurrect the old
+            // DOM group after a reload.
+            for (const node of app.graph._nodes || []) this._clearNodeGroupData(node);
+            this.rebuildAllEls();
+            return;
+        }
 
         console.log('[Workspace2 Canvas Groups] 恢复编组...', this._pendingGroups ? Object.keys(this._pendingGroups).length + '个编组数据待恢复' : '无待恢复数据');
 
@@ -3097,11 +3693,16 @@ const Workspace2CanvasGroups = {
                     borderWidth: 2, borderOpacity: 0.65,
                     shadowSize: 0, shadowColor: DEFAULT_SHADOW_COLOR,
                     contentPadding: DEFAULT_CONTENT_PADDING,
-                    headerBgColor: 'rgba(0,0,0,0.4)', titleColor: '#FFD700'
+                    headerBgColor: 'rgba(0,0,0,0.4)',
+                    backgroundFillEnabled: false,
+                    backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
+                    titleColor: '#FFD700'
                 };
             } else {
                 this.groups[gid].nodeIds = nids;
                 if (this.groups[gid].contentPadding === undefined) this.groups[gid].contentPadding = DEFAULT_CONTENT_PADDING;
+                if (this.groups[gid].backgroundFillEnabled === undefined) this.groups[gid].backgroundFillEnabled = false;
+                if (this.groups[gid].backgroundOpacity === undefined) this.groups[gid].backgroundOpacity = DEFAULT_BACKGROUND_OPACITY;
                 if (this.groups[gid].shadowSize === undefined) this.groups[gid].shadowSize = 0;
                 if (!this.groups[gid].shadowColor) this.groups[gid].shadowColor = DEFAULT_SHADOW_COLOR;
                 // 确保bounds存在
@@ -3112,6 +3713,8 @@ const Workspace2CanvasGroups = {
         }
         for (const group of Object.values(this.groups)) {
             if (group.contentPadding === undefined) group.contentPadding = DEFAULT_CONTENT_PADDING;
+            if (group.backgroundFillEnabled === undefined) group.backgroundFillEnabled = false;
+            if (group.backgroundOpacity === undefined) group.backgroundOpacity = DEFAULT_BACKGROUND_OPACITY;
             if (group.shadowSize === undefined) group.shadowSize = 0;
             if (!group.shadowColor) group.shadowColor = DEFAULT_SHADOW_COLOR;
         }

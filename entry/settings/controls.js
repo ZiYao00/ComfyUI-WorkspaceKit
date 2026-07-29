@@ -59,9 +59,6 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
       ["Shift + 3", t("settings.shortcuts.templates")],
       ["Shift + 4", t("settings.shortcuts.extension")],
       ["Alt + C", t("settings.shortcuts.saveTemplate")],
-      ["Ctrl + G", t("settings.shortcuts.createGroup")],
-      ["Shift + G", t("settings.shortcuts.ungroup")],
-      [t("settings.shortcuts.shiftLeftClickKey"), t("settings.shortcuts.toggleGroupIgnore")],
     ];
     const grid = document.createElement("div");
     grid.className = "workspace2-settings-shortcut-grid";

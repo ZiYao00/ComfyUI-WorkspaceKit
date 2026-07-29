@@ -1,0 +1,13 @@
+{
+  "name": "comfyui-workspacekit-dev-tools",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Development-only tooling for real-page tests. Not required for using this plugin; ComfyUI users can ignore this file and node_modules/.",
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.0"
+  }
+}

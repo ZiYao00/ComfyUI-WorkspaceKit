@@ -34,6 +34,11 @@ lerna-debug.log*
 ui/yarn.lock
 *.local
 
+# Playwright (development-only real-page test tooling)
+test-results/
+playwright-report/
+playwright/.cache/
+
 # Secrets
 .env
 .env.*
@@ -46,6 +51,7 @@ hash/
 backup/
 .codex-backups/
 .ai-bridge/
+.dev-docs/
 *.backup
 *.bak
 

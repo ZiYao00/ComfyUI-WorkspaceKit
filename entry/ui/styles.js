@@ -1268,7 +1268,7 @@ export function styles() {
     .workspace2-row.is-file > .workspace2-name,
     .workspace2-node-row .workspace2-name,
     .workspace2-template-name {
-      opacity: .8;
+      opacity: .9;
     }
     .workspace2-meta {
       color: var(--workspace2-muted);

@@ -438,6 +438,7 @@
   "groups.color": "颜色",
   "groups.opacity": "颜色/透明度",
   "groups.borderWidth": "粗细",
+  "groups.cornerRadius": "圆角",
   "groups.shadow": "阴影",
   "groups.padding": "边距",
   "groups.animation": "动画",

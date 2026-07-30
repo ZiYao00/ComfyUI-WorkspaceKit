@@ -1664,7 +1664,7 @@ function openWorkspaceSettings() {
     pageButtons.set(page.id, button);
     pageElements.set(page.id, pageElement);
   }
-  selectSettingsPage("workflows");
+  selectSettingsPage(settingPages[0].id);
   settingsLayout.append(settingsNav, settingsPagesElement);
   dialog.append(header, settingsLayout);
   backdrop.append(dialog);

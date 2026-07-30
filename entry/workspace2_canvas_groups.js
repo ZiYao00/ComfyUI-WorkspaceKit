@@ -108,6 +108,22 @@ const parseRgbaAlpha = (value, fallback = DEFAULT_HEADER_OPACITY) => {
     return m ? finiteNumber(m[1], fallback) : fallback;
 };
 
+// Native LiteGraph groups expose a single solid `color` field (a hex string),
+// while a WorkspaceKit group carries a translucent `headerBgColor` (rgba) plus a
+// separate `titleColor`. When converting to native we cannot represent all three
+// layers, so we approximate: if the user gave the group a meaningful color, keep
+// its title-bar RGB as a solid hex; if the group is still on the default (a near
+// black rgba(0,0,0,x)), return null so the caller leaves `color` unset and the
+// native group falls back to ComfyUI's own default palette instead of rendering
+// an all-black box. (rgbToHex is defined below, alongside the color presets.)
+const nativeColorFromWorkspaceKitGroup = group => {
+    const rgb = parseRgbaRgb(group?.headerBgColor, null);
+    if (!rgb) return null;
+    const isNearBlack = rgb.r <= 8 && rgb.g <= 8 && rgb.b <= 8;
+    if (isNearBlack) return null;
+    return rgbToHex(rgb);
+};
+
 // T-210b (2026-07-29): body fill RGB is always the title-bar RGB, and body alpha
 // is strictly half the title-bar alpha. No independent backgroundOpacity slider
 // value gates it anymore (the earlier min-of-header-and-background clamp is
@@ -300,26 +316,34 @@ const Workspace2CanvasGroups = {
         ctx.save();
         for (const group of groups) {
             const b = group._previewBounds || group.bounds;
-            const headerHeight = Math.max(21, Math.round((group.fontSize || 14) * 1.8));
             const x = b.x;
-            const y = b.y + headerHeight;
+            const y = b.y;
             const w = Math.max(0, b.w);
-            const h = Math.max(0, b.h - headerHeight);
+            const h = Math.max(0, b.h);
             if (!w || !h) continue;
             if (Array.isArray(visibleArea) && visibleArea.length >= 4) {
                 const [vx, vy, vw, vh] = visibleArea;
                 if (x + w < vx || y + h < vy || x > vx + vw || y > vy + vh) continue;
             }
 
-            const radius = Math.min(7, w / 2, h / 2);
+            // Fill the area inside the group border (T-213: concentric nesting
+            // with the outer border, so the fill arcs match the border arc minus
+            // one border width; the header's translucent DOM color stacks on top).
+            const bw = finiteNumber(group.borderWidth, 2);
+            const radius = Math.min(Math.max(0, finiteNumber(group.cornerRadius, 8) - bw), w / 2, h / 2);
+            const ix = x + bw, iy = y + bw, iw = Math.max(0, w - bw * 2), ih = Math.max(0, h - bw * 2);
+            if (!iw || !ih) continue;
             ctx.fillStyle = groupBodyBackground(group);
             ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x + w, y);
-            ctx.lineTo(x + w, y + h - radius);
-            ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-            ctx.lineTo(x + radius, y + h);
-            ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+            ctx.moveTo(ix + radius, iy);
+            ctx.lineTo(ix + iw - radius, iy);
+            ctx.quadraticCurveTo(ix + iw, iy, ix + iw, iy + radius);
+            ctx.lineTo(ix + iw, iy + ih - radius);
+            ctx.quadraticCurveTo(ix + iw, iy + ih, ix + iw - radius, iy + ih);
+            ctx.lineTo(ix + radius, iy + ih);
+            ctx.quadraticCurveTo(ix, iy + ih, ix, iy + ih - radius);
+            ctx.lineTo(ix, iy + radius);
+            ctx.quadraticCurveTo(ix, iy, ix + radius, iy);
             ctx.closePath();
             ctx.fill();
         }
@@ -719,10 +743,11 @@ const Workspace2CanvasGroups = {
             const spd = (g.effectSpeed || 3) / 3;
             const bw = finiteNumber(g.borderWidth, 2) * scale;
             const bo = g.borderOpacity ?? 0.65;
+            const cr = Math.max(0, finiteNumber(g.cornerRadius, 8)) * scale;
 
             // 非marquee效果重置文字样式
             if (e !== 'marquee' && e !== 'marqueebreathe') {
-                el.style.overflow = '';
+                el.style.overflow = 'hidden';
                 el.style.background = 'transparent';
                 if (refs.title) {
                     refs.title.style.background = '';
@@ -761,7 +786,7 @@ const Workspace2CanvasGroups = {
                 const angle = (t * 360) % 360;
                 const h0 = (t * 360) % 360;
                 el.style.border = `${Math.max(0, bw)}px solid transparent`;
-                el.style.borderRadius = '8px';
+                el.style.borderRadius = `${cr}px`;
                 el.style.overflow = 'hidden';
                 el.style.borderImage = `conic-gradient(from ${angle}deg, hsl(0,100%,65%), hsl(30,100%,65%), hsl(60,100%,65%), hsl(90,100%,65%), hsl(120,100%,65%), hsl(150,100%,65%), hsl(180,100%,65%), hsl(210,100%,65%), hsl(240,100%,65%), hsl(270,100%,65%), hsl(300,100%,65%), hsl(330,100%,65%), hsl(360,100%,65%)) 1`;
                 this.applyUserShadow(el, g, scale);
@@ -783,7 +808,7 @@ const Workspace2CanvasGroups = {
                 const h0 = (t * 360) % 360;
                 el.style.overflow = 'hidden';
                 el.style.border = `${Math.max(0, bw)}px solid transparent`;
-                el.style.borderRadius = '8px';
+                el.style.borderRadius = `${cr}px`;
                 el.style.borderImage = `conic-gradient(from ${angle}deg, hsl(0,100%,${5+wave*60}%), hsl(30,100%,${5+wave*60}%), hsl(60,100%,${5+wave*60}%), hsl(90,100%,${5+wave*60}%), hsl(120,100%,${5+wave*60}%), hsl(150,100%,${5+wave*60}%), hsl(180,100%,${5+wave*60}%), hsl(210,100%,${5+wave*60}%), hsl(240,100%,${5+wave*60}%), hsl(270,100%,${5+wave*60}%), hsl(300,100%,${5+wave*60}%), hsl(330,100%,${5+wave*60}%), hsl(360,100%,${5+wave*60}%)) 1`;
                 this.applyUserShadow(el, g, scale);
                 const lv = 5 + wave * 60;
@@ -874,6 +899,7 @@ const Workspace2CanvasGroups = {
             effectSpeed: 3,
             borderWidth: 2,
             borderOpacity: 0.65,
+            cornerRadius: 8,
             shadowSize: 0,
             shadowColor: DEFAULT_SHADOW_COLOR,
             contentPadding: DEFAULT_CONTENT_PADDING,
@@ -944,6 +970,7 @@ const Workspace2CanvasGroups = {
             effectSpeed: group.effectSpeed || 3,
             borderWidth: finiteNumber(group.borderWidth, 2),
             borderOpacity: group.borderOpacity ?? 0.65,
+            cornerRadius: finiteNumber(group.cornerRadius, 8),
             shadowSize: Math.max(0, finiteNumber(group.shadowSize, 0)),
             shadowColor: group.shadowColor || DEFAULT_SHADOW_COLOR,
             contentPadding: group.contentPadding ?? DEFAULT_CONTENT_PADDING,
@@ -1284,13 +1311,18 @@ const Workspace2CanvasGroups = {
         el.dataset.groupId = group.id;
         const bw = finiteNumber(group.borderWidth, 2);
         const bo = group.borderOpacity ?? 0.65;
-        el.style.cssText = `position:absolute;pointer-events:none;border:${bw}px solid hsla(48,100%,55%,${bo});border-radius:8px;background:transparent;box-sizing:border-box;z-index:5;`;
+        const cr = Math.max(0, finiteNumber(group.cornerRadius, 8));
+        // Corner radius is applied only on the outer box. overflow:hidden clips the
+        // header/body children to the border's inner edge, so they inherit a
+        // concentric rounded corner automatically — no per-child radius math, and
+        // the layers can never desync during a fast slider drag.
+        el.style.cssText = `position:absolute;pointer-events:none;border:${bw}px solid hsla(48,100%,55%,${bo});border-radius:${cr}px;background:transparent;box-sizing:border-box;overflow:hidden;z-index:5;`;
         const fs = group.fontSize || 14;
         const showTitle = (group.title || '').trim() !== '';
         const headerHeight = Math.max(21, Math.round(fs * 1.8));
         el.innerHTML = `
-            <div class="xzg-group-body" style="position:absolute;left:0;right:0;top:${headerHeight}px;bottom:0;background:transparent;border-radius:0 0 7px 7px;pointer-events:none;z-index:1;"></div>
-            <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || DEFAULT_HEADER_BG_COLOR) : 'transparent'};border-radius:7px 7px 0 0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
+            <div class="xzg-group-body" style="position:absolute;left:0;right:0;top:${headerHeight}px;bottom:0;background:transparent;border-radius:0;pointer-events:none;z-index:1;"></div>
+            <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || DEFAULT_HEADER_BG_COLOR) : 'transparent'};border-radius:0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
                 <div style="flex:1 1 auto;min-width:0;overflow:hidden;display:flex;align-items:center;height:100%;">
                     <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1.4;overflow:hidden;text-overflow:ellipsis;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
                 </div>
@@ -1307,9 +1339,9 @@ const Workspace2CanvasGroups = {
                     <button class="xzg-delete-btn" title="${t('groups.delete')}" style="border:none;background:none;cursor:pointer;padding:0;flex-shrink:0;font-size:18px;color:hsla(48,100%,55%,0.5);line-height:1;">×</button>
                 </div>
             </div>
-            <div class="xzg-border-left" style="position:absolute;left:-3px;top:${headerHeight}px;width:10px;bottom:-3px;pointer-events:auto;cursor:move;z-index:2;"></div>
-            <div class="xzg-border-right" style="position:absolute;right:-3px;top:${headerHeight}px;width:10px;bottom:-3px;pointer-events:auto;cursor:move;z-index:2;"></div>
-            <div class="xzg-border-bottom" style="position:absolute;left:7px;right:7px;bottom:-3px;height:10px;pointer-events:auto;cursor:move;z-index:2;"></div>
+            <div class="xzg-border-left" style="position:absolute;left:0;top:${headerHeight}px;width:10px;bottom:0;pointer-events:auto;cursor:move;z-index:2;"></div>
+            <div class="xzg-border-right" style="position:absolute;right:0;top:${headerHeight}px;width:10px;bottom:0;pointer-events:auto;cursor:move;z-index:2;"></div>
+            <div class="xzg-border-bottom" style="position:absolute;left:7px;right:7px;bottom:0;height:10px;pointer-events:auto;cursor:move;z-index:2;"></div>
             <div class="xzg-resize-handle" title="${t('groups.resize')}" style="position:absolute;right:2px;bottom:2px;width:14px;height:14px;cursor:nwse-resize;pointer-events:auto;opacity:0.6;z-index:3;">
                 <svg viewBox="0 0 14 14" width="14" height="14"><path d="M12 2L2 12 M8 12h4v-4" stroke="#FFD700" stroke-width="1.5" fill="none"/></svg>
             </div>
@@ -1516,6 +1548,7 @@ const Workspace2CanvasGroups = {
             useUnifiedColor: Boolean(target.useUnifiedColor),
             effect: target.effect, effectSpeed: target.effectSpeed,
             borderWidth: target.borderWidth, borderOpacity: target.borderOpacity,
+            cornerRadius: target.cornerRadius,
             shadowSize: target.shadowSize,
             shadowColor: target.shadowColor,
             contentPadding: target.contentPadding,
@@ -1535,6 +1568,7 @@ const Workspace2CanvasGroups = {
                 useUnifiedColor: _snapshot.useUnifiedColor,
                 effect: _snapshot.effect, effectSpeed: _snapshot.effectSpeed,
                 borderWidth: _snapshot.borderWidth, borderOpacity: _snapshot.borderOpacity,
+                cornerRadius: _snapshot.cornerRadius,
                 shadowSize: _snapshot.shadowSize,
                 shadowColor: _snapshot.shadowColor,
                 contentPadding: _snapshot.contentPadding,
@@ -1559,7 +1593,7 @@ const Workspace2CanvasGroups = {
         // Keep one label column for both Chinese and English.  The earlier
         // 52px column was sized only for Chinese and let English labels run
         // underneath their sliders.
-        modal.style.cssText = `position:fixed;left:0;top:0;background:#1e1e1e;border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:0 12px 12px;z-index:9999;width:min(370px,calc(100vw - 20px));max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow-y:auto;box-sizing:border-box;box-shadow:0 0 20px rgba(0,0,0,0.8);visibility:hidden;`;
+        modal.style.cssText = `position:fixed;left:0;top:0;background:var(--workspacekit-dialog-bg, #1e1e1e);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:0 12px 12px;z-index:9999;width:min(370px,calc(100vw - 20px));max-width:calc(100vw - 20px);max-height:calc(100vh - 20px);overflow-y:auto;box-sizing:border-box;box-shadow:0 0 20px rgba(0,0,0,0.8);visibility:hidden;`;
         const curH = group.colorHue || 48, curS = group.colorSat ?? 100, curL = group.colorLit ?? 55;
         const activePresetSnapshot = this.readActivePreset();
         let activePresetIndex = activePresetSnapshot;
@@ -1634,6 +1668,13 @@ const Workspace2CanvasGroups = {
                     <input class="xzg-set-borderwidth" type="range" min="0" max="5" value="${finiteNumber(group.borderWidth, 2)}" style="flex:1;height:28px;margin:0;">
                     <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
                         <span class="xzg-set-bw-val" style="color:#fff;font-size:12px;text-align:left;">${finiteNumber(group.borderWidth, 2)}px</span>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
+                    <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;">${t('groups.cornerRadius')}</label>
+                    <input class="xzg-set-cornerradius" type="range" min="0" max="20" value="${Math.min(20, Math.max(0, finiteNumber(group.cornerRadius, 8)))}" style="flex:1;height:28px;margin:0;">
+                    <div style="width:58px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;height:28px;">
+                        <span class="xzg-set-cr-val" style="color:#fff;font-size:12px;text-align:left;">${Math.min(20, Math.max(0, finiteNumber(group.cornerRadius, 8)))}px</span>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:6px;height:28px;margin-bottom:8px;">
@@ -1757,6 +1798,19 @@ const Workspace2CanvasGroups = {
             bwV.textContent = bwR.value;
             group.borderWidth = finiteNumber(bwR.value, 2);
             self.updateGroupStyle(group.id);
+        });
+
+        // 圆角滑块（实时预览）
+        const crR = modal.querySelector('.xzg-set-cornerradius');
+        const crV = modal.querySelector('.xzg-set-cr-val');
+        crR.addEventListener('input', () => {
+            const v = Math.min(20, Math.max(0, finiteNumber(crR.value, 8)));
+            crV.textContent = `${v}px`;
+            group.cornerRadius = v;
+            self.updateGroupStyle(group.id);
+            // Body fill is drawn in onDrawBackground; force a canvas redraw in the
+            // same tick so it never lags the DOM border during a fast drag.
+            app.graph?.setDirtyCanvas?.(true, true);
         });
 
         // 边框阴影滑块（实时预览）
@@ -2021,6 +2075,7 @@ const Workspace2CanvasGroups = {
             effectSpeed: parseInt(spdR.value) || 3,
             borderWidth: finiteNumber(bwR.value, 2),
             borderOpacity: (parseInt(boR.value) || 65) / 100,
+            cornerRadius: Math.min(20, Math.max(0, finiteNumber(crR.value, 8))),
             shadowSize: Math.max(0, finiteNumber(shadowR.value, 0)),
             shadowColor: shadowColorPicker.value || DEFAULT_SHADOW_COLOR,
             contentPadding: Math.max(0, parseInt(cpR.value) || 0),
@@ -2076,6 +2131,8 @@ const Workspace2CanvasGroups = {
             spdV.textContent = `${spdR.value}X`;
             bwR.value = finiteNumber(merged.borderWidth, 2);
             bwV.textContent = `${bwR.value}px`;
+            crR.value = Math.min(20, Math.max(0, finiteNumber(merged.cornerRadius, 8)));
+            crV.textContent = `${crR.value}px`;
             boR.value = Math.round((merged.borderOpacity ?? 0.65) * 100);
             boV.textContent = `${boR.value}%`;
             shadowR.value = Math.max(0, finiteNumber(merged.shadowSize, 0));
@@ -2593,6 +2650,7 @@ const Workspace2CanvasGroups = {
         const refs = this._ensureRefs(el);
         const bw = finiteNumber(g.borderWidth, 2) * scale;
         const bo = g.borderOpacity ?? 0.65;
+        const cr = Math.max(0, finiteNumber(g.cornerRadius, 8)) * scale;
         // T-207 (2026-07-29): keep the selection outline identical to
         // refreshGroupSelection(). This path runs on drag/zoom/sync and used to
         // overwrite it with the old "multi-only 2px dashed" rule, which hid the
@@ -2601,6 +2659,8 @@ const Workspace2CanvasGroups = {
         el.classList.toggle('is-xzg-group-selected', showSelection);
         el.style.outline = showSelection ? '1px solid rgba(180, 180, 180, 0.5)' : 'none';
         el.style.outlineOffset = showSelection ? '4px' : '0';
+        el.style.borderRadius = `${cr}px`;
+        el.style.overflow = 'hidden';
 
         if (g.bypassed) {
             el.style.border = `${bw}px solid hsla(280,60%,55%,${bo})`;
@@ -3045,6 +3105,7 @@ const Workspace2CanvasGroups = {
             effectSpeed: g.effectSpeed,
             borderWidth: g.borderWidth,
             borderOpacity: g.borderOpacity,
+            cornerRadius: g.cornerRadius,
             shadowSize: Math.max(0, finiteNumber(g.shadowSize, 0)),
             shadowColor: g.shadowColor || DEFAULT_SHADOW_COLOR,
             contentPadding: g.contentPadding ?? DEFAULT_CONTENT_PADDING,
@@ -3244,7 +3305,8 @@ const Workspace2CanvasGroups = {
                 const native = new GroupCtor(source.title || 'Group');
                 native.pos = [Number(bounds.x), Number(bounds.y)];
                 native.size = [Math.max(140, Number(bounds.w)), Math.max(80, Number(bounds.h))];
-                if (source.headerBgColor) native.color = source.headerBgColor;
+                const nativeColor = nativeColorFromWorkspaceKitGroup(source);
+                if (nativeColor) native.color = nativeColor;
                 graph.add(native);
                 addedGroups.push(native);
                 nativeGroupIds[source.id] = native.id;
@@ -3576,6 +3638,7 @@ const Workspace2CanvasGroups = {
                                 effectSpeed: g.effectSpeed,
                                 borderWidth: g.borderWidth,
                                 borderOpacity: g.borderOpacity,
+                                cornerRadius: g.cornerRadius,
                                 shadowSize: g.shadowSize,
                                 shadowColor: g.shadowColor,
                                 contentPadding: g.contentPadding,
@@ -3802,6 +3865,7 @@ const Workspace2CanvasGroups = {
                     fontSize: 16, colorHue: 48, colorSat: 100, colorLit: 55,
                     effect: 'none', effectSpeed: 3,
                     borderWidth: 2, borderOpacity: 0.65,
+                    cornerRadius: 8,
                     shadowSize: 0, shadowColor: DEFAULT_SHADOW_COLOR,
                     contentPadding: DEFAULT_CONTENT_PADDING,
                     headerBgColor: DEFAULT_HEADER_BG_COLOR,

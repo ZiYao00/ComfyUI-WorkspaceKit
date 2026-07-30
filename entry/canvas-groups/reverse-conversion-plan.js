@@ -12,12 +12,13 @@ const DEFAULT_STYLE = Object.freeze({
     effectSpeed: 3,
     borderWidth: 2,
     borderOpacity: 0.65,
+    cornerRadius: 8,
     shadowSize: 0,
     shadowColor: "#000000",
     contentPadding: 12,
-    headerBgColor: "rgba(0,0,0,0.4)",
+    headerBgColor: "rgba(0,0,0,0.25)",
     backgroundFillEnabled: false,
-    backgroundOpacity: 0.25,
+    backgroundOpacity: 0.125,
     titleColor: "#FFD700",
 });
 

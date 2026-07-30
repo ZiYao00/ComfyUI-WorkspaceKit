@@ -12,7 +12,7 @@ export function ensureWorkspaceKitDialogStyles() {
   style.id = STYLE_ID;
   style.textContent = `
     .workspacekit-dialog {
-      --workspacekit-dialog-bg: #1e1e1e;
+      --workspacekit-dialog-bg: var(--comfy-menu-bg, var(--p-content-background, #1e1e1e));
       --workspacekit-dialog-surface: #2a2a2a;
       --workspacekit-dialog-text: #f5f5f7;
       --workspacekit-dialog-muted: #a1a1a6;

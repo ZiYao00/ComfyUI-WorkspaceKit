@@ -438,6 +438,7 @@
   "groups.color": "Color",
   "groups.opacity": "Color / Opacity",
   "groups.borderWidth": "Width",
+  "groups.cornerRadius": "Corner",
   "groups.shadow": "Shadow",
   "groups.padding": "Padding",
   "groups.animation": "Animation",

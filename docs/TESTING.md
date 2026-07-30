@@ -13,6 +13,13 @@ This document records reproducible test evidence and unresolved errors found whi
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.zh-CN.md` (T-xxx).
 
+## 2026-07-30 - Main-package acceptance sweep (groups, regression, panel UI template)
+
+- Verified in the main package (junction from `custom_nodes/ComfyUI-WorkspaceKit` to the repo, ComfyUI restarted). All items below pass with no regression; several had code landed earlier and were awaiting a real-page confirmation.
+- **Group settings dialog / title font / color presets (T-210, T-211, T-212):** header default opacity 25%, background swatch presets replacing the opacity slider, unified font-and-border color control moved under the font-size row, shadow/thickness reorder, default title font size 16, enlarged header padding, title no longer drifts down when zooming out (including below 40%), removed marquee animation options, ten read-only full color presets, 50% header-opacity cap, one-shot theme detection on preset click, and the border "Color / Opacity" label all behave as designed.
+- **Continuous regression (T-017, T-018, T-019, T-020, T-021, T-022):** Nodes2 cache under large plugin counts / multi-tab / isolated profiles, Templates exception paths and batch restore/undo, four-state visuals (dark/light/transparent/frosted), Layout merged-vs-standalone appearance matrix, group selection interaction (marquee, Shift multi-select, blank click, Esc, edit focus), and template preview hover all pass.
+- **Panel UI Template acceptance (T-014, T-015, T-016):** Layout merged-mode and standalone-mode theme/lifecycle acceptance and the remaining Vendor export material pass.
+
 ## 2026-07-29 - entry.js split #6: extract official adapter to `integrations/official-node-adapter.js`
 
 - Pre-change backup: `.codex-backups/30-entry-splits/ComfyUI-WorkspaceKit-before-official-adapter-20260729-223230.zip` (247 files).
@@ -537,6 +544,7 @@ Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.z
 - Reproduced with a test workflow renamed directly through the WorkspaceKit backend endpoint, simulating another browser/client. The 4-second poll correctly updated Browse from the old file name to the new one, but the official ComfyUI Store retained the old Open-tab identity.
 - A scoped experiment that called official `syncWorkflows()` after the detected signature change removed the stale Open row, but left the old workflow canvas/title active. This is a worse state and was reverted; it is not part of the current source.
 - Automatic reopening/remapping is intentionally not implemented: an external rename has no reliable identity mapping and reopening can discard or overwrite an unsaved active canvas. A future product decision must define an explicit user-visible conflict/reopen flow before this is changed.
+- Re-confirmed in the main package on 2026-07-30: Browse updates to the new name after the poll while the open tab keeps its old official identity. This boundary behaves as designed and is not treated as a defect.
 
 ## 2026-07-21 - Sidebar shortcut toggle regression
 
@@ -1005,15 +1013,17 @@ Confirmed in the test package with `comfyui_frontend_package 1.45.20`:
 
 Run this checklist in the test package before accepting a main-package release. Record any failure with the workflow path, ComfyUI frontend version, and browser-console error.
 
-- [ ] **Open:** open the same workflow from Browse and Open; each loads the intended graph without a second click.
-- [ ] **Unsaved state:** after opening, no dot or Save is shown. Change a node value, link, title, or position; the dot and Save appear only on that current Open row.
-- [ ] **Save:** a successful save clears the dot and Save. A failed or cancelled save leaves both visible.
-- [ ] **Workflow switch:** opening a second workflow starts clean and does not inherit the first workflow's indicator.
-- [ ] **Create:** a new workflow appears locally, opens once, and does not cause repeated full scans or duplicate official-list synchronization.
-- [ ] **Rename and move:** selected path, Open history, and the current-save target follow the renamed/moved workflow.
-- [ ] **Delete and restore:** list and official workflow synchronization have no stale duplicate after trashing and restoring a workflow or folder.
-- [ ] **External-change poll:** inline rename and drag ordering survive longer than one background-poll interval.
-- [ ] **Restart and refresh:** previous-workflow restore has no `graphData.extra` error and the current Open row starts clean.
+Last verified in the main package on 2026-07-30 (T-009 through T-012): all items pass. No regression found; the underlying behavior had already been fixed in prior work, so this run only confirmed status and updated documentation.
+
+- [x] **Open:** open the same workflow from Browse and Open; each loads the intended graph without a second click.
+- [x] **Unsaved state:** after opening, no dot or Save is shown. Change a node value, link, title, or position; the dot and Save appear only on that current Open row.
+- [x] **Save:** a successful save clears the dot and Save. A failed or cancelled save leaves both visible.
+- [x] **Workflow switch:** opening a second workflow starts clean and does not inherit the first workflow's indicator.
+- [x] **Create:** a new workflow appears locally, opens once, and does not cause repeated full scans or duplicate official-list synchronization.
+- [x] **Rename and move:** selected path, Open history, and the current-save target follow the renamed/moved workflow.
+- [x] **Delete and restore:** list and official workflow synchronization have no stale duplicate after trashing and restoring a workflow or folder.
+- [x] **External-change poll:** inline rename and drag ordering survive longer than one background-poll interval.
+- [x] **Restart and refresh:** previous-workflow restore has no `graphData.extra` error and the current Open row starts clean.
 
 ## 2026-07-18 - Workflow first-save panel refresh
 

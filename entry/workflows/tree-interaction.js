@@ -7,6 +7,7 @@ export function createWorkflowTreeInteraction({
   renderPanel,
   requestAnimationFrame,
   setExpandedRecursive,
+  parentPath,
 }) {
   function getTreeScrollTop(el) {
     return el.querySelector(".workspace2-tree")?.scrollTop || 0;
@@ -24,18 +25,14 @@ export function createWorkflowTreeInteraction({
     });
   }
 
-  function workflowFolderKeys(node) {
-    const keys = [];
-    if (!node || node.type !== "folder") {
-      return keys;
-    }
-    if (node.path) {
-      keys.push(node.path);
-    }
-    for (const child of node.children || []) {
-      keys.push(...workflowFolderKeys(child));
-    }
-    return keys;
+  // Sibling folders share the same parent path. Level-only: descendant
+  // expansion state is untouched so collapsing one level does not lose the
+  // expanded state of nested folders.
+  function workflowSiblingKeys(node) {
+    const parent = parentPath(node.path || "");
+    return (state.items || [])
+      .filter((item) => item.type === "folder" && item.path && parentPath(item.path) === parent)
+      .map((item) => item.path);
   }
 
   function toggleWorkflowFolder(el, node, recursive = false) {
@@ -44,7 +41,8 @@ export function createWorkflowTreeInteraction({
     }
     const isOpen = state.expanded.has(node.path);
     if (recursive) {
-      setExpandedRecursive(state.expanded, workflowFolderKeys(node), !isOpen);
+      // Ctrl/Cmd-click collapses (or expands) every sibling at this level only.
+      setExpandedRecursive(state.expanded, workflowSiblingKeys(node), !isOpen);
     } else if (isOpen) {
       state.expanded.delete(node.path);
     } else {
@@ -56,7 +54,7 @@ export function createWorkflowTreeInteraction({
   return {
     getTreeScrollTop,
     restoreTreeScrollTop,
-    workflowFolderKeys,
+    workflowSiblingKeys,
     toggleWorkflowFolder,
   };
 }

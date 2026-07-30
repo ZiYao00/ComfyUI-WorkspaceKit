@@ -25,6 +25,11 @@
 
 ### Changed
 
+- Changed Ctrl/Cmd+click on a folder/group disclosure triangle to collapse (or
+  expand) only the siblings at that same level, in the Workflows, Templates, and
+  Nodes-favorites panels. It previously collapsed the clicked branch and all of
+  its descendants; now descendants keep their own expanded state. The official
+  node-category tree is unaffected.
 - Added optional WorkspaceKit group body fill. The new `背景` control reuses the
   title-bar color, while its opacity is independent from the `标题栏` opacity;
   legacy groups keep their existing header color and opacity.

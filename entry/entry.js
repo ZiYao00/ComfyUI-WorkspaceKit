@@ -579,6 +579,7 @@ const workflowTreeInteraction = createWorkflowTreeInteraction({
   renderPanel,
   requestAnimationFrame,
   setExpandedRecursive,
+  parentPath,
 });
 const getTreeScrollTop = workflowTreeInteraction.getTreeScrollTop;
 const restoreTreeScrollTop = workflowTreeInteraction.restoreTreeScrollTop;
@@ -2673,7 +2674,6 @@ const {
   uniqueTemplateGroupName,
   getTemplateGroup,
   childTemplateGroups,
-  templateGroupKeys,
   isTemplateGroupDescendant,
   normalizeTemplateOrders,
 } = createTemplateLibraryStore({
@@ -3498,7 +3498,11 @@ function renderTemplateContextMenu(el) {
 function toggleTemplateGroup(el, groupId, recursive = false) {
   const isOpen = templatesState.expanded.has(groupId);
   if (recursive) {
-    setExpandedRecursive(templatesState.expanded, templateGroupKeys(groupId), !isOpen);
+    // Ctrl/Cmd-click collapses (or expands) sibling groups at this level only;
+    // descendants keep their own expanded state.
+    const group = getTemplateGroup(groupId);
+    const siblingKeys = childTemplateGroups(group?.parentId || "").map((item) => item.id);
+    setExpandedRecursive(templatesState.expanded, siblingKeys, !isOpen);
   } else if (isOpen) {
     templatesState.expanded.delete(groupId);
   } else {
@@ -7797,22 +7801,14 @@ function toggleOfficialTreeFolder(el, folder, recursive = false) {
   renderNodesPanel(el);
 }
 
-function favoriteGroupKeys(groupId) {
-  const keys = [];
-  if (!groupId || groupId === NODE_DEFAULT_GROUP_ID) {
-    return keys;
-  }
-  keys.push(groupId);
-  for (const child of childNodeGroups(groupId)) {
-    keys.push(...favoriteGroupKeys(child.id));
-  }
-  return keys;
-}
-
 function toggleFavoriteGroup(el, groupId, recursive = false) {
   const isOpen = nodesState.expanded.has(groupId);
   if (recursive) {
-    setExpandedRecursive(nodesState.expanded, favoriteGroupKeys(groupId), !isOpen);
+    // Ctrl/Cmd-click collapses (or expands) sibling groups at this level only;
+    // descendants keep their own expanded state.
+    const group = (nodesState.library.groups || []).find((item) => item.id === groupId);
+    const siblingKeys = childNodeGroups(group?.parentId || "").map((item) => item.id);
+    setExpandedRecursive(nodesState.expanded, siblingKeys, !isOpen);
   } else if (isOpen) {
     nodesState.expanded.delete(groupId);
   } else {

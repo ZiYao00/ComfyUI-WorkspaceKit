@@ -108,12 +108,13 @@ been extracted to [`core/search-scoring.js`](../entry/core/search-scoring.js)
 Key: `restoreNodeLibraryFromFile`, `wrapObjectInfoNode`, `getNodeDefinitions`,
 `createNodeGroup`, `addFavoriteNode`, `moveFavoriteToGroup`.
 
-### Node grouping, imports & drag/drop — L7816–8992
-Node grouping/labels, N-Sidebar & official-favorites import, node pointer/canvas
-drag-drop. Key: `groupedNodes` (L7806), `importNSidebarPreview` (L8061),
-`importOfficialFavorites` (L8099), `openOfficialFavoritesMenu` (L8212),
-`makeNodeCanvasDragSource` (L8297), `beginNodeReorderDrag` (L8464),
-`commitNodeGroupPointerDrag` (L8598), `setupNodeCanvasDrop` (L8878).
+### Node grouping & imports — approx L4096–4620
+Node grouping/labels, N-Sidebar & official-favorites import. Key: `groupedNodes`,
+`importNSidebarPreview`, `importOfficialFavorites`, `openOfficialFavoritesMenu`.
+**Node pointer/canvas drag-drop was extracted to
+[`nodes/drag-drop.js`](../entry/nodes/drag-drop.js) (2026-07-30) via
+`createNodeDragDrop`.** `canvasPositionFromClient` / `isCanvasDropTarget` remain
+in entry.js (external callers) and are injected into the factory.
 
 ### UI-scale / density / sort controls — L8993–9553
 Font/UI-scale sliders, density controls, recent-workflow store, sort menus, module
@@ -153,7 +154,7 @@ verification (see Step 3 of the large-file plan).
 | ~~`FALLBACK_STRINGS` table~~ | ~~L181–650~~ | ✅ **Extracted** to `entry/core/fallback-strings.js` (2026-07-29) — see MODULE_MAP |
 | ~~Official adapter + favorites probing~~ | ~~L1306–1630~~ | ✅ **Extracted** to `entry/integrations/official-node-adapter.js` (2026-07-29) via `createOfficialNodeAdapter` factory — see MODULE_MAP |
 | ~~Panel appearance / glass / background~~ | ~~L2010–2320~~ | ✅ **Extracted** to `entry/ui/panel-appearance.js` (2026-07-29) via `createPanelAppearance` factory — see MODULE_MAP |
-| Node drag/drop cluster | L8297–8992 | Self-contained pointer/canvas DnD engine; → `nodes/drag-drop.js` (mirrors `templates/drag-drop.js`) |
+| ~~Node drag/drop cluster~~ | ~~L8297–8992~~ | ✅ **Extracted** to `entry/nodes/drag-drop.js` (2026-07-30) via `createNodeDragDrop` factory. `canvasPositionFromClient`/`isCanvasDropTarget` deliberately kept in entry.js (external callers) and injected. See MODULE_MAP |
 | ~~Node search/scoring~~ | ~~L7375–7609~~ | ✅ **Extracted** (2026-07-29): generic primitives → `core/search-scoring.js`, node-specific → `nodes/search.js` via `createNodeSearch` factory. Dead `fuzzySearchMatch`/`nodeSearchText`/`nodePinyinSearchText` removed. See MODULE_MAP |
 | ~~Confirm/notice/inline-confirm dialogs~~ | ~~L2749–3030~~ | ✅ **Extracted** to `entry/ui/dialogs.js` (2026-07-29) via `createWorkspace2Dialogs` factory — see MODULE_MAP |
 

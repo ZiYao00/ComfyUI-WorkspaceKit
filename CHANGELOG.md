@@ -4,12 +4,12 @@
 
 ### Internal
 
-- Modularized `entry/entry.js` in six verified splits (12,178 → ~8,455 lines):
+- Modularized `entry/entry.js` in seven verified splits (12,178 → ~7,900 lines):
   extracted `ui/styles.js`, `core/fallback-strings.js`, `ui/dialogs.js`,
-  `core/search-scoring.js` + `nodes/search.js`, `ui/panel-appearance.js`, and
-  `integrations/official-node-adapter.js`. Fixed a temporal-dead-zone
-  regression from the dialogs split and consolidated the docs to reduce
-  per-change update burden. No user-visible behavior change.
+  `core/search-scoring.js` + `nodes/search.js`, `ui/panel-appearance.js`,
+  `integrations/official-node-adapter.js`, and `nodes/drag-drop.js`. Fixed a
+  temporal-dead-zone regression from the dialogs split and consolidated the docs
+  to reduce per-change update burden. No user-visible behavior change.
 
 ### Documentation
 

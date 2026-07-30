@@ -201,6 +201,19 @@ const computeGroupColorPreset = (hue, light) => {
     return { titleRgb, fontHex };
 };
 
+// The "11th fixed color": hue 190° — a cyan that sits in the gap between the
+// 180° and 216° background swatches, so it duplicates none of the ten. It reuses
+// the exact same title/font recipe as those swatches (dark theme) and drives the
+// built-in default group style, which in turn feeds all four preset slots, the
+// reset (↺) button, and every newly created group (user request 2026-07-30).
+// Values are static (dark recipe, no DOM probe) so getBuiltInStyle() stays safe
+// to call outside the browser (serialize/restore/contract tests). Background
+// fill remains OFF by default — only the title bar and its derived body tint.
+const DEFAULT_GROUP_HUE = 190;
+const DEFAULT_GROUP_TITLE_RGB = hslToRgb(DEFAULT_GROUP_HUE, GROUP_BACKGROUND_SWATCH_SATURATION, GROUP_BACKGROUND_SWATCH_LIGHTNESS);
+const DEFAULT_GROUP_FONT_HEX = rgbToHex(hslToRgb(DEFAULT_GROUP_HUE, GROUP_PRESET_THEME.dark.font.s, GROUP_PRESET_THEME.dark.font.l));
+const DEFAULT_GROUP_HEADER_BG = `rgba(${DEFAULT_GROUP_TITLE_RGB.r},${DEFAULT_GROUP_TITLE_RGB.g},${DEFAULT_GROUP_TITLE_RGB.b},${DEFAULT_HEADER_OPACITY})`;
+
 
 const Workspace2CanvasGroups = {
     initialized: false,
@@ -891,10 +904,10 @@ const Workspace2CanvasGroups = {
     getBuiltInStyle() {
         return {
             fontSize: 16,
-            colorHue: 48,
-            colorSat: 100,
-            colorLit: 55,
-            useUnifiedColor: false,
+            colorHue: DEFAULT_GROUP_HUE,
+            colorSat: GROUP_PRESET_THEME.dark.font.s,
+            colorLit: GROUP_PRESET_THEME.dark.font.l,
+            useUnifiedColor: true,
             effect: 'none',
             effectSpeed: 3,
             borderWidth: 2,
@@ -903,10 +916,10 @@ const Workspace2CanvasGroups = {
             shadowSize: 0,
             shadowColor: DEFAULT_SHADOW_COLOR,
             contentPadding: DEFAULT_CONTENT_PADDING,
-            headerBgColor: DEFAULT_HEADER_BG_COLOR,
+            headerBgColor: DEFAULT_GROUP_HEADER_BG,
             backgroundFillEnabled: false,
             backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
-            titleColor: '#FFD700'
+            titleColor: DEFAULT_GROUP_FONT_HEX
         };
     },
 
@@ -1702,21 +1715,21 @@ const Workspace2CanvasGroups = {
             </div>
             <div style="display:flex;flex-direction:column;gap:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.12);">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;">
-                    <div style="display:flex;align-items:center;gap:2px;min-width:0;">
-                        <span style="color:#bbb;font-size:12px;white-space:nowrap;">${t('groups.preset')}</span>
+                    <div style="display:flex;align-items:center;gap:6px;min-width:0;">
+                        <span style="color:#bbb;font-size:12px;white-space:nowrap;margin-right:2px;">${t('groups.preset')}</span>
                         <button class="xzg-preset-btn" data-preset="0" type="button" style="height:26px;width:28px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">1</button>
                         <button class="xzg-preset-btn" data-preset="1" type="button" style="height:26px;width:28px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">2</button>
                         <button class="xzg-preset-btn" data-preset="2" type="button" style="height:26px;width:28px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">3</button>
                         <button class="xzg-preset-btn" data-preset="3" type="button" style="height:26px;width:28px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;padding:0;">4</button>
                     </div>
-                    <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
                         <button class="xzg-save-preset" type="button" style="height:26px;padding:0 8px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:11px;white-space:nowrap;" title="${t('groups.savePresetTooltip')}">${t('groups.savePreset')}</button>
                         <button class="xzg-reset-default" type="button" style="height:26px;width:22px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:14px;line-height:1;padding:0;" title="${t('groups.restorePreset')}">↺</button>
                     </div>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.12);">
                     <button class="xzg-set-apply-all" type="button" style="height:28px;padding:0 10px;background:#333;border:1px solid rgba(255,255,255,0.15);border-radius:4px;color:#ddd;cursor:pointer;font-size:12px;white-space:nowrap;" title="${t('groups.applyAllTooltip')}">${t('groups.applyAll')}</button>
-                    <div style="display:flex;align-items:center;gap:4px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
                         <button class="xzg-set-cancel" type="button" style="height:28px;min-width:58px;padding:0 10px;background:#333;border:1px solid rgba(255,255,255,0.2);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">${t('groups.cancel')}</button>
                         <button class="xzg-set-apply" type="button" style="height:28px;min-width:58px;padding:0 10px;background:#0a84ff;border:1px solid rgba(90,200,250,0.85);border-radius:4px;color:#fff;cursor:pointer;font-size:12px;">${t('groups.apply')}</button>
                     </div>
@@ -3861,17 +3874,8 @@ const Workspace2CanvasGroups = {
                 const fromExtra = app?.graph?.extra?.xzgGroups?.[gid];
                 const bounds = this.calcBounds(nids) || { x: 0, y: 0, w: 300, h: 200 };
                 this.groups[gid] = fromExtra ? { ...fromExtra, title: normalizeGroupTitle(fromExtra.title) } : {
-                    id: gid, title: this.uniqueGroupTitle(undefined, gid), nodeIds: nids, bypassed: false, bounds,
-                    fontSize: 16, colorHue: 48, colorSat: 100, colorLit: 55,
-                    effect: 'none', effectSpeed: 3,
-                    borderWidth: 2, borderOpacity: 0.65,
-                    cornerRadius: 8,
-                    shadowSize: 0, shadowColor: DEFAULT_SHADOW_COLOR,
-                    contentPadding: DEFAULT_CONTENT_PADDING,
-                    headerBgColor: DEFAULT_HEADER_BG_COLOR,
-                    backgroundFillEnabled: false,
-                    backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
-                    titleColor: '#FFD700'
+                    ...this.getBuiltInStyle(),
+                    id: gid, title: this.uniqueGroupTitle(undefined, gid), nodeIds: nids, bypassed: false, bounds
                 };
             } else {
                 this.groups[gid].nodeIds = nids;

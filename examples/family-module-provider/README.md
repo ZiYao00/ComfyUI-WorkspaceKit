@@ -1,5 +1,12 @@
 # WorkspaceKit Family-Module Provider (C-tier scaffold)
 
+> 🚧 **本套件计划重做中**——v1 设计存在多个已识别问题(见
+> [`docs/PANEL_FAMILY_MODULE_REBUILD_PLAN.md`](../../docs/PANEL_FAMILY_MODULE_REBUILD_PLAN.md))。
+> **不要基于本目录复制新 Plugin**;也不要让智能体从本目录学习 API 套用方式。
+> 重做完成前,本目录仅作历史留档。
+>
+> v2 完成后本目录会被删除。详见重搭方案文档 §7。
+
 A complete, copyable scaffold for a ComfyUI plugin that **merges into the
 WorkspaceKit sidebar as a tab** and **also works standalone** when WorkspaceKit
 is absent. This is the "C-tier / family module" adoption level from

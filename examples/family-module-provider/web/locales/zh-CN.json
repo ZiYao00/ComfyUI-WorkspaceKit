@@ -1,0 +1,10 @@
+{
+  "example.title": "家族模块",
+  "example.tab": "家族",
+  "example.settings": "设置",
+  "example.ready": "就绪",
+  "example.section.title": "示例分区",
+  "example.section.desc": "把这里替换成你自己的控件。本分区使用共享 UI 模板的组件。",
+  "example.button": "点我",
+  "example.clicked": "已点击 {count} 次"
+}

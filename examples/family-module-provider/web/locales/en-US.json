@@ -1,0 +1,10 @@
+{
+  "example.title": "Family Module",
+  "example.tab": "Family",
+  "example.settings": "Settings",
+  "example.ready": "Ready",
+  "example.section.title": "Example section",
+  "example.section.desc": "Replace this with your own controls. This section uses the shared UI Template primitives.",
+  "example.button": "Click me",
+  "example.clicked": "Clicked {count} times"
+}

@@ -14,7 +14,6 @@ export function createWorkspacePanelHost({
   settingsTitle,
   onOpenSettings,
   createSettingsIcon,
-  overflowProviders = [],
   providerLabel = (provider) => provider.title || provider.id,
   onActivateProvider,
   onPinProvider,
@@ -29,41 +28,148 @@ export function createWorkspacePanelHost({
 
   const tabStrip = document.createElement("div");
   tabStrip.className = "workspace2-module-tabs";
-  tabStrip.style.setProperty("--workspace2-tab-count", String(tabs.length));
 
   const tabButtons = new Map();
+  // Each tab is now a `<details>` (when it has overflow providers) or a
+  // `<button>` (core modules). The summary inside a details tab holds the
+  // label plus a caret button so the caret can be hit-tested separately from
+  // the label. Clicking the label = activate the pinned/default provider.
+  // Clicking the caret = toggle the overflow menu.
   for (const tab of tabs) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `workspace2-module-tab ${activeTabId === tab.id ? "is-active" : ""}`;
-    button.textContent = tab.label;
-    if (tab.tooltip) {
-      button.title = tab.tooltip;
-      button.setAttribute("aria-label", tab.tooltip);
+    const hasOverflow = Array.isArray(tab.overflow) && tab.overflow.length > 0;
+    if (hasOverflow) {
+      const details = document.createElement("details");
+      details.className = `workspace2-module-overflow-tab ${activeTabId === tab.id ? "is-active" : ""}`;
+      details.dataset.workspace2ModuleId = tab.id;
+
+      const summary = document.createElement("summary");
+      summary.className = "workspace2-module-tab";
+      if (tab.tooltip) {
+        summary.title = tab.tooltip;
+        summary.setAttribute("aria-label", tab.tooltip);
+      }
+      summary.dataset.workspace2ModuleId = tab.id;
+      summary.setAttribute("aria-current", activeTabId === tab.id ? "page" : "false");
+
+      const labelText = document.createElement("span");
+      labelText.className = "workspace2-module-tab-label";
+      labelText.textContent = tab.label;
+      summary.append(labelText);
+
+      // Caret lives in its own button so click events on the caret do not
+      // bubble up to the summary's default toggle (which would re-open the
+      // menu after the user clicks the label to switch providers).
+      const caret = document.createElement("button");
+      caret.type = "button";
+      caret.className = "workspace2-module-overflow-caret";
+      caret.setAttribute("aria-hidden", "true");
+      caret.textContent = "▾";
+      caret.addEventListener("click", (event) => {
+        // preventDefault stops the parent summary from doing its native toggle
+        // (which would happen after our manual toggle and cancel it out).
+        // stopPropagation is also needed so mousedown on the caret does not
+        // race the document-level "close on outside click" handler.
+        event.preventDefault();
+        event.stopPropagation();
+        details.open = !details.open;
+      });
+      summary.append(caret);
+
+      // Float the menu on document.body so `workspace2-shell`'s
+      // `overflow: hidden` (needed for the glass ::before background) cannot
+      // clip it when the sidebar is narrow. Repositioned on toggle / scroll.
+      const menu = document.createElement("div");
+      menu.className = "workspace2-module-overflow-menu workspace2-floating";
+      for (const provider of tab.overflow) {
+        const row = document.createElement("div");
+        row.className = "workspace2-module-overflow-row";
+        row.dataset.workspace2ProviderId = provider.id;
+        const label = document.createElement("span");
+        label.className = "workspace2-module-overflow-name";
+        label.textContent = providerLabel(provider);
+        const pin = document.createElement("button");
+        pin.type = "button";
+        pin.className = "workspace2-module-overflow-pin";
+        pin.textContent = pinLabel;
+        pin.addEventListener("click", (event) => {
+          event.stopPropagation();
+          details.open = false;
+          onPinProvider?.(provider.id);
+        });
+        row.addEventListener("click", () => {
+          details.open = false;
+          onActivateProvider?.(provider.id);
+        });
+        row.append(label, pin);
+        menu.append(row);
+      }
+      document.body.append(menu);
+
+      const positionMenu = () => {
+        const rect = summary.getBoundingClientRect();
+        const menuWidth = Math.min(280, Math.max(180, window.innerWidth - 24));
+        const desiredLeft = rect.right - menuWidth;
+        const clampedLeft = Math.max(8, Math.min(desiredLeft, window.innerWidth - menuWidth - 8));
+        menu.style.left = `${clampedLeft}px`;
+        menu.style.top = `${rect.bottom + 6}px`;
+        menu.style.width = `${menuWidth}px`;
+      };
+      details.addEventListener("toggle", () => {
+        if (details.open) {
+          positionMenu();
+          menu.style.display = "";
+        } else {
+          menu.style.display = "none";
+        }
+      });
+      // Click the summary's label area (not the caret) to activate the tab
+      // (which is the pinned/default provider in this layout).
+      labelText.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onActivate(tab.id);
+      });
+
+      // Outside-click + ESC close. mousedown fires before click, so we use it
+      // and skip when the target is inside the overflow tab or the floating
+      // menu. The caret's own click handler still toggles via the same path.
+      const onDocMouseDown = (event) => {
+        if (!details.open) return;
+        const target = event.target;
+        if (target.closest(".workspace2-module-overflow-tab, .workspace2-module-overflow-menu")) return;
+        details.open = false;
+      };
+      const onDocKeyDown = (event) => {
+        if (!details.open) return;
+        if (event.key === "Escape") {
+          details.open = false;
+        }
+      };
+      document.addEventListener("mousedown", onDocMouseDown, true);
+      document.addEventListener("keydown", onDocKeyDown, true);
+
+      tabButtons.set(tab.id, summary);
+      details.append(summary);
+      tabStrip.append(details);
+    } else {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `workspace2-module-tab ${activeTabId === tab.id ? "is-active" : ""}`;
+      button.textContent = tab.label;
+      if (tab.tooltip) {
+        button.title = tab.tooltip;
+        button.setAttribute("aria-label", tab.tooltip);
+      }
+      button.dataset.workspace2ModuleId = tab.id;
+      button.setAttribute("aria-current", activeTabId === tab.id ? "page" : "false");
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onActivate(tab.id);
+      });
+      tabButtons.set(tab.id, button);
+      tabStrip.append(button);
     }
-    button.dataset.workspace2ModuleId = tab.id;
-    button.setAttribute("aria-current", activeTabId === tab.id ? "page" : "false");
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      onActivate(tab.id);
-    });
-    tabButtons.set(tab.id, button);
-    tabStrip.append(button);
-  }
-  if (overflowProviders.length) {
-    const overflow = document.createElement("details"); overflow.className = "workspace2-module-overflow";
-    const summary = document.createElement("summary"); summary.textContent = `${overflowLabel} ▾`;
-    const menu = document.createElement("div"); menu.className = "workspace2-module-overflow-menu";
-    for (const provider of overflowProviders) {
-      const row = document.createElement("div"); row.className = "workspace2-module-overflow-row";
-      const open = document.createElement("button"); open.type = "button"; open.textContent = providerLabel(provider);
-      open.addEventListener("click", () => { overflow.open = false; onActivateProvider?.(provider.id); });
-      const pin = document.createElement("button"); pin.type = "button"; pin.textContent = pinLabel;
-      pin.addEventListener("click", () => { overflow.open = false; onPinProvider?.(provider.id); });
-      row.append(open, pin); menu.append(row);
-    }
-    overflow.append(summary, menu); tabStrip.append(overflow);
   }
 
   const settingsButton = document.createElement("button");

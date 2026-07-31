@@ -175,25 +175,38 @@ export function styles() {
     }
     .workspace2-module-tabs {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       flex: 0 0 auto;
-      display: grid;
-      grid-template-columns: repeat(var(--workspace2-tab-count, 3), minmax(0, 1fr)) 30px;
+      display: flex;
+      align-items: stretch;
+      flex-wrap: nowrap;
       gap: 7px;
       padding: 9px 10px 7px;
       border-bottom: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 62%, transparent);
       background: transparent;
+      overflow: visible;
     }
     .workspace2-module-tab {
       position: relative;
+      flex: 1 1 0;
+      min-width: max(3em, 48px);
+      max-width: 14em;
       min-height: 30px;
+      padding: 0 8px;
       border: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 78%, transparent);
       border-radius: 8px;
       color: var(--p-text-muted-color, rgba(255, 255, 255, 0.68));
       background: var(--workspace2-tab-bg);
       font: 500 12px/1.2 var(--font-family, Arial, sans-serif);
       cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+    }
+    .workspace2-module-tab,
+    .workspace2-module-overflow-tab {
+      flex-shrink: 0;
     }
     .workspace2-module-tab:hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
@@ -238,13 +251,23 @@ export function styles() {
       stroke: currentColor;
       fill: none;
     }
-    .workspace2-module-overflow { position:relative; min-width:66px; }
-    .workspace2-module-overflow summary { list-style:none; min-height:30px; display:grid; place-items:center; padding:0 8px; border:1px solid var(--p-content-border-color, var(--border-color, rgba(255,255,255,.14))); border-radius:8px; color:var(--p-text-muted-color,rgba(255,255,255,.7)); cursor:pointer; font:500 12px/1.2 var(--font-family,Arial,sans-serif); }
-    .workspace2-module-overflow summary::-webkit-details-marker { display:none; }
-    .workspace2-module-overflow-menu { position:absolute; right:0; top:calc(100% + 6px); z-index:20; min-width:180px; padding:6px; border:1px solid var(--p-content-border-color,var(--border-color,rgba(255,255,255,.16))); border-radius:9px; background:var(--comfy-menu-bg,var(--p-content-background,#202124)); box-shadow:0 10px 28px rgba(0,0,0,.25); }
-    .workspace2-module-overflow-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px; }
-    .workspace2-module-overflow-row button { min-width:0; border:0; border-radius:6px; padding:7px 8px; color:var(--p-text-color,var(--fg-color,#ddd)); background:transparent; text-align:left; cursor:pointer; font:500 12px/1.2 var(--font-family,Arial,sans-serif); }
-    .workspace2-module-overflow-row button:hover { background:var(--p-list-option-hover-background,rgba(255,255,255,.075)); }
+    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: max(6em, 72px); max-width: 14em; display:inline-flex; }
+    .workspace2-module-overflow-tab > summary { list-style:none; flex: 1 1 0; min-width: 0; max-width: 100%; display:flex; align-items:center; gap:6px; padding:0 8px; border:1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255,255,255,.14))) 78%, transparent); border-radius:8px; color:var(--p-text-muted-color,rgba(255,255,255,.68)); background:var(--workspace2-tab-bg); font:500 12px/1.2 var(--font-family,Arial,sans-serif); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:30px; transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease; }
+    .workspace2-module-overflow-tab > summary::-webkit-details-marker { display:none; }
+    .workspace2-module-overflow-tab > summary::marker { content:""; }
+    .workspace2-module-overflow-tab > summary:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: var(--workspace2-tab-hover-bg); border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 32%, var(--workspace2-border, rgba(255,255,255,.14))); }
+    .workspace2-module-overflow-tab.is-active > summary { color: var(--p-text-color, var(--fg-color, #f5f8ff)); border-color: color-mix(in srgb, var(--workspace2-accent) 28%, var(--workspace2-border)); background: var(--workspace2-tab-active-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 8%, transparent), 0 0 0 1px rgba(0, 0, 0, 0.05); }
+    .workspace2-module-overflow-tab.is-active > summary::after { content:""; position:absolute; left:12px; right:12px; bottom:4px; height:2px; border-radius:2px; background:var(--workspace2-accent-muted); }
+    .workspace2-module-overflow-tab > summary .workspace2-module-tab-label { flex: 1 1 0; min-width: 0; overflow:hidden; text-overflow:ellipsis; }
+    .workspace2-module-overflow-caret { display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:18px; padding:0 2px; background:transparent; border:0; color:inherit; font-size:10px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease; transform-origin:center; border-radius:4px; }
+    .workspace2-module-overflow-caret:hover { background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 24%, transparent); }
+    .workspace2-module-overflow-tab[open] > summary .workspace2-module-overflow-caret { transform:rotate(180deg); }
+    .workspace2-module-overflow-menu { position:fixed; z-index:1200; width:max-content; max-width:min(280px, calc(100vw - 24px)); min-width:180px; padding:6px; border:1px solid var(--p-content-border-color,var(--border-color,rgba(255,255,255,.16))); border-radius:9px; background:var(--comfy-menu-bg,var(--p-content-background,#202124)); box-shadow:0 10px 28px rgba(0,0,0,.25); }
+    .workspace2-module-overflow-row { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:center; gap:5px; cursor:pointer; border-radius:6px; }
+    .workspace2-module-overflow-row:hover { background: var(--p-list-option-hover-background, rgba(255,255,255,.075)); }
+    .workspace2-module-overflow-name { min-width:0; padding:7px 8px; color:var(--p-text-color,var(--fg-color,#ddd)); background:transparent; text-align:left; font:500 12px/1.2 var(--font-family,Arial,sans-serif); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .workspace2-module-overflow-pin { min-width:auto; border:0; border-radius:6px; padding:6px 12px; color:#fff; background:var(--workspace2-accent); font:500 12px/1.2 var(--font-family,Arial,sans-serif); cursor:pointer; }
+    .workspace2-module-overflow-pin:hover { background: color-mix(in srgb, var(--workspace2-accent) 80%, white); }
     .workspace2-module-frame {
       position: relative;
       z-index: 1;

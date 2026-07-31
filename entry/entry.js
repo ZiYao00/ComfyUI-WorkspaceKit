@@ -5269,10 +5269,9 @@ function workspaceModuleTab(moduleId) {
     return { id: moduleId, label: workspaceModuleLabel(moduleId) };
   }
   const label = String(provider.tabLabel || provider.title || provider.id);
-  const icon = String(provider.icon || "").trim();
   return {
     id: moduleId,
-    label: icon ? `${icon} ${label}` : label,
+    label,
     tooltip: String(provider.tabTooltip || provider.title || label),
   };
 }
@@ -5295,8 +5294,12 @@ function renderWorkspace2Panel(el) {
 
   const plan = workspaceTabPlan();
   const visibleIds = [...plan.coreIds, ...(plan.pinned ? [plan.pinned.id] : [])];
+  const tabsWithOverflow = visibleIds.map((id) => ({
+    ...workspaceModuleTab(id),
+    overflow: id === plan.pinned?.id ? plan.overflowProviders : [],
+  }));
   const panelHost = createWorkspacePanelHost({
-    tabs: visibleIds.map(workspaceModuleTab),
+    tabs: tabsWithOverflow,
     activeTabId: workspaceState.activeModule,
     onActivate: (moduleId) => {
       workspaceState.activeModule = moduleId;
@@ -5306,7 +5309,6 @@ function renderWorkspace2Panel(el) {
     settingsTitle: t("settings.title"),
     onOpenSettings: openWorkspaceSettings,
     createSettingsIcon: () => iconSvg("settings"),
-    overflowProviders: plan.overflowProviders,
     providerLabel: (provider) => resolveWorkspacePanelProviderLabel(provider).text,
     onActivateProvider: (id) => { workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },
     onPinProvider: (id) => { localStorage.setItem(PINNED_PROVIDER_KEY, id); workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },

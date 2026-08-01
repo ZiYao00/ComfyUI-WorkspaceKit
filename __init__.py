@@ -577,7 +577,7 @@ async def workspace2_trash_move(request):
 @server.PromptServer.instance.routes.get("/workspace2/trash/list")
 async def workspace2_trash_list(_request):
     try:
-        items = await asyncio.to_thread(list_trash, get_workspace_data_root())
+        items = await asyncio.to_thread(list_trash, get_workspace_data_root(), get_workflows_root())
         return _json_response({"ok": True, "items": items})
     except Exception as exc:
         return _json_error(str(exc), status=500)
@@ -832,6 +832,7 @@ async def workspace2_trash_system_delete(request):
             move_trash_item_to_system_trash,
             get_workspace_data_root(),
             trash_id,
+            get_workflows_root(),
         )
         return _json_response({"ok": True, "item": item})
     except Exception as exc:
@@ -844,6 +845,7 @@ async def workspace2_trash_empty(_request):
         result = await asyncio.to_thread(
             empty_trash_to_system_trash,
             get_workspace_data_root(),
+            get_workflows_root(),
         )
         return _json_response({"ok": True, **result})
     except Exception as exc:

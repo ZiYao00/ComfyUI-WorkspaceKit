@@ -1,4 +1,4 @@
-# ComfyUI-WorkspaceKit
+# ComfyUI WorkspaceKit (WK)
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -10,11 +10,9 @@
 ![Status](https://img.shields.io/badge/status-public%20beta-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-ComfyUI-WorkspaceKit brings workflow management, node favorites, template reuse, and canvas organization into one focused workspace.
+ComfyUI WorkspaceKit (WK) brings workflow management, node favorites, template reuse, and canvas organization into one focused workspace. Its Chinese product name is **WK 工作区**.
 
-Current status: **public beta, 0.2.4**. Back up important workflows, user settings, node favorites, and template data before first using it in a production ComfyUI environment.
-
-**Maintenance note:** Updates and Issue / PR replies may be delayed for the next 2–3 weeks.
+Current status: **public beta, 0.2.5**. Back up important workflows, user settings, node favorites, and template data before first using it in a production ComfyUI environment.
 
 <p align="center">
   <a href="#why-workspacekit">Why WorkspaceKit</a> ·
@@ -37,22 +35,28 @@ After using ComfyUI for a while, it is common to run into these problems:
 
 WorkspaceKit brings those daily organization tasks into one workspace sidebar.
 
+## The WK Suite
+
+Use **WK** after the first full product name in documentation, videos, and community discussions. The core modules are **WK Workflows**, **WK Nodes**, **WK Templates**, and **WK Groups**. Related family modules use the same convention: **WK Layout** and **WK Theme**. Inside the sidebar, tabs remain concise: Workflows, Nodes, Templates, Layout, and Theme.
+
+The technical repository name, installation path, Provider API, storage keys, and Registry identifier remain `ComfyUI-WorkspaceKit`; the WK naming is a user-facing brand and module convention.
+
 | Common problem | WorkspaceKit approach | Result |
 | --- | --- | --- |
-| Too many workflows | **Workflows 2**: folder tree, search, drag and drop, sorting, recents | Organize by project and find files faster |
-| Nodes are hard to find or remember | **Nodes 2**: source categories, search, pinyin search, favorite groups | Build a personal node library |
-| Repeated node structures | **Templates**: preserve node positions and links | Save once and reuse anytime |
-| Large canvases become hard to read | **Group Enhancements + Title2** | Create clearer work areas and hierarchy |
+| Too many workflows | **WK Workflows**: folder tree, search, drag and drop, sorting, recents | Organize by project and find files faster |
+| Nodes are hard to find or remember | **WK Nodes**: source categories, search, pinyin search, favorite groups | Build a personal node library |
+| Repeated node structures | **WK Templates**: preserve node positions and links | Save once and reuse anytime |
+| Large canvases become hard to read | **WK Groups + Title2** | Create clearer work areas and hierarchy |
 | Risk of accidental deletion or migration loss | **Two-layer trash + data backup and transfer** | Safer recovery, backup, and migration |
 
 ## Core Features
 
 WorkspaceKit provides one unified sidebar entry with three built-in tabs and optional compatible extension tabs:
 
-- **Workflows 2**: Manage workflow files in the ComfyUI workflow directory.
-- **Nodes 2**: Browse, search, favorite, group, and organize nodes.
-- **Templates**: Save selected connected nodes as reusable templates, organize them with groups, and recover deleted items.
-- **Group Enhancements**: Improve canvas group gestures, title-bar controls, and group styling.
+- **WK Workflows**: Manage workflow files in the ComfyUI workflow directory.
+- **WK Nodes**: Browse, search, favorite, group, and organize nodes.
+- **WK Templates**: Save selected connected nodes as reusable templates, organize them with groups, and recover deleted items.
+- **WK Groups**: Improve canvas group gestures, title-bar controls, and group styling.
 - **Title2**: A lightweight visual title and annotation node for complex workflows.
 
 ### One entry for core creative assets
@@ -69,9 +73,9 @@ Workflows and templates each provide recoverable trash. Data import and official
 
 ## Features
 
-### Workflows 2
+### WK Workflows
 
-Workflows 2 is for workflow-file organization, especially when you have many `.json` workflows.
+WK Workflows is for workflow-file organization, especially when you have many `.json` workflows.
 
 Key features:
 
@@ -89,9 +93,9 @@ Key features:
 
 > **Note:** Recursive toggle applies to tree folders and groups, not section headers such as Open / Browse or Favorites / Comfy / Extensions. While a search is active, matching paths stay visible, so a collapsed result is not visually hidden.
 
-![Workflows 2: folders, sorting, and drag-and-drop](Preview/a1.png)
+![WK Workflows: folders, sorting, and drag-and-drop](Preview/a1.png)
 
-![Workflows 2: trash and restore](Preview/a1.1.png)
+![WK Workflows: trash and restore](Preview/a1.1.png)
 
 **Quick access:** `Shift+1` / `Shift+W`
 
@@ -105,9 +109,9 @@ Key features:
 
 Advanced users can choose a custom workflow root. Use a dedicated workflow directory only; do not use a drive root, Desktop, Downloads, or a large project directory.
 
-### Nodes 2
+### WK Nodes
 
-Nodes 2 is for node discovery, favorites, and organization in large ComfyUI installs.
+WK Nodes is for node discovery, favorites, and organization in large ComfyUI installs.
 
 Key features:
 
@@ -123,7 +127,7 @@ Key features:
 - Missing third-party nodes are dimmed instead of silently removed.
 - Node caching improves first display for large node libraries.
 
-![Nodes 2: favorites and official-favorites synchronization](Preview/a2.png)
+![WK Nodes: favorites and official-favorites synchronization](Preview/a2.png)
 
 **Quick access:** `Shift+2` / `Shift+N`
 
@@ -134,7 +138,7 @@ Key features:
 | Sort | Change the node display order. |
 | Favorite Manager | Import, export, back up, and restore official and WorkspaceKit favorites. |
 
-### Templates
+### WK Templates
 
 Templates are reusable connected node groups. Use them for common structures such as loaders, preprocessing, control blocks, output chains, or post-processing chains.
 
@@ -164,9 +168,9 @@ Key features:
 
 During the beta compatibility period, template data continues to use the existing Workspace2-compatible location under the ComfyUI user directory. Existing template data remains available after upgrading to WorkspaceKit. Back up important template data regularly.
 
-### Group Enhancements
+### WK Groups
 
-Group Enhancements make canvas groups closer to common design-tool behavior.
+WK Groups make canvas groups closer to common design-tool behavior.
 
 Key features:
 
@@ -201,8 +205,8 @@ WorkspaceKit can export and import data it manages, which is useful when migrati
 
 | Shortcut | Action |
 |---|---|
-| `Shift+1` / `Shift+W` | Open Workflows 2 |
-| `Shift+2` / `Shift+N` | Open Nodes 2 |
+| `Shift+1` / `Shift+W` | Open WK Workflows |
+| `Shift+2` / `Shift+N` | Open WK Nodes |
 | `Shift+3` | Open Templates |
 | `Shift+4` | Open the pinned compatible extension tab, when present |
 | `Alt+C` | Save selected nodes as a template |
@@ -260,7 +264,7 @@ Do not update your ComfyUI Python environment unless you understand the environm
 
 WorkspaceKit has two trash layers:
 
-- **WorkspaceKit trash**: recoverable trash used by Workflows 2. Templates use a separate recoverable library trash.
+- **WorkspaceKit trash**: recoverable trash used by WK Workflows. WK Templates use a separate recoverable library trash.
 - **System trash**: the operating-system trash / recycle bin.
 
 On Windows, WorkspaceKit has a built-in recycle-bin fallback. On other platforms, system-trash support depends on `send2trash` and the desktop environment it supports.
@@ -277,8 +281,8 @@ WorkspaceKit moves, renames, and organizes workflow files. Before first use in a
 ## Five-Minute Quick Start
 
 1. Open WorkspaceKit from the sidebar, then use `Shift+1`, `Shift+2`, and `Shift+3` to switch between Workflows, Nodes, and Templates.
-2. Create a folder in Workflows 2 and drag a workflow into it.
-3. Search for a frequently used node in Nodes 2 and drag it into a favorites group.
+2. Create a folder in WK Workflows and drag a workflow into it.
+3. Search for a frequently used node in WK Nodes and drag it into a favorites group.
 4. Select connected nodes on the canvas and press `Alt+C` to save a template.
 5. Select nodes and press `Ctrl+G` to create your first WorkspaceKit group.
 
@@ -289,7 +293,7 @@ WorkspaceKit moves, renames, and organizes workflow files. Before first use in a
 - Very large workflow directories can take longer to scan and refresh.
 - The Registry listing is published; an icon, banner, and GIF tutorials can continue to improve.
 - Template trash is available; undo, bulk restore, and additional recovery UX can be improved later.
-- Nodes 2 search speed, ranking quality, and pinyin matching still need validation in very large node libraries.
+- WK Nodes search speed, ranking quality, and pinyin matching still need validation in very large node libraries.
 
 ## Project Notes
 
@@ -299,7 +303,7 @@ Maintainer: ZiYao00
 
 Project homepage: https://github.com/ZiYao00/ComfyUI-WorkspaceKit
 
-Developer documentation: [Architecture](docs/ARCHITECTURE.md), [Module Map](docs/MODULE_MAP.md), [Testing Log](docs/TESTING.md), and [Contributing](CONTRIBUTING.md).
+Developer documentation: [Chinese Development Status Index](docs/DEVELOPMENT_STATUS.zh-CN.md), [Chinese Branding and Naming](docs/BRANDING_AND_NAMING.zh-CN.md), [Architecture](docs/ARCHITECTURE.md), [Module Map](docs/MODULE_MAP.md), [Testing Log](docs/TESTING.md), and [Contributing](CONTRIBUTING.md).
 
 See [CHANGELOG.md](CHANGELOG.md) for version history and [ROADMAP.zh-CN.md](ROADMAP.zh-CN.md) for planned work.
 

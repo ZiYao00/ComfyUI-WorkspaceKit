@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.5 - 2026-08-01
+
 ### Internal
 
 - Modularized `entry/entry.js` in seven verified splits (12,178 → ~7,900 lines):
@@ -10,6 +12,15 @@
   `integrations/official-node-adapter.js`, and `nodes/drag-drop.js`. Fixed a
   temporal-dead-zone regression from the dialogs split and consolidated the docs
   to reduce per-change update burden. No user-visible behavior change.
+
+- Added a dependency-free `npm test` entry point and GitHub Actions contract
+  workflow. It runs 65 JavaScript contracts, 3 Python service contracts, and
+  release-version consistency checks; browser acceptance remains separate.
+
+- Hardened workflow trash persistence with atomic manifest replacement,
+  backup generation, operation journaling, compensation, and interrupted
+  operation recovery. Real test-package acceptance now covers delete, restore,
+  system recycle-bin transfer, and empty-trash confirmation.
 
 ### Documentation
 
@@ -36,9 +47,9 @@
 - Added the first reversible group-conversion archive layer. It records a
   detached, schema-versioned WorkspaceKit snapshot (including background
   fields) without activating native-group conversion yet.
-- Added the first confirmed-scope WorkspaceKit-to-native conversion command for
-  the current workflow, with preflight validation and rollback protection;
-  reverse conversion and real-page acceptance remain pending.
+- Delivered reversible WorkspaceKit/native group conversion for the current
+  workflow, with preflight validation, archive preservation, rollback
+  protection, reverse conversion, and recorded test-package acceptance.
 
 ## 0.2.4 - 2026-07-22
 

@@ -6,19 +6,17 @@ This document records planned product work. A listed item is a design intent, no
 
 ## P0 — WorkspaceKit Panel UI Template v1
 
-Status: **architecture approved; implementation not started.**
+Status: **implemented and contract-tested; compatibility and visual regression remain ongoing release checks.**
 
-WorkspaceKit will provide a versioned, opt-in UI Template for family modules
-and external panel Providers. Layout remains independently installable, but
-uses a generated and Git-tracked WorkspaceKit UI runtime when the host is
-absent. With a compatible WorkspaceKit installed, Layout uses the host's
-current Template whether it is merged into a tab or remains a standalone
-sidebar entry.
+WorkspaceKit provides a versioned, opt-in UI Template for family modules and
+external panel Providers. Layout remains independently installable, but uses a
+generated and Git-tracked WorkspaceKit UI runtime when the host is absent. With
+a compatible WorkspaceKit installed, Layout uses the host's current Template
+whether it is merged into a tab or remains a standalone sidebar entry.
 
-The implementation is intentionally staged: establish a single editable UI
-source and deterministic Vendor export first; expose an optional public host
-capability second; migrate Layout merged and standalone modes separately; then
-release a documented third-party template. Details and release gates are in
+The v1 primitive, public capability, Vendor fallback, Layout merged/standalone
+paths, contracts, and example documentation are delivered. Details, current
+compatibility boundaries, and future API-version release gates are in
 [Panel UI Template v1](PANEL_UI_TEMPLATE.md).
 
 ## P0 — Sidebar-entry resilience
@@ -42,7 +40,7 @@ Required acceptance before release:
 
 ## P1 — Reversible WorkspaceKit / ComfyUI native group representation
 
-Status: **first WorkspaceKit-to-native command implemented; real-page acceptance and reverse conversion remain.**
+Status: **both conversion directions are implemented; fixture coverage and current test-package acceptance are recorded.**
 
 WorkspaceKit currently uses its own overlay-group representation to support header actions, modifier gestures, multi-group selection, and its visual settings. A future workflow-level command will provide **WorkspaceKit groups / Use ComfyUI default groups** for the current workflow only.
 
@@ -70,8 +68,7 @@ WorkspaceKit overlay groups now support an opt-in body fill while preserving the
 
 - Add **Enable group background fill** to the group settings.
 - The fill uses the same RGB color source as the title-bar background. It does not introduce a second unrelated color picker.
-- Keep title-bar opacity and content-fill opacity as separate controls: title bars need stronger contrast for text and actions, while the body fill must remain lighter for nodes and links.
-- Default content-fill opacity to a weaker value than the title bar, and prevent it from exceeding the title-bar opacity.
+- Keep the title-bar opacity as the user control. The first implementation derives body-fill opacity from it at a fixed weaker ratio, so the body cannot become stronger than the title bar.
 - Apply the same behavior to per-group settings, defaults, presets, Apply to All, preview/cancel restoration, and workflow serialization/recovery.
 
 Required acceptance before release:
@@ -79,7 +76,7 @@ Required acceptance before release:
 1. Disabled fill keeps the group body completely transparent.
 2. Changing title-bar color immediately updates the enabled body fill color.
 3. Body opacity remains lower than or equal to title-bar opacity across slider, preset, and restore paths.
-4. Save/reload preserves both the enabled state and opacity values.
+4. Save/reload preserves the enabled state and title-derived fill opacity.
 
 ## P1 — Delete key for WorkspaceKit group selection
 
@@ -135,14 +132,15 @@ Required acceptance before release:
 
 ## P1 — Settings information architecture
 
-Status: **design approved; implementation not started.**
+Status: **implemented; follow-up work is limited to visual refinement and future shortcut editing.**
 
-Reorganize Settings by product domain: Workflows, Nodes, Templates, Groups,
-Shortcuts, Appearance, Extensions, Data and maintenance, and About. Template
-behavior owns Alt+C auto-open; workflow behavior owns recent-history count;
-group representation and conversion receive their own Groups page; group
-pointer gestures remain under Shortcuts. The detailed Chinese plan and staged
-acceptance rules are documented in the internal `.dev-docs/` tree (not published).
+Settings are organized by product domain: Appearance; Groups; Workflows;
+Templates; Shortcuts; and Advanced. Template behavior owns Alt+C auto-open;
+workflow behavior owns recent-history count; group representation and
+conversion receive their own Groups page; group pointer gestures remain under
+Shortcuts. Advanced contains integrations, provider settings, node cache, data
+management, and About. The detailed Chinese plan and staged acceptance rules
+remain in the internal `.dev-docs/` tree (not published).
 
 ## P1 — Workflows Browse two-pane layout
 

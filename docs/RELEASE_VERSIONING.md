@@ -9,7 +9,7 @@ dialog therefore does not carry a separate hard-coded version.
 
 Use semantic versions only:
 
-- `0.2.2` for compatible bug fixes.
+- `0.2.5` for the next compatible bug-fix release after the current `0.2.4`.
 - `0.3.0` for compatible user-facing features.
 - `1.0.0` for the first stable release.
 
@@ -21,12 +21,15 @@ Before a release, run:
 
 ```powershell
 python scripts/release_version.py --check
-python scripts/release_version.py --set 0.2.3 --date 2026-07-21
+python scripts/release_version.py --set 0.2.5 --date 2026-08-01
 ```
 
 The update command changes the release source and the two README status lines,
 then creates a Changelog placeholder if necessary. Fill in the real Changelog
-notes, run tests, commit, push, and only then publish with `comfy node publish`.
+notes, run `npm test`, commit, and push. The `Contract checks` workflow reruns
+the same offline suite on GitHub. A push that changes `pyproject.toml` to a new
+version then passes through the separate Registry publishing gate; it is the
+only workflow that may publish the node.
 
 `--check` fails if the package version, README status lines, runtime version
 loader, or current Changelog heading disagree.

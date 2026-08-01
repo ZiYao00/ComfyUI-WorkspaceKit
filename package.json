@@ -4,6 +4,10 @@
   "private": true,
   "description": "Development-only tooling for real-page tests. Not required for using this plugin; ComfyUI users can ignore this file and node_modules/.",
   "scripts": {
+    "test": "npm run test:contracts && npm run test:python && npm run test:version",
+    "test:contracts": "node scripts/run-contract-tests.mjs",
+    "test:python": "python scripts/run-python-tests.py",
+    "test:version": "python scripts/release_version.py --check",
     "e2e": "playwright test",
     "e2e:report": "playwright show-report"
   },

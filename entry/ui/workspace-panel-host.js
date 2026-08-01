@@ -30,146 +30,153 @@ export function createWorkspacePanelHost({
   tabStrip.className = "workspace2-module-tabs";
 
   const tabButtons = new Map();
-  // Each tab is now a `<details>` (when it has overflow providers) or a
-  // `<button>` (core modules). The summary inside a details tab holds the
-  // label plus a caret button so the caret can be hit-tested separately from
-  // the label. Clicking the label = activate the pinned/default provider.
-  // Clicking the caret = toggle the overflow menu.
+  // Overflow tabs render as `<button>` + a separate caret `<button>` inside a
+  // wrapper. The caret opens a `workspace2-context` menu — the same primitive
+  // the Workflows sort menu and the row context menus already use — so the
+  // dropdown matches the rest of WorkspaceKit and inherits its z-index above
+  // the frosted-glass shell. A single close handler is shared by every tab.
+  let openMenu = null;
+  let openMenuAnchor = null;
+
+  const closeOverflowMenu = () => {
+    if (!openMenu) return;
+    openMenu.remove();
+    openMenu = null;
+    openMenuAnchor?.classList.remove("is-menu-open");
+    openMenuAnchor = null;
+  };
+
+  // Registered once per host, not once per tab: re-registering per tab leaked a
+  // handler on every panel re-render and the stale copies fought over the same
+  // menu state.
+  const onDocumentPointerDown = (event) => {
+    if (!openMenu) return;
+    if (openMenu.contains(event.target)) return;
+    if (openMenuAnchor?.contains(event.target)) return;
+    closeOverflowMenu();
+  };
+  const onDocumentKeyDown = (event) => {
+    // Escape is checked before any containment guard: the focused element is
+    // usually inside the menu, so an inside-first guard would swallow it.
+    if (openMenu && event.key === "Escape") {
+      event.preventDefault();
+      closeOverflowMenu();
+    }
+  };
+  document.addEventListener("pointerdown", onDocumentPointerDown, true);
+  document.addEventListener("click", onDocumentPointerDown, true);
+  document.addEventListener("keydown", onDocumentKeyDown, true);
+
+  const openOverflowMenu = (anchor, providers) => {
+    closeOverflowMenu();
+    const menu = document.createElement("div");
+    menu.className = "workspace2-context workspace2-module-overflow-context";
+    menu.addEventListener("pointerdown", (event) => event.stopPropagation());
+    menu.addEventListener("click", (event) => event.stopPropagation());
+    menu.addEventListener("contextmenu", (event) => event.preventDefault());
+
+    providers.forEach((provider, index) => {
+      if (index > 0) {
+        const divider = document.createElement("div");
+        divider.className = "workspace2-menu-divider";
+        menu.append(divider);
+      }
+      const row = document.createElement("div");
+      row.className = "workspace2-module-overflow-row";
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "workspace2-menu-item workspace2-module-overflow-open";
+      open.textContent = providerLabel(provider);
+      open.addEventListener("click", () => {
+        closeOverflowMenu();
+        onActivateProvider?.(provider.id);
+      });
+      const pin = document.createElement("button");
+      pin.type = "button";
+      pin.className = "workspace2-menu-item workspace2-module-overflow-pin";
+      pin.textContent = pinLabel;
+      pin.addEventListener("click", () => {
+        closeOverflowMenu();
+        onPinProvider?.(provider.id);
+      });
+      row.append(open, pin);
+      menu.append(row);
+    });
+
+    // `workspace2-context` is position: fixed, so viewport coordinates from the
+    // anchor are the correct basis and the frosted-glass shell cannot clip it.
+    const rect = anchor.getBoundingClientRect();
+    menu.style.visibility = "hidden";
+    document.body.append(menu);
+    const width = menu.offsetWidth || 200;
+    menu.style.left = `${Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))}px`;
+    menu.style.top = `${rect.bottom + 6}px`;
+    menu.style.visibility = "";
+
+    openMenu = menu;
+    openMenuAnchor = anchor;
+    anchor.classList.add("is-menu-open");
+  };
+
   for (const tab of tabs) {
     const hasOverflow = Array.isArray(tab.overflow) && tab.overflow.length > 0;
-    if (hasOverflow) {
-      const details = document.createElement("details");
-      details.className = `workspace2-module-overflow-tab ${activeTabId === tab.id ? "is-active" : ""}`;
-      details.dataset.workspace2ModuleId = tab.id;
-
-      const summary = document.createElement("summary");
-      summary.className = "workspace2-module-tab";
-      if (tab.tooltip) {
-        summary.title = tab.tooltip;
-        summary.setAttribute("aria-label", tab.tooltip);
-      }
-      summary.dataset.workspace2ModuleId = tab.id;
-      summary.setAttribute("aria-current", activeTabId === tab.id ? "page" : "false");
-
-      const labelText = document.createElement("span");
-      labelText.className = "workspace2-module-tab-label";
-      labelText.textContent = tab.label;
-      summary.append(labelText);
-
-      // Caret lives in its own button so click events on the caret do not
-      // bubble up to the summary's default toggle (which would re-open the
-      // menu after the user clicks the label to switch providers).
-      const caret = document.createElement("button");
-      caret.type = "button";
-      caret.className = "workspace2-module-overflow-caret";
-      caret.setAttribute("aria-hidden", "true");
-      caret.textContent = "▾";
-      caret.addEventListener("click", (event) => {
-        // preventDefault stops the parent summary from doing its native toggle
-        // (which would happen after our manual toggle and cancel it out).
-        // stopPropagation is also needed so mousedown on the caret does not
-        // race the document-level "close on outside click" handler.
-        event.preventDefault();
-        event.stopPropagation();
-        details.open = !details.open;
-      });
-      summary.append(caret);
-
-      // Float the menu on document.body so `workspace2-shell`'s
-      // `overflow: hidden` (needed for the glass ::before background) cannot
-      // clip it when the sidebar is narrow. Repositioned on toggle / scroll.
-      const menu = document.createElement("div");
-      menu.className = "workspace2-module-overflow-menu workspace2-floating";
-      for (const provider of tab.overflow) {
-        const row = document.createElement("div");
-        row.className = "workspace2-module-overflow-row";
-        row.dataset.workspace2ProviderId = provider.id;
-        const label = document.createElement("span");
-        label.className = "workspace2-module-overflow-name";
-        label.textContent = providerLabel(provider);
-        const pin = document.createElement("button");
-        pin.type = "button";
-        pin.className = "workspace2-module-overflow-pin";
-        pin.textContent = pinLabel;
-        pin.addEventListener("click", (event) => {
-          event.stopPropagation();
-          details.open = false;
-          onPinProvider?.(provider.id);
-        });
-        row.addEventListener("click", () => {
-          details.open = false;
-          onActivateProvider?.(provider.id);
-        });
-        row.append(label, pin);
-        menu.append(row);
-      }
-      document.body.append(menu);
-
-      const positionMenu = () => {
-        const rect = summary.getBoundingClientRect();
-        const menuWidth = Math.min(280, Math.max(180, window.innerWidth - 24));
-        const desiredLeft = rect.right - menuWidth;
-        const clampedLeft = Math.max(8, Math.min(desiredLeft, window.innerWidth - menuWidth - 8));
-        menu.style.left = `${clampedLeft}px`;
-        menu.style.top = `${rect.bottom + 6}px`;
-        menu.style.width = `${menuWidth}px`;
-      };
-      details.addEventListener("toggle", () => {
-        if (details.open) {
-          positionMenu();
-          menu.style.display = "";
-        } else {
-          menu.style.display = "none";
-        }
-      });
-      // Click the summary's label area (not the caret) to activate the tab
-      // (which is the pinned/default provider in this layout).
-      labelText.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onActivate(tab.id);
-      });
-
-      // Outside-click + ESC close. mousedown fires before click, so we use it
-      // and skip when the target is inside the overflow tab or the floating
-      // menu. The caret's own click handler still toggles via the same path.
-      const onDocMouseDown = (event) => {
-        if (!details.open) return;
-        const target = event.target;
-        if (target.closest(".workspace2-module-overflow-tab, .workspace2-module-overflow-menu")) return;
-        details.open = false;
-      };
-      const onDocKeyDown = (event) => {
-        if (!details.open) return;
-        if (event.key === "Escape") {
-          details.open = false;
-        }
-      };
-      document.addEventListener("mousedown", onDocMouseDown, true);
-      document.addEventListener("keydown", onDocKeyDown, true);
-
-      tabButtons.set(tab.id, summary);
-      details.append(summary);
-      tabStrip.append(details);
-    } else {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `workspace2-module-tab ${activeTabId === tab.id ? "is-active" : ""}`;
-      button.textContent = tab.label;
-      if (tab.tooltip) {
-        button.title = tab.tooltip;
-        button.setAttribute("aria-label", tab.tooltip);
-      }
-      button.dataset.workspace2ModuleId = tab.id;
-      button.setAttribute("aria-current", activeTabId === tab.id ? "page" : "false");
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onActivate(tab.id);
-      });
-      tabButtons.set(tab.id, button);
-      tabStrip.append(button);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `workspace2-module-tab ${activeTabId === tab.id ? "is-active" : ""}`;
+    if (tab.tooltip) {
+      button.title = tab.tooltip;
+      button.setAttribute("aria-label", tab.tooltip);
     }
+    button.dataset.workspace2ModuleId = tab.id;
+    button.setAttribute("aria-current", activeTabId === tab.id ? "page" : "false");
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeOverflowMenu();
+      onActivate(tab.id);
+    });
+    tabButtons.set(tab.id, button);
+
+    if (!hasOverflow) {
+      button.textContent = tab.label;
+      tabStrip.append(button);
+      continue;
+    }
+
+    // Label and caret are separate hit targets: the label switches to this
+    // tab's own provider, the caret lists the others.
+    const label = document.createElement("span");
+    label.className = "workspace2-module-tab-label";
+    label.textContent = tab.label;
+    button.append(label);
+
+    const wrap = document.createElement("div");
+    wrap.className = "workspace2-module-overflow-tab";
+    wrap.dataset.workspace2ModuleId = tab.id;
+
+    const divider = document.createElement("span");
+    divider.className = "workspace2-module-tab-divider";
+    divider.setAttribute("aria-hidden", "true");
+
+    const caret = document.createElement("button");
+    caret.type = "button";
+    caret.className = "workspace2-module-overflow-caret";
+    caret.title = overflowLabel;
+    caret.setAttribute("aria-label", overflowLabel);
+    caret.setAttribute("aria-haspopup", "menu");
+    caret.textContent = "▾";
+    caret.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (openMenuAnchor === wrap) {
+        closeOverflowMenu();
+        return;
+      }
+      openOverflowMenu(wrap, tab.overflow);
+    });
+
+    wrap.append(button, divider, caret);
+    tabStrip.append(wrap);
   }
 
   const settingsButton = document.createElement("button");
@@ -226,5 +233,14 @@ export function createWorkspacePanelHost({
     contextHost: toolbarHost,
     controlsHost,
     contentHost,
+    // Removes the document-level overflow-menu listeners and any open menu.
+    // renderWorkspace2Panel() builds a fresh host on every tab switch, so
+    // without this the listeners accumulate across re-renders.
+    dispose() {
+      closeOverflowMenu();
+      document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+      document.removeEventListener("click", onDocumentPointerDown, true);
+      document.removeEventListener("keydown", onDocumentKeyDown, true);
+    },
   };
 }

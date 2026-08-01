@@ -15,11 +15,12 @@ Thank you for helping improve WorkspaceKit.
 1. Fork the repository and create a focused branch.
 2. Install the plugin in a test ComfyUI environment.
 3. Make the smallest change that solves the issue.
-4. Test both normal and failure paths.
-5. Update `docs/MODULE_MAP.md`, `docs/ARCHITECTURE.md`, and `docs/TESTING.md` when a module boundary changes.
-6. Update English and Chinese documentation when user-facing behavior changes.
-7. Include screenshots or a short recording for UI changes.
-8. Open a pull request using the repository template.
+4. Run `npm test` before opening a pull request; it covers offline JavaScript contracts, Python service contracts, and release-version consistency without starting ComfyUI.
+5. Test both normal and failure paths in a test ComfyUI package when the change affects a live interaction, UI, or file operation.
+6. Update `docs/MODULE_MAP.md`, `docs/ARCHITECTURE.md`, and `docs/TESTING.md` when a module boundary changes.
+7. Update English and Chinese documentation when user-facing behavior changes.
+8. Include screenshots or a short recording for UI changes.
+9. Open a pull request using the repository template. GitHub Actions reruns `npm test`; browser acceptance remains a separate requirement for live behavior.
 
 ## Pull request expectations
 

@@ -211,7 +211,10 @@ assert.match(String(failedConversion.children[1].textContent), /groups\.convertF
 conversionFailure = null;
 
 const entry = await readFile(new URL("../entry/entry.js", import.meta.url), "utf8");
-assert.match(entry, /selectSettingsPage\("workflows"\)/);
+// The user-approved settings information architecture starts on Appearance,
+// not a feature-specific page. Keep this contract in sync with the navigation
+// order in openWorkspaceSettings().
+assert.match(entry, /selectSettingsPage\(settingPages\[0\]\.id\)/);
 assert.doesNotMatch(entry, /selectSettingsPage\("common"\)/);
 
 console.log("Settings dialog sections contract passed.");

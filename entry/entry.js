@@ -348,6 +348,7 @@ const workspaceState = {
   settingsCloseHandler: null,
   panelApi: null,
   providerDispose: null,
+  panelHostDispose: null,
   claimedProviderIds: new Set(),
   sidebarRegistered: false,
   startup: {
@@ -1010,6 +1011,16 @@ function disposeWorkspacePanelProvider() {
   workspaceState.providerDispose = null;
   if (typeof dispose !== "function") return;
   try { dispose(); } catch (error) { console.warn("[WorkspaceKit] Provider cleanup failed", error); }
+}
+
+// The panel host registers document-level listeners for the tab overflow menu.
+// renderWorkspace2Panel() builds a fresh host on every tab switch, so the
+// previous host must release them or they accumulate across re-renders.
+function disposeWorkspacePanelHost() {
+  const dispose = workspaceState.panelHostDispose;
+  workspaceState.panelHostDispose = null;
+  if (typeof dispose !== "function") return;
+  try { dispose(); } catch (error) { console.warn("[WorkspaceKit] Panel host cleanup failed", error); }
 }
 
 function claimWorkspacePanelProvider(provider) {
@@ -5263,16 +5274,26 @@ function workspaceModuleLabel(moduleId) {
   return t("workspace.tab.workflows");
 }
 
+// Tab labels are text-only. Providers may still ship an `icon`, and some also
+// bake the same glyph into `tabLabel` ("🎨 Theme"), so the leading symbol is
+// stripped here rather than trusting providers to send a clean label.
+function stripLeadingTabGlyph(label) {
+  const trimmed = label.trim();
+  // Falls back to the original when the label is nothing but a glyph, so a
+  // provider that ships an icon-only label still renders something.
+  return trimmed.replace(/^[\p{Extended_Pictographic}\p{So}️‍]+\s*/u, "").trim() || trimmed;
+}
+
 function workspaceModuleTab(moduleId) {
   const provider = findWorkspacePanelProvider(moduleId);
   if (!provider) {
     return { id: moduleId, label: workspaceModuleLabel(moduleId) };
   }
-  const label = String(provider.tabLabel || provider.title || provider.id);
+  const label = stripLeadingTabGlyph(String(provider.tabLabel || provider.title || provider.id));
   return {
     id: moduleId,
     label,
-    tooltip: String(provider.tabTooltip || provider.title || label),
+    tooltip: stripLeadingTabGlyph(String(provider.tabTooltip || provider.title || label)),
   };
 }
 
@@ -5282,6 +5303,7 @@ function workspaceTabPlan() {
 
 function renderWorkspace2Panel(el) {
   disposeWorkspacePanelProvider();
+  disposeWorkspacePanelHost();
   workspaceState.renderTarget = el;
   styles();
   setupWorkspaceKeyIsolation();
@@ -5309,12 +5331,13 @@ function renderWorkspace2Panel(el) {
     settingsTitle: t("settings.title"),
     onOpenSettings: openWorkspaceSettings,
     createSettingsIcon: () => iconSvg("settings"),
-    providerLabel: (provider) => resolveWorkspacePanelProviderLabel(provider).text,
+    providerLabel: (provider) => stripLeadingTabGlyph(resolveWorkspacePanelProviderLabel(provider).title),
     onActivateProvider: (id) => { workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },
     onPinProvider: (id) => { localStorage.setItem(PINNED_PROVIDER_KEY, id); workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },
     overflowLabel: t("workspace.extensions"),
     pinLabel: t("workspace.pin"),
   });
+  workspaceState.panelHostDispose = typeof panelHost.dispose === "function" ? panelHost.dispose : null;
   applyWorkspaceBackgroundEffect(panelHost.shell);
   el.append(panelHost.shell);
   syncWorkspaceGlassOverlay();

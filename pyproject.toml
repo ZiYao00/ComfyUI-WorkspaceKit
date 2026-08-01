@@ -1,8 +1,8 @@
 [project]
 name = "comfyui-workspacekit"
-description = "A modular workspace, sidebar, and panel system for organizing workflows, nodes, favorites, templates, and canvas groups in ComfyUI."
+description = "ComfyUI WorkspaceKit (WK): a modular workspace, sidebar, and panel system for organizing workflows, nodes, favorites, templates, and canvas groups in ComfyUI."
 # Release through scripts/release_version.py so this semantic version remains authoritative.
-version = "0.2.4"
+version = "0.2.5"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { file = "LICENSE" }
@@ -23,4 +23,4 @@ Issues = "https://github.com/ZiYao00/ComfyUI-WorkspaceKit/issues"
 
 [tool.comfy]
 PublisherId = "yuer424"
-DisplayName = "WorkspaceKit"
+DisplayName = "ComfyUI WorkspaceKit"

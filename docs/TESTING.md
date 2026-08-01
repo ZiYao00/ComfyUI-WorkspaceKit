@@ -4,14 +4,41 @@ This document records reproducible test evidence and unresolved errors found whi
 
 ## Current baseline (updated per batch)
 
-- **WorkspaceKit contracts (Node `.mjs`)**: 64/64 passing.
-- **WorkspaceKit contracts (Python `.py`)**: 2/2 passing (`test-workspace-data-bundle.py`, `test-workflow-copy.py`).
+- **WorkspaceKit contracts (Node `.mjs`)**: 65/65 passing.
+- **WorkspaceKit contracts (Python `.py`)**: 3/3 passing (`test-trash-service.py`, `test-workspace-data-bundle.py`, `test-workflow-copy.py`).
 - **Node syntax + locale JSON**: `entry/entry.js`, `entry/settings/*.js`, `entry/workspace2_canvas_groups.js`, `entry/canvas-groups/{conversion-archive,conversion-result,reverse-conversion-plan}.js` and `entry/locales/*.json` all pass.
 - **Playwright real-page smoke** (`scripts/e2e/smoke-workspacekit-sidebar.mjs`): passing on the test package at `http://127.0.0.1:8190/`. Verifies that `window.app.extensions` contains both `comfyui.workspace2` and `WorkspaceKit.ThemeLab`, that `window.WorkspaceKitPanelAPI` and `window.WorkspaceKitPanelUITemplate` are exposed, and that `#workspace2-sidebar-emoji-icon-style` is injected. No WorkspaceKit-related console errors.
-- **Last baseline re-run**: 2026-07-28.
-- **Historical figure `61/61`** in older entries reflects the contract count at that batch; the current figure is `64/64`.
+- **Last baseline re-run**: 2026-08-01 (`npm test`).
+- **Historical figures** in older entries reflect the contract count at that batch; the current figure is `65/65`.
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.zh-CN.md` (T-xxx).
+
+## 2026-08-01 - Minimal offline CI baseline
+
+- **Pre-change backup:** `.codex-backups/90-full-snapshots/ComfyUI-WorkspaceKit-before-ci-contract-alignment-20260801-20260801-190239.zip` (309 source files).
+- **Unified local command:** `npm test` runs all top-level JavaScript contracts in deterministic filename order, all top-level Python service contracts using the active Python interpreter, then `scripts/release_version.py --check`. It requires neither ComfyUI nor Playwright to be running.
+- **GitHub Actions:** `.github/workflows/ci.yml` runs that same command on every push and pull request using Node 20 and Python 3.11. The existing Registry workflow remains the only workflow permitted to publish.
+- **Contract alignment:** three stale tests were updated to assert accepted current behavior: theme-aware default group color, Appearance as the settings landing page, and the body-mounted overflow menu with listener disposal. No production panel source was changed for this alignment.
+- **Verification:** `npm test` passed: 65 JavaScript contracts, 3 Python service contracts, and release-version check `0.2.4`. `python -m py_compile scripts/run-python-tests.py scripts/release_version.py service/trash_service.py __init__.py` and `git diff --check` also passed. Node emits `MODULE_TYPELESS_PACKAGE_JSON` warnings when it loads browser ES modules from this dev-tool package; these are warnings only and are intentionally not masked by changing the package module mode.
+- **Boundary:** GitHub Actions itself will first run after this change is committed and pushed. The CI suite is deliberately offline; real ComfyUI visual and interaction acceptance remains a separate test-package responsibility.
+
+## 2026-08-01 - Workflow trash manifest reliability batches 1 to 3
+
+- **Pre-change backups:** `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-trash-manifest-atomic-batch1-20260801-184627.zip` (1,758,756 bytes, SHA-256 `8A4FFC63D48B21821E48C953F168B7692FE08549828928B18F06E6B52A36822C`), `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-trash-operation-compensation-batch2-20260801-184908.zip` (1,760,571 bytes, SHA-256 `888D2FA57D20CB7DB7EA51A933F3E91371A68AAEBAE7BE0D719742379358752B`), and `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-trash-operation-journal-batch3-20260801-185412.zip` (1,762,208 bytes, SHA-256 `E9290615AC173CAF60FB008E8148B4BAE87132ADCF7CB4B1FE296AC06F5D2362`).
+- **Batch 1 — manifest integrity:** `trash_manifest.json` now writes through a unique same-directory temporary file, flushes and fsyncs, validates the serialized JSON, then promotes with `os.replace`. Before each valid replacement, the prior generation is atomically retained as `trash_manifest.json.bak`. A corrupt primary manifest reads from that backup; an unreadable primary and backup fail explicitly rather than silently returning an empty list. A process-wide `RLock` serializes read-modify-write trash transactions from concurrent browser requests.
+- **Batch 2 — ordinary failure compensation:** a failed manifest save after moving an item into the plugin trash moves it back to the workflows root; a failed save after restore moves it back into the plugin trash. System recycle-bin deletion first persists `system_deleting`; if that precondition cannot be written, the irreversible system call is not made. A normal system-delete failure restores the `trashed` state.
+- **Batch 3 — interrupted-operation recovery:** each move, restore, and system-recycle action now creates a single atomic `trash_operation.json` journal before it changes the filesystem. The next trash action or list request resolves that record from the actual workflow/trash paths: complete a moved-but-unlisted deletion, finalize a restored item, or finalize/reset a system-delete intermediate state. Ambiguous or malformed journal data fails explicitly; it never guesses a file move. The journal clears only after the corresponding manifest state is durable.
+- **Verification:** `python -m py_compile service/trash_service.py __init__.py scripts/test-trash-service.py`; `python scripts/test-trash-service.py`; `python scripts/test-workflow-copy.py`; and `python scripts/test-workspace-data-bundle.py` all passed. The new service contract covers atomic primary/backup generations, corrupt-primary backup read, injected promotion failure, concurrent moves, delete compensation, restore compensation, the system-delete precondition, move/restore/system-delete crash recovery, and corrupt-journal rejection.
+- **Real test-package acceptance:** restarted `G:\AIGC\ComfyUI_test` on port `8190` after the service changes. Through the live Workflows panel, a newly created test workflow moved into WorkspaceKit trash, appeared there, restored back to the workflow list, then a separate newly created test workflow moved from WorkspaceKit trash to the Windows system Recycle Bin after its danger confirmation. Finally, the real “Move All to System Trash” confirmation cleared all 16 remaining test-package trash entries. The asynchronous list refresh completed with `0` `.workspace2-trash-item` elements; no `trash_operation.json` remained under the test-package user data. No WorkspaceKit console error appeared during this flow.
+- **Boundary:** this validates normal real-page operation, not a forced process crash between filesystem and manifest writes. The Python service contract remains the evidence for those deliberate fault-injection and recovery paths.
+
+## 2026-08-01 - WK naming + current Layout host-path recheck
+
+- **Branding resources:** both locale JSON files parsed successfully and expose the same 459 keys. The user-facing WorkspaceKit title, sidebar tooltip, core tab titles, group-conversion messages, node-favorites synchronization messages, fallback strings, README terminology, and `[tool.comfy] DisplayName` were updated to the WK naming standard. No technical key, Provider ID, storage key, directory, or workflow-data field changed.
+- **UI Template contracts:** `scripts/test-panel-ui-template.mjs`, `test-panel-ui-template-api.mjs`, `test-panel-ui-template-compatibility.mjs`, and `test-panel-ui-template-export.mjs` all passed.
+- **Layout contracts:** all seven current Layout test files passed (21 tests): geometry, module view, legacy command registry, whole-selection alignment, standalone Vendor/host compatibility, WorkspaceKit adapter, and WorkspaceKit Provider.
+- **Real test-package path:** the running package at `http://127.0.0.1:8190/` resolves both custom-node junctions to the two Git repositories. WorkspaceKit's sidebar entry opened normally; Workflows, Nodes, Templates, and the hosted Layout tab rendered. Hosted Layout exposed title/status, command-size slider, presentation-mode radios, and all 12 command controls, with no WorkspaceKit-specific error observed in the inspected page state.
+- **Boundary:** the live server was not restarted during this documentation/resource batch, so it continued showing its previously loaded strings. A restart plus one fresh-page check is required before claiming the new `WK 工作区` / `WK Workspace` labels are visible at runtime.
 
 ## 2026-07-30 - Main-package acceptance sweep (groups, regression, panel UI template)
 

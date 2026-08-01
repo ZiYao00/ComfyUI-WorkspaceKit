@@ -1,4 +1,4 @@
-# ComfyUI-WorkspaceKit
+# ComfyUI WorkspaceKit（WK）
 
 [English](README.md) · **简体中文**
 
@@ -10,9 +10,9 @@
 ![Status](https://img.shields.io/badge/status-public%20beta-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-ComfyUI-WorkspaceKit 是一个面向 ComfyUI 的工作区增强插件，把工作流管理、节点收藏、模板复用和画布整理放进同一个侧边栏入口。
+ComfyUI WorkspaceKit（WK，技术仓库名为 `ComfyUI-WorkspaceKit`）的中文正式名是 **WK 工作区**。它是一个面向 ComfyUI 的工作区增强插件，把工作流管理、节点收藏、模板复用和画布整理放进同一个侧边栏入口。
 
-当前为 **公开测试版 0.2.4**，还不是稳定版 1.0。首次在主力环境中使用前，请备份重要工作流、用户设置、节点收藏和模板数据。
+当前状态：**公开测试版，0.2.5**。还不是稳定版 1.0；首次在主力环境中使用前，请备份重要工作流、用户设置、节点收藏和模板数据。
 
 <p align="center">
   <a href="#为什么做成一个工作区">为什么做成一个工作区</a> ·
@@ -35,6 +35,12 @@ ComfyUI-WorkspaceKit 是一个面向 ComfyUI 的工作区增强插件，把工�
 - 删除后保留恢复机会。
 
 WorkspaceKit 不替代 ComfyUI 官方界面，也不是把更多按钮堆进侧边栏。它补充的是重度用户逐渐需要的工作区能力：**快速找到内容、保持清晰结构、复用已经搭好的节点，以及在整理失误后找回数据。**
+
+## WK 套件
+
+首次介绍写作 **ComfyUI WorkspaceKit（WK）**，之后可简称为 **WK**。核心模块统一称为：**WK 工作流、WK 节点、WK 模板、WK 编组**；关联模块称为：**WK 版式、WK 主题**。在已打开的侧边栏内，标签保持简洁，直接显示“工作流｜节点｜模板｜版式｜主题”。
+
+`ComfyUI-WorkspaceKit` 仍是仓库、安装目录、Provider API、存储键和 Registry 中使用的技术名称；WK 只用于对外品牌与功能模块称呼。
 
 ## 三类工作资产
 
@@ -73,7 +79,7 @@ WorkspaceKit 管理真实的工作流文件，也会保存用户长期积累的�
 
 ## 功能说明
 
-### 工作流
+### WK 工作流
 
 - 默认使用 ComfyUI 官方工作流目录；
 - 树状文件夹管理，支持文件夹和子文件夹；
@@ -99,7 +105,7 @@ WorkspaceKit 管理真实的工作流文件，也会保存用户长期积累的�
 | 排序 | 按名称、修改时间或自定义顺序显示。 |
 | 回收站 | 查看、恢复或清理已删除工作流。 |
 
-### 节点
+### WK 节点
 
 - 按 **Comfy** 和 **扩展** 区分节点来源；
 - 支持搜索、模糊搜索和拼音搜索；
@@ -122,7 +128,7 @@ WorkspaceKit 管理真实的工作流文件，也会保存用户长期积累的�
 | 排序 | 调整节点显示顺序。 |
 | 收藏管理 | 导入、导出、备份和恢复官方收藏与 WorkspaceKit 收藏。 |
 
-### 模板
+### WK 模板
 
 - 使用 `Alt+C` 将当前选中的节点保存为模板；
 - 保存模板时保留节点相对位置和连接关系；
@@ -146,7 +152,7 @@ WorkspaceKit 管理真实的工作流文件，也会保存用户长期积累的�
 
 测试阶段为保证兼容性，模板数据仍使用 ComfyUI 用户目录下现有的 Workspace2 兼容存储位置；升级后已有模板数据仍可继续使用。
 
-### 编组增强
+### WK 编组
 
 - 选中节点后按 `Ctrl+G` 创建 WorkspaceKit 编组；
 - 按 `Shift+G` 解除一个或多个编组框，不删除其中节点；
@@ -265,7 +271,7 @@ python_embeded\python.exe -m pip install -r ComfyUI\custom_nodes\ComfyUI-Workspa
 
 - 项目维护者：ZiYao00
 - 项目主页：https://github.com/ZiYao00/ComfyUI-WorkspaceKit
-- 开发文档：[架构说明](docs/ARCHITECTURE.md)、[模块清单](docs/MODULE_MAP.md)、[测试记录](docs/TESTING.md)、[贡献说明](CONTRIBUTING.md)
+- 开发文档：[开发状态索引](docs/DEVELOPMENT_STATUS.zh-CN.md)、[品牌与命名规范](docs/BRANDING_AND_NAMING.zh-CN.md)、[架构说明](docs/ARCHITECTURE.md)、[模块清单](docs/MODULE_MAP.md)、[测试记录](docs/TESTING.md)、[贡献说明](CONTRIBUTING.md)
 - 版本变化：[CHANGELOG.md](CHANGELOG.md)
 - 后续计划：[ROADMAP.zh-CN.md](ROADMAP.zh-CN.md)
 

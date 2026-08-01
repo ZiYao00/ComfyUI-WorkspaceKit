@@ -52,8 +52,8 @@ assert.match(
 );
 assert.match(
   source,
-  /getBuiltInStyle\(\)\s*\{[\s\S]*?headerBgColor: DEFAULT_HEADER_BG_COLOR/,
-  "getBuiltInStyle must use the 0.25 header color constant"
+  /getBuiltInStyle\(\)\s*\{[\s\S]*?headerBgColor: DEFAULT_GROUP_HEADER_BG/,
+  "getBuiltInStyle must use the theme-aware default group header color"
 );
 assert.equal(parseRgbaAlpha("rgba(0,0,0,0.25)"), 0.25);
 

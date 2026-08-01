@@ -10,18 +10,39 @@ class FakeElement {
     this.attributes = new Map();
     this.listeners = new Map();
     this.hidden = false;
+    this.classList = {
+      add: (...tokens) => { this.className = `${this.className} ${tokens.join(" ")}`.trim(); },
+      remove: (...tokens) => { this.className = this.className.split(/\s+/).filter((token) => !tokens.includes(token)).join(" "); },
+    };
   }
   append(...children) { this.children.push(...children); }
+  remove() { this.removed = true; }
   setAttribute(name, value) { this.attributes.set(name, value); }
   addEventListener(type, listener) { this.listeners.set(type, listener); }
+  removeEventListener(type, listener) { if (this.listeners.get(type) === listener) this.listeners.delete(type); }
+  contains(target) { return target === this || this.children.some((child) => child?.contains?.(target)); }
+  getBoundingClientRect() { return { right: 200, bottom: 40 }; }
+  get offsetWidth() { return 200; }
   click() {
     this.listeners.get("click")?.({ preventDefault() {}, stopPropagation() {} });
   }
 }
 
 const activated = [];
+const makeDocument = () => {
+  const listeners = new Map();
+  return {
+    createElement: (tagName) => new FakeElement(tagName),
+    body: new FakeElement("body"),
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    removeEventListener: (type, listener) => { if (listeners.get(type) === listener) listeners.delete(type); },
+    listeners,
+  };
+};
+globalThis.window = { innerWidth: 1000 };
+const document = makeDocument();
 const host = createWorkspacePanelHost({
-  document: { createElement: (tagName) => new FakeElement(tagName) },
+  document,
   tabs: [
     { id: "workflows", label: "Workflows" },
     { id: "nodes", label: "Nodes" },
@@ -36,7 +57,6 @@ const host = createWorkspacePanelHost({
 });
 
 assert.equal(host.shell.className, "workspace2-shell");
-assert.equal(host.tabStrip.style["--workspace2-tab-count"], "4");
 assert.equal(host.tabButtons.size, 4);
 assert.match(host.tabButtons.get("nodes").className, /is-active/);
 assert.equal(host.tabButtons.get("nodes").attributes.get("aria-current"), "page");
@@ -61,23 +81,30 @@ assert.equal(host.contentHost.dataset.workspace2ModuleMount, "true");
 assert.deepEqual(host.moduleFrame.children, [host.headerHost, host.toolbarHost, host.controlsHost, host.contentHost]);
 
 const providerEvents = [];
+const overflowDocument = makeDocument();
 const overflowHost = createWorkspacePanelHost({
-  document: { createElement: (tagName) => new FakeElement(tagName) },
-  tabs: [{ id: "workflows", label: "Workflows" }, { id: "nodes", label: "Nodes" }, { id: "templates", label: "Templates" }, { id: "layout", label: "📐 Layout" }],
+  document: overflowDocument,
+  tabs: [{ id: "workflows", label: "Workflows" }, { id: "nodes", label: "Nodes" }, { id: "templates", label: "Templates" }, { id: "layout", label: "📐 Layout", overflow: [{ id: "provider.other", title: "Other" }] }],
   activeTabId: "layout",
   onActivate() {}, settingsTitle: "Settings", onOpenSettings() {},
   overflowLabel: "Extensions", pinLabel: "Pin",
-  overflowProviders: [{ id: "provider.other", title: "Other" }],
   providerLabel: (provider) => provider.title,
   onActivateProvider: (id) => providerEvents.push(`open:${id}`),
   onPinProvider: (id) => providerEvents.push(`pin:${id}`),
 });
-const overflow = overflowHost.tabStrip.children.find((child) => child.className === "workspace2-module-overflow");
+const overflow = overflowHost.tabStrip.children.find((child) => child.className === "workspace2-module-overflow-tab");
 assert.ok(overflow);
-assert.equal(overflow.children[0].textContent, "Extensions ▾");
-const overflowRow = overflow.children[1].children[0];
+assert.equal(overflow.children[0].children[0].textContent, "📐 Layout");
+overflow.children[2].click();
+const overflowMenu = overflowDocument.body.children.at(-1);
+assert.match(overflowMenu.className, /workspace2-module-overflow-context/);
+const overflowRow = overflowMenu.children[0];
 overflowRow.children[0].click();
-overflowRow.children[1].click();
+overflow.children[2].click();
+const pinMenu = overflowDocument.body.children.at(-1);
+pinMenu.children[0].children[1].click();
 assert.deepEqual(providerEvents, ["open:provider.other", "pin:provider.other"]);
+overflowHost.dispose();
+assert.equal(overflowDocument.listeners.size, 0, "dispose must release document-level overflow listeners");
 
 console.log("WorkspaceKit panel host contract passed.");

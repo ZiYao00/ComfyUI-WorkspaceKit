@@ -185,11 +185,14 @@ export function styles() {
       border-bottom: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 62%, transparent);
       background: transparent;
       overflow: visible;
+      container: workspace2-tabstrip / inline-size;
     }
     .workspace2-module-tab {
       position: relative;
       flex: 1 1 0;
-      min-width: max(3em, 48px);
+      /* 3em covers three CJK glyphs at the 12px tab font; the padding is added
+         on top so the third glyph is never the one that gets ellipsised. */
+      min-width: calc(3em + 16px);
       max-width: 14em;
       min-height: 30px;
       padding: 0 8px;
@@ -204,9 +207,16 @@ export function styles() {
       text-overflow: ellipsis;
       transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
     }
-    .workspace2-module-tab,
-    .workspace2-module-overflow-tab {
-      flex-shrink: 0;
+    /* Below roughly 280px of sidebar the 3-glyph budget no longer fits together
+       with the settings button, so the floor drops to two glyphs. The settings
+       button must never be pushed out of the row. */
+    @container workspace2-tabstrip (max-width: 300px) {
+      .workspace2-module-tab { min-width: calc(2em + 12px); }
+      /* width:0 releases the wrapper from its content's min-content floor so it
+         shrinks with the plain tabs instead of pinning the settings button out
+         of the row. */
+      .workspace2-module-overflow-tab { width: 0; min-width: calc(2em + 12px + 20px); }
+      .workspace2-module-overflow-tab > .workspace2-module-tab { min-width: 0; }
     }
     .workspace2-module-tab:hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
@@ -251,23 +261,41 @@ export function styles() {
       stroke: currentColor;
       fill: none;
     }
-    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: max(6em, 72px); max-width: 14em; display:inline-flex; }
-    .workspace2-module-overflow-tab > summary { list-style:none; flex: 1 1 0; min-width: 0; max-width: 100%; display:flex; align-items:center; gap:6px; padding:0 8px; border:1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255,255,255,.14))) 78%, transparent); border-radius:8px; color:var(--p-text-muted-color,rgba(255,255,255,.68)); background:var(--workspace2-tab-bg); font:500 12px/1.2 var(--font-family,Arial,sans-serif); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:30px; transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease; }
-    .workspace2-module-overflow-tab > summary::-webkit-details-marker { display:none; }
-    .workspace2-module-overflow-tab > summary::marker { content:""; }
-    .workspace2-module-overflow-tab > summary:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: var(--workspace2-tab-hover-bg); border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 32%, var(--workspace2-border, rgba(255,255,255,.14))); }
-    .workspace2-module-overflow-tab.is-active > summary { color: var(--p-text-color, var(--fg-color, #f5f8ff)); border-color: color-mix(in srgb, var(--workspace2-accent) 28%, var(--workspace2-border)); background: var(--workspace2-tab-active-bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 8%, transparent), 0 0 0 1px rgba(0, 0, 0, 0.05); }
-    .workspace2-module-overflow-tab.is-active > summary::after { content:""; position:absolute; left:12px; right:12px; bottom:4px; height:2px; border-radius:2px; background:var(--workspace2-accent-muted); }
-    .workspace2-module-overflow-tab > summary .workspace2-module-tab-label { flex: 1 1 0; min-width: 0; overflow:hidden; text-overflow:ellipsis; }
-    .workspace2-module-overflow-caret { display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:18px; padding:0 2px; background:transparent; border:0; color:inherit; font-size:10px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease; transform-origin:center; border-radius:4px; }
-    .workspace2-module-overflow-caret:hover { background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 24%, transparent); }
-    .workspace2-module-overflow-tab[open] > summary .workspace2-module-overflow-caret { transform:rotate(180deg); }
-    .workspace2-module-overflow-menu { position:fixed; z-index:1200; width:max-content; max-width:min(280px, calc(100vw - 24px)); min-width:180px; padding:6px; border:1px solid var(--p-content-border-color,var(--border-color,rgba(255,255,255,.16))); border-radius:9px; background:var(--comfy-menu-bg,var(--p-content-background,#202124)); box-shadow:0 10px 28px rgba(0,0,0,.25); }
-    .workspace2-module-overflow-row { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:center; gap:5px; cursor:pointer; border-radius:6px; }
-    .workspace2-module-overflow-row:hover { background: var(--p-list-option-hover-background, rgba(255,255,255,.075)); }
-    .workspace2-module-overflow-name { min-width:0; padding:7px 8px; color:var(--p-text-color,var(--fg-color,#ddd)); background:transparent; text-align:left; font:500 12px/1.2 var(--font-family,Arial,sans-serif); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .workspace2-module-overflow-pin { min-width:auto; border:0; border-radius:6px; padding:6px 12px; color:#fff; background:var(--workspace2-accent); font:500 12px/1.2 var(--font-family,Arial,sans-serif); cursor:pointer; }
-    .workspace2-module-overflow-pin:hover { background: color-mix(in srgb, var(--workspace2-accent) 80%, white); }
+    /* The label keeps a plain tab's 3-CJK-glyph budget; the divider and caret
+       add a fixed ~22px on top. Anything larger and this tab would claim a
+       bigger flex share than its neighbours and push the settings button out. */
+    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: calc(3em + 16px + 22px); max-width: 14em; min-height:30px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255,255,255,.14))) 78%, transparent); border-radius:8px; background:var(--workspace2-tab-bg); transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
+    .workspace2-module-overflow-tab:hover { background: var(--workspace2-tab-hover-bg); border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 32%, var(--workspace2-border, rgba(255,255,255,.14))); }
+    .workspace2-module-overflow-tab.is-menu-open { border-color: color-mix(in srgb, var(--workspace2-accent) 42%, var(--workspace2-border)); }
+    /* The tab button inside the wrapper drops its own chrome: the wrapper draws
+       the border and background so the label and caret read as one control.
+       min-height is released to the wrapper too, otherwise the button's own
+       30px plus the wrapper's border would make this tab a pixel taller than
+       the plain ones. */
+    .workspace2-module-overflow-tab > .workspace2-module-tab { flex: 1 1 0; min-width: 0; min-height: 0; border:0; border-radius:7px 0 0 7px; background:transparent; box-shadow:none; text-align:center; }
+    .workspace2-module-overflow-tab > .workspace2-module-tab:hover { background:transparent; border-color:transparent; }
+    .workspace2-module-overflow-tab > .workspace2-module-tab.is-active { background:var(--workspace2-tab-active-bg); box-shadow:none; }
+    .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::after { left:8px; right:8px; }
+    .workspace2-module-tab-label { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
+    .workspace2-module-tab-divider { flex:0 0 1px; align-self:center; width:1px; height:14px; margin:0 3px; background: color-mix(in srgb, currentColor 24%, transparent); }
+    .workspace2-module-overflow-caret { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; min-width:14px; padding:0 1px; background:transparent; border:0; border-radius:4px; color:var(--p-text-muted-color, rgba(255,255,255,.68)); font-size:10px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease, color 120ms ease; transform-origin:center; }
+    .workspace2-module-overflow-caret:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 24%, transparent); }
+    .workspace2-module-overflow-tab.is-menu-open > .workspace2-module-overflow-caret { transform:rotate(180deg); color: var(--workspace2-accent); }
+    /* The dropdown reuses .workspace2-context (shared with the sort/row menus),
+       so it inherits that primitive's fixed positioning and z-index above the
+       frosted-glass shell. Only the row layout is specific to this menu.
+       It is appended to <body>, outside .workspace2-shell, so the accent token
+       is redeclared here — shell-scoped custom properties do not reach it. */
+    .workspace2-module-overflow-context {
+      --workspace2-accent: var(--p-primary-color, var(--accent-color, #0A84FF));
+      max-width: min(300px, calc(100vw - 24px));
+    }
+    .workspace2-module-overflow-row { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:center; gap:6px; }
+    .workspace2-module-overflow-open { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 12px/1.2 var(--font-family,Arial,sans-serif); }
+    /* Two classes so this wins over the later, equally specific
+       .workspace2-menu-item transparent-background rule. */
+    .workspace2-module-overflow-row .workspace2-module-overflow-pin { flex:0 0 auto; width:auto; min-height:26px; padding:5px 12px; border-radius:6px; color:#fff; background:var(--workspace2-accent); font:500 12px/1.2 var(--font-family,Arial,sans-serif); text-align:center; }
+    .workspace2-module-overflow-row .workspace2-module-overflow-pin:hover { color:#fff; background: color-mix(in srgb, var(--workspace2-accent) 82%, white); }
     .workspace2-module-frame {
       position: relative;
       z-index: 1;

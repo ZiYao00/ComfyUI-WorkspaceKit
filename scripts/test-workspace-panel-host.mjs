@@ -84,10 +84,10 @@ const providerEvents = [];
 const overflowDocument = makeDocument();
 const overflowHost = createWorkspacePanelHost({
   document: overflowDocument,
-  tabs: [{ id: "workflows", label: "Workflows" }, { id: "nodes", label: "Nodes" }, { id: "templates", label: "Templates" }, { id: "layout", label: "📐 Layout", overflow: [{ id: "provider.other", title: "Other" }] }],
+  tabs: [{ id: "workflows", label: "Workflows" }, { id: "nodes", label: "Nodes" }, { id: "templates", label: "Templates" }, { id: "layout", label: "📐 Layout", overflow: [{ id: "layout", title: "Layout" }, { id: "provider.other", title: "Other" }] }],
   activeTabId: "layout",
   onActivate() {}, settingsTitle: "Settings", onOpenSettings() {},
-  overflowLabel: "Extensions", pinLabel: "Pin",
+  overflowLabel: "Extensions",
   providerLabel: (provider) => provider.title,
   onActivateProvider: (id) => providerEvents.push(`open:${id}`),
   onPinProvider: (id) => providerEvents.push(`pin:${id}`),
@@ -98,12 +98,16 @@ assert.equal(overflow.children[0].children[0].textContent, "📐 Layout");
 overflow.children[2].click();
 const overflowMenu = overflowDocument.body.children.at(-1);
 assert.match(overflowMenu.className, /workspace2-module-overflow-context/);
-const overflowRow = overflowMenu.children[0];
-overflowRow.children[0].click();
+assert.equal(overflowMenu.children.length, 3, "menu includes current provider, divider, and another provider");
+const currentProviderItem = overflowMenu.children[0];
+assert.match(currentProviderItem.className, /is-current/);
+assert.equal(currentProviderItem.attributes.get("aria-current"), "page");
+assert.equal(currentProviderItem.children[0].textContent, "▸");
+currentProviderItem.click();
 overflow.children[2].click();
-const pinMenu = overflowDocument.body.children.at(-1);
-pinMenu.children[0].children[1].click();
-assert.deepEqual(providerEvents, ["open:provider.other", "pin:provider.other"]);
+const providerMenu = overflowDocument.body.children.at(-1);
+providerMenu.children[2].click();
+assert.deepEqual(providerEvents, ["open:layout", "pin:provider.other"]);
 overflowHost.dispose();
 assert.equal(overflowDocument.listeners.size, 0, "dispose must release document-level overflow listeners");
 

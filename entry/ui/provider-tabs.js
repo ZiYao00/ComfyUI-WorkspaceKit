@@ -9,10 +9,13 @@ export function resolvePinnedProvider(providers, storedId = "") {
 }
 
 export function createWorkspaceTabPlan(coreIds, providers, storedId = "") {
-  const pinned = resolvePinnedProvider(providers, storedId);
+  const mergedProviders = providers.filter((provider) => provider?.id);
+  const pinned = resolvePinnedProvider(mergedProviders, storedId);
   return Object.freeze({
     coreIds: Object.freeze([...coreIds]),
     pinned,
-    overflowProviders: Object.freeze(providers.filter((provider) => provider !== pinned)),
+    // The overflow selector is also the provider switcher, so it must retain
+    // the current pinned provider instead of hiding it from the menu.
+    mergedProviders: Object.freeze([...mergedProviders]),
   });
 }

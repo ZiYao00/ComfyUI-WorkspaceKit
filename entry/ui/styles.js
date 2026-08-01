@@ -261,10 +261,10 @@ export function styles() {
       stroke: currentColor;
       fill: none;
     }
-    /* The label keeps a plain tab's 3-CJK-glyph budget; the divider and caret
-       add a fixed ~22px on top. Anything larger and this tab would claim a
+    /* The label keeps a plain tab's 3-CJK-glyph budget; the divider and larger
+       caret add a fixed ~28px on top. Anything larger and this tab would claim a
        bigger flex share than its neighbours and push the settings button out. */
-    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: calc(3em + 16px + 22px); max-width: 14em; min-height:30px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255,255,255,.14))) 78%, transparent); border-radius:8px; background:var(--workspace2-tab-bg); transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
+    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: calc(3em + 16px + 28px); max-width: 14em; min-height:30px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255,255,255,.14))) 78%, transparent); border-radius:8px; background:var(--workspace2-tab-bg); transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
     .workspace2-module-overflow-tab:hover { background: var(--workspace2-tab-hover-bg); border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 32%, var(--workspace2-border, rgba(255,255,255,.14))); }
     .workspace2-module-overflow-tab.is-menu-open { border-color: color-mix(in srgb, var(--workspace2-accent) 42%, var(--workspace2-border)); }
     /* The tab button inside the wrapper drops its own chrome: the wrapper draws
@@ -278,7 +278,7 @@ export function styles() {
     .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::after { left:8px; right:8px; }
     .workspace2-module-tab-label { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
     .workspace2-module-tab-divider { flex:0 0 1px; align-self:center; width:1px; height:14px; margin:0 3px; background: color-mix(in srgb, currentColor 24%, transparent); }
-    .workspace2-module-overflow-caret { flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center; min-width:14px; padding:0 1px; background:transparent; border:0; border-radius:4px; color:var(--p-text-muted-color, rgba(255,255,255,.68)); font-size:10px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease, color 120ms ease; transform-origin:center; }
+    .workspace2-module-overflow-caret { flex:0 0 20px; display:inline-flex; align-items:center; justify-content:center; min-width:20px; padding:0; background:transparent; border:0; border-radius:4px; color:var(--p-text-muted-color, rgba(255,255,255,.68)); font-size:13px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease, color 120ms ease; transform-origin:center; }
     .workspace2-module-overflow-caret:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 24%, transparent); }
     .workspace2-module-overflow-tab.is-menu-open > .workspace2-module-overflow-caret { transform:rotate(180deg); color: var(--workspace2-accent); }
     /* The dropdown reuses .workspace2-context (shared with the sort/row menus),
@@ -290,12 +290,10 @@ export function styles() {
       --workspace2-accent: var(--p-primary-color, var(--accent-color, #0A84FF));
       max-width: min(300px, calc(100vw - 24px));
     }
-    .workspace2-module-overflow-row { display:grid; grid-template-columns: minmax(0, 1fr) auto; align-items:center; gap:6px; }
-    .workspace2-module-overflow-open { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:500 12px/1.2 var(--font-family,Arial,sans-serif); }
-    /* Two classes so this wins over the later, equally specific
-       .workspace2-menu-item transparent-background rule. */
-    .workspace2-module-overflow-row .workspace2-module-overflow-pin { flex:0 0 auto; width:auto; min-height:26px; padding:5px 12px; border-radius:6px; color:#fff; background:var(--workspace2-accent); font:500 12px/1.2 var(--font-family,Arial,sans-serif); text-align:center; }
-    .workspace2-module-overflow-row .workspace2-module-overflow-pin:hover { color:#fff; background: color-mix(in srgb, var(--workspace2-accent) 82%, white); }
+    .workspace2-module-overflow-open { width:100%; min-width:0; display:flex; align-items:center; gap:7px; overflow:hidden; text-align:left; white-space:nowrap; font:500 12px/1.2 var(--font-family,Arial,sans-serif); }
+    .workspace2-module-overflow-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .workspace2-module-overflow-current-marker { flex:0 0 auto; color:var(--workspace2-accent); font-size:13px; line-height:1; }
+    .workspace2-module-overflow-open.is-current { color:var(--workspace2-accent); background:color-mix(in srgb, var(--workspace2-accent) 13%, transparent); }
     .workspace2-module-frame {
       position: relative;
       z-index: 1;

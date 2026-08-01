@@ -5318,7 +5318,7 @@ function renderWorkspace2Panel(el) {
   const visibleIds = [...plan.coreIds, ...(plan.pinned ? [plan.pinned.id] : [])];
   const tabsWithOverflow = visibleIds.map((id) => ({
     ...workspaceModuleTab(id),
-    overflow: id === plan.pinned?.id ? plan.overflowProviders : [],
+    overflow: id === plan.pinned?.id ? plan.mergedProviders : [],
   }));
   const panelHost = createWorkspacePanelHost({
     tabs: tabsWithOverflow,
@@ -5335,7 +5335,6 @@ function renderWorkspace2Panel(el) {
     onActivateProvider: (id) => { workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },
     onPinProvider: (id) => { localStorage.setItem(PINNED_PROVIDER_KEY, id); workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },
     overflowLabel: t("workspace.extensions"),
-    pinLabel: t("workspace.pin"),
   });
   workspaceState.panelHostDispose = typeof panelHost.dispose === "function" ? panelHost.dispose : null;
   applyWorkspaceBackgroundEffect(panelHost.shell);

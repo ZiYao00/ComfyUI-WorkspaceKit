@@ -18,7 +18,6 @@ export function createWorkspacePanelHost({
   onActivateProvider,
   onPinProvider,
   overflowLabel = "Extensions",
-  pinLabel = "Pin",
 }) {
   if (!document?.createElement) {
     throw new TypeError("A DOM document is required to create the WorkspaceKit panel host.");
@@ -67,7 +66,7 @@ export function createWorkspacePanelHost({
   document.addEventListener("click", onDocumentPointerDown, true);
   document.addEventListener("keydown", onDocumentKeyDown, true);
 
-  const openOverflowMenu = (anchor, providers) => {
+  const openOverflowMenu = (anchor, currentProviderId, providers) => {
     closeOverflowMenu();
     const menu = document.createElement("div");
     menu.className = "workspace2-context workspace2-module-overflow-context";
@@ -81,26 +80,28 @@ export function createWorkspacePanelHost({
         divider.className = "workspace2-menu-divider";
         menu.append(divider);
       }
-      const row = document.createElement("div");
-      row.className = "workspace2-module-overflow-row";
+      const isCurrent = provider.id === currentProviderId;
       const open = document.createElement("button");
       open.type = "button";
-      open.className = "workspace2-menu-item workspace2-module-overflow-open";
-      open.textContent = providerLabel(provider);
+      open.className = `workspace2-menu-item workspace2-module-overflow-open${isCurrent ? " is-current" : ""}`;
+      if (isCurrent) {
+        const marker = document.createElement("span");
+        marker.className = "workspace2-module-overflow-current-marker";
+        marker.textContent = "▸";
+        marker.setAttribute("aria-hidden", "true");
+        open.append(marker);
+        open.setAttribute("aria-current", "page");
+      }
+      const label = document.createElement("span");
+      label.className = "workspace2-module-overflow-label";
+      label.textContent = providerLabel(provider);
+      open.append(label);
       open.addEventListener("click", () => {
         closeOverflowMenu();
-        onActivateProvider?.(provider.id);
+        if (isCurrent) onActivateProvider?.(provider.id);
+        else onPinProvider?.(provider.id);
       });
-      const pin = document.createElement("button");
-      pin.type = "button";
-      pin.className = "workspace2-menu-item workspace2-module-overflow-pin";
-      pin.textContent = pinLabel;
-      pin.addEventListener("click", () => {
-        closeOverflowMenu();
-        onPinProvider?.(provider.id);
-      });
-      row.append(open, pin);
-      menu.append(row);
+      menu.append(open);
     });
 
     // `workspace2-context` is position: fixed, so viewport coordinates from the
@@ -143,8 +144,8 @@ export function createWorkspacePanelHost({
       continue;
     }
 
-    // Label and caret are separate hit targets: the label switches to this
-    // tab's own provider, the caret lists the others.
+    // Label and caret are separate hit targets: the label opens the pinned
+    // provider, while the caret lists every merged provider.
     const label = document.createElement("span");
     label.className = "workspace2-module-tab-label";
     label.textContent = tab.label;
@@ -172,7 +173,7 @@ export function createWorkspacePanelHost({
         closeOverflowMenu();
         return;
       }
-      openOverflowMenu(wrap, tab.overflow);
+      openOverflowMenu(wrap, tab.id, tab.overflow);
     });
 
     wrap.append(button, divider, caret);

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- The merged-plugin tab selector now shows every merged plugin, including the
+  current one. Selecting another plugin directly pins and opens it; the current
+  plugin is marked with a theme-colored triangle instead of a separate Pin
+  button. Enlarged the selector caret and its click target.
+
 ## 0.2.5 - 2026-08-01
 
 ### Internal

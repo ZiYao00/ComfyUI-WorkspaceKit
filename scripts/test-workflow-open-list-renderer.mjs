@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createWorkflowOpenListRenderer } from "../entry/workflows/open-list-renderer.js";
 
 class Element {
-  constructor() { this.children=[]; this.listeners=new Map(); this.className=""; this.textContent=""; this.style={}; this.classList={ values:new Set(), add:(name)=>this.classList.values.add(name) }; }
+  constructor() { this.children=[]; this.listeners=new Map(); this.className=""; this.textContent=""; this.style={ values:new Map(), setProperty:(name,value)=>this.style.values.set(name,value) }; this.classList={ values:new Set(), add:(name)=>this.classList.values.add(name) }; }
   append(...nodes) { this.children.push(...nodes); }
   addEventListener(type, listener) { this.listeners.set(type, listener); }
   setAttribute(name, value) { this[name] = value; }
@@ -17,11 +17,15 @@ const { renderOpenWorkflowList } = createWorkflowOpenListRenderer({
 const official = { path:"one.json", item:{path:"one.json"}, displayName:"One", isOfficialWorkflow:true, isActive:true, isDirty:true, isRenaming:false };
 const recent = { path:"two.json", item:{path:"two.json"}, displayName:"Two", isOfficialWorkflow:false, isActive:false, isDirty:true, isRenaming:false };
 const section = renderOpenWorkflowList({
-  entries:[official,recent], createRenameInput: () => ({input:true}),
+  entries:[official,recent], capacity: 9, scrollTop: 42, createRenameInput: () => ({input:true}),
   onOpen: async (entry) => calls.push(`open:${entry.path}`), onSave: async (entry) => calls.push(`save:${entry.path}`),
   onStartRename: (entry) => calls.push(`rename:${entry.path}`), onCloseOfficial: async (entry) => calls.push(`close:${entry.path}`),
   onRemoveRecent: (entry) => calls.push(`remove:${entry.path}`), onError: () => calls.push("error"),
 });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(section.className.includes("workspace2-open-history-list"), true);
+assert.equal(section.style.values.get("--workspace2-open-history-rows"), "9");
+assert.equal(section.scrollTop, 42);
 assert.equal(section.children.length, 3);
 const officialRow = section.children[1];
 assert.equal(officialRow.classList.values.has("is-selected"), true);

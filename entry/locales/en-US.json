@@ -22,7 +22,7 @@
   "settings.groupSettings": "Groups",
   "settings.groupSettingsHelp": "Manage WorkspaceKit group activation, creation, ungrouping, and pointer gestures in one place.",
   "settings.recentWorkflows": "Open history count",
-  "settings.recentWorkflowsHelp": "How many recently opened workflows the \"Open\" section keeps at most. Older entries drop off beyond this limit; the workflow files themselves are not affected.",
+  "settings.recentWorkflowsHelp": "Sets the fixed visible height of the Open section (5–15 rows). Additional open workflows remain available by scrolling inside the section; workflow files are not affected.",
   "settings.panelOpacity": "Panel opacity",
   "settings.panelGlass": "Glass background",
   "settings.panelBlur": "Background blur",

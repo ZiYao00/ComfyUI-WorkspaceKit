@@ -18,8 +18,9 @@ export function createWorkflowRecentStore({
   onLimitChanged,
 }) {
   function snapLimit(value) {
-    const normalized = Math.max(2, Math.min(20, Math.round(Number(value) || 5)));
-    return Math.abs(normalized - 5) <= 1 ? 5 : normalized;
+    // This is a genuinely linear UI setting: every integer represents one
+    // visible Open-history row. Do not retain the older near-5 snapping rule.
+    return Math.max(5, Math.min(15, Math.round(Number(value) || 5)));
   }
 
   function limit() {

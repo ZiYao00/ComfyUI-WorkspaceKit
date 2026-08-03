@@ -24,15 +24,15 @@ export function createWorkflowSectionRenderer({
     storage.setItem(key, collapsed ? "1" : "0");
   }
 
-  function createSection({ title, collapsedKey, className = "", content }) {
+  function createSection({ title, collapsedKey, className = "", content, collapsible = true }) {
     const section = document.createElement("section");
     section.className = `workspace2-workflow-section ${className}`.trim();
-    const collapsed = isCollapsed(collapsedKey);
+    const collapsed = collapsible && isCollapsed(collapsedKey);
     section.classList.toggle("is-collapsed", collapsed);
 
     const { header } = createSectionHeader({
       titleText: title,
-      collapsible: true,
+      collapsible,
       expanded: !collapsed,
     });
     header.classList.add("workspace2-workflow-section-header");
@@ -41,14 +41,16 @@ export function createWorkflowSectionRenderer({
     body.className = "workspace2-workflow-section-content";
     body.append(content);
 
-    header.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const next = !section.classList.contains("is-collapsed");
-      section.classList.toggle("is-collapsed", next);
-      setSectionHeaderExpanded(header, !next);
-      setCollapsed(collapsedKey, next);
-    });
+    if (collapsible) {
+      header.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const next = !section.classList.contains("is-collapsed");
+        section.classList.toggle("is-collapsed", next);
+        setSectionHeaderExpanded(header, !next);
+        setCollapsed(collapsedKey, next);
+      });
+    }
 
     section.append(header, body);
     return section;

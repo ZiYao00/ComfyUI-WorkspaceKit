@@ -5944,7 +5944,7 @@ const isWorkflowSectionCollapsed = workflowSections.isCollapsed;
 const setWorkflowSectionCollapsed = workflowSections.setCollapsed;
 const createWorkflowSection = workflowSections.createSection;
 
-function recentWorkflowRows(el) {
+function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
   const existing = new Map(state.items.filter((item) => item.type === "file").map((item) => [item.path, item]));
   const officialMode = state.isOfficialRoot && Boolean(getOfficialWorkflowStore(app));
   const activeOfficialWorkflow = officialMode ? getActiveOfficialWorkflow(app) : null;
@@ -5994,6 +5994,8 @@ function recentWorkflowRows(el) {
   });
   return renderOpenWorkflowList({
     entries,
+    capacity: workflowRecentLimit(),
+    scrollTop,
     createRenameInput: (entry) => createWorkflowRenameInput(el, entry.item, "open"),
     onOpen: async (entry) => {
       state.selectedPath = entry.path;
@@ -6031,6 +6033,7 @@ function renderPanel(el) {
     trash: state.showTrash,
   });
   const snapshot = scrollSnapshot(el);
+  const openHistoryScrollTop = el?.querySelector?.(".workspace2-open-history-list")?.scrollTop || 0;
   state.workflowsTarget = el;
   startAutoRefresh(el);
   styles();
@@ -6182,7 +6185,9 @@ function renderPanel(el) {
   const openSection = createWorkflowSection({
     title: t("workflows.recent"),
     collapsedKey: WORKFLOW_OPEN_SECTION_COLLAPSED_KEY,
-    content: recentWorkflowRows(el),
+    className: "is-open-history",
+    collapsible: false,
+    content: recentWorkflowRows(el, { scrollTop: openHistoryScrollTop }),
   });
 
   const browseSection = createWorkflowSection({

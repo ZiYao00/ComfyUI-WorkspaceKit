@@ -1028,19 +1028,37 @@ export function styles() {
     }
     .workspace2-workflow-blueprint .workspacekit-ui-panel-content-slot {
       padding: 8px 10px 10px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
     .workspace2-workflow-content {
       flex: 1 1 auto;
       min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 10px;
+      overflow: hidden;
     }
     .workspace2-workflow-section-header .workspace2-section-line {
       display: none;
     }
     .workspace2-workflow-section.is-browse {
       flex: 1 1 auto;
+    }
+    .workspace2-workflow-section.is-open-history {
+      flex: 0 0 auto;
+      padding: 6px;
+      border: 1px solid color-mix(in srgb, var(--workspace2-border) 54%, transparent);
+      border-radius: var(--workspace2-radius);
+      background: color-mix(in srgb, var(--workspace2-hover) 38%, transparent);
+      overflow: hidden;
+    }
+    .workspace2-workflow-section.is-open-history .workspace2-section-header {
+      min-height: 20px;
+      padding: 0 6px 4px;
+      color: var(--workspace2-muted);
+      pointer-events: none;
     }
     .workspace2-section-header {
       min-height: 24px;
@@ -1104,6 +1122,8 @@ export function styles() {
     }
     .workspace2-workflow-section.is-browse .workspace2-workflow-section-content {
       flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
     }
     .workspace2-workflow-section.is-collapsed .workspace2-workflow-section-content {
       display: none;
@@ -1115,13 +1135,23 @@ export function styles() {
       margin: 0;
       padding: 2px 0 0;
     }
+    .workspace2-open-history-list {
+      --workspace2-open-history-row-height: max(26px, calc(var(--workspace2-row-height) - 4px));
+      height: calc(var(--workspace2-open-history-rows) * var(--workspace2-open-history-row-height));
+      box-sizing: border-box;
+      gap: 0;
+      padding: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
     .workspace2-current-workflow {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       gap: 8px;
-      min-height: var(--workspace2-row-height);
-      padding: 2px 5px 2px 6px;
+      min-height: var(--workspace2-open-history-row-height, var(--workspace2-row-height));
+      padding: 1px 5px 1px 6px;
       border: 1px solid transparent;
       border-radius: var(--workspace2-radius-sm);
     }

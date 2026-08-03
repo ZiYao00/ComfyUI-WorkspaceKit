@@ -12,6 +12,8 @@ export function createWorkflowOpenListRenderer({ document, translate, iconButton
 
   function renderOpenWorkflowList({
     entries,
+    capacity = 5,
+    scrollTop = 0,
     createRenameInput,
     onOpen,
     onSave,
@@ -21,7 +23,8 @@ export function createWorkflowOpenListRenderer({ document, translate, iconButton
     onError,
   }) {
     const section = document.createElement("div");
-    section.className = "workspace2-recent-workflows";
+    section.className = "workspace2-recent-workflows workspace2-open-history-list";
+    section.style.setProperty("--workspace2-open-history-rows", String(Math.max(5, Math.min(15, Number(capacity) || 5))));
     const label = document.createElement("div");
     label.className = "workspace2-current-workflow-label";
     label.textContent = translate("workflows.recent");
@@ -32,6 +35,7 @@ export function createWorkflowOpenListRenderer({ document, translate, iconButton
       empty.className = "workspace2-current-workflow-name is-empty";
       empty.textContent = translate("workflows.currentEmpty");
       section.append(empty);
+      queueMicrotask(() => { section.scrollTop = Number(scrollTop) || 0; });
       return section;
     }
 
@@ -76,6 +80,10 @@ export function createWorkflowOpenListRenderer({ document, translate, iconButton
       row.append(info, actions);
       section.append(row);
     }
+    // The Workflows panel is rebuilt after official-store updates. Restore this
+    // independent scroll position after the newly created section is mounted;
+    // otherwise a save or dirty-state render sends a long Open history to top.
+    queueMicrotask(() => { section.scrollTop = Number(scrollTop) || 0; });
     return section;
   }
 

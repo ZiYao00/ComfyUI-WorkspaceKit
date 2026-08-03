@@ -1,64 +1,40 @@
-# 开发状态索引
+# WorkspaceKit 文档导航
 
-> 更新：2026-08-01。此页是中文导航页，不替代测试证据或内部设计文档。
+> 更新：2026-08-02。此页是公开文档入口与维护说明，不记录逐批开发进度。
 
-## 当前优先级
+## 进度与发布的三文档机制
 
-### 已完成：编组转换双向闭环
-
-转换算法的夹具验收已覆盖：纯往返、混合、空工作流、重叠/边界、原生新增与删除、无效边界和失败注入。新增原生组会采用默认 WorkspaceKit 样式；已删除原生组不会静默复活。
-
-当前测试包与主包的人工验收未发现异常。复杂夹具的保存并重开保留为后续版本改动时的回归项，而不是当前阻塞项。
-
-- 事实证据：[测试记录](TESTING.md)
-- 内部状态机与验收矩阵：[编组转换加固](../.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md)
-
-### 已完成：Workflows 回收站可靠性
-
-- 测试包已完成真实页面的删除、回收站显示、恢复、转系统回收站与清空全部；服务端也覆盖原子清单、补偿和中断恢复契约。
-- 新建、打开、保存、重命名、移动及 Browse/官方 Store 同步继续作为后续改动的回归清单，不再以“未修复 P0”表述。
-
-## 已实现，持续回归
-
-| 领域 | 已完成基础 | 后续验收 |
+| 发生什么 | 只更新哪里 | 说明 |
 | --- | --- | --- |
-| Nodes2 缓存 | 服务端快照、签名、IndexedDB、跨标签协调 | 大插件量、多标签、独立浏览器配置、主包体验 |
-| Templates | 首次打开解耦、基础模板交互 | 主包异常、复杂预览、批量恢复/撤销 |
-| 外观 | 透明/磨砂、面板分区 | 暗色、浅色、透明、磨砂主包视觉回归 |
-| 编组 UX | 双向转换入口、选择与设置调整 | 背景滑块第二阶段设计与复杂持久化验收 |
-| Layout/Provider | 统一 UI Template、合并/独立路径、Vendor 回退与四种外观矩阵 | 后续 Provider 或 UI Template 版本升级时，按同一矩阵回归；不作为当前 P0 |
+| 任务开始、状态变化、技术债或未决项 | 本地 `.dev-docs/DEV_LOG.zh-CN.md` | 唯一开发进度真源；该目录不发布到 GitHub |
+| 可重复测试、真实页面验收或已知失败 | [TESTING.md](TESTING.md) | 只记录事实、命令、环境与结果 |
+| 用户可感知的已完成变更、准备发布 | [CHANGELOG.md](../CHANGELOG.md) | 只在功能完成后进入 Unreleased 或版本说明 |
 
-## 本轮文案与套件收尾（2026-08-01）
+`ROADMAP.md` 只在产品方向变化时更新；架构/API/UI Template 文档只在对应公开契约稳定后更新。不要为每个小批次重复修改这些文档。
 
-- 品牌规范已建立：对外产品名为 **ComfyUI WorkspaceKit（WK）**，中文正式名为 **WK 工作区**，系列称呼为 **WK 套件**；核心与关联模块统一使用 `WK 工作流 / 节点 / 模板 / 编组 / 版式 / 主题`。
-- 中英文 README、Registry 显示名、双语语言包与回退字符串已完成首轮用户可见文案统一；技术仓库名、接口、存储键、Provider ID 与兼容路径均未修改。
-- UI Template 的 primitive、API、兼容与导出合同已复跑通过；Layout 的 Vendor 回退、兼容宿主、Provider 和共享内容测试均通过。
-- 测试包已在本轮重启后复核 WorkspaceKit 入口、核心标签、托管 Layout 标签和 Workflows 回收站完整路径。语言包最终呈现仍随 ComfyUI 的客户端语言加载时机保留为轻量回归项。
+## 用户与贡献者入口
 
-## 已规划，尚未进入实现
-
-- Alt 拖拽复制 WorkspaceKit 编组、内部节点与连线。
-- 编组批量删除确认或可靠撤销。
-- `Shift+1` 至 `Shift+4` 自定义，及 ComfyUI/浏览器冲突提示。
-- 数据导出/导入、schema、导入前自动备份体验完善。
-- GIF 教程、Registry Banner、根目录风险提示。
-- 继续小批次拆分 `entry.js`；当前模块边界见 [ENTRY_MAP.md](ENTRY_MAP.md) 与 [MODULE_MAP.md](MODULE_MAP.md)。
-
-## 文档地图
-
-| 文档 | 权威用途 |
+| 目的 | 文档 |
 | --- | --- |
-| [TESTING.md](TESTING.md) | 可复现实验、错误、夹具与通过证据 |
-| [ROADMAP.zh-CN.md](../ROADMAP.zh-CN.md) | 面向用户的产品计划 |
-| [.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md](../.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md) | 编组转换内部状态机和验收矩阵 |
-| [PANEL_QUICKSTART.md](PANEL_QUICKSTART.md) | 新插件合并侧边栏的实际接入路径 |
-| [PANEL_FAMILY_MODULE_REBUILD_PLAN.md](PANEL_FAMILY_MODULE_REBUILD_PLAN.md) | 家族模块 v2 重搭计划；v1 示例仅保留，不继续扩展 |
-| [BREAKING_CHANGES_REPORT.md](BREAKING_CHANGES_REPORT.md) | UI Template consumer/export 变更审计与已知风险 |
-| [BACKUP_CONVENTION.md](BACKUP_CONVENTION.md) | 备份规则 |
+| 安装、功能概览与使用说明 | [README.zh-CN.md](../README.zh-CN.md) / [README.md](../README.md) |
+| 未来产品方向 | [ROADMAP.zh-CN.md](../ROADMAP.zh-CN.md) / [ROADMAP.md](ROADMAP.md) |
+| 版本历史 | [CHANGELOG.md](../CHANGELOG.md) |
+| 贡献、安全与版本规则 | [CONTRIBUTING.md](../CONTRIBUTING.md) / [SECURITY.md](../SECURITY.md) / [RELEASE_VERSIONING.md](RELEASE_VERSIONING.md) |
 
-## 维护规则
+## 开发与集成入口
 
-1. 只有真实页面或可重复 E2E 结果才能标为“通过”。
-2. `TESTING.md` 记录事实；路线图只记录产品状态。
-3. 内部专项设计集中在 `.dev-docs/`，避免在 `docs/` 建立重复版本。
-4. 每次新功能先在本索引登记分类，再决定是否需要新的专项文档。
+| 目的 | 文档 |
+| --- | --- |
+| 可重复测试证据 | [TESTING.md](TESTING.md) |
+| 总体架构、入口与模块边界 | [ARCHITECTURE.md](ARCHITECTURE.md) / [ENTRY_MAP.md](ENTRY_MAP.md) / [MODULE_MAP.md](MODULE_MAP.md) |
+| Provider 注册、面板分区与 UI Template | [PANEL_PROVIDER_API.md](PANEL_PROVIDER_API.md) / [PANEL_BLUEPRINT.md](PANEL_BLUEPRINT.md) / [PANEL_UI_TEMPLATE.md](PANEL_UI_TEMPLATE.md) |
+| 新建可独立/合并的家族插件 | [PANEL_QUICKSTART.md](PANEL_QUICKSTART.md) |
+| 已确认的 WK UI Template 重建与 Theme 迁移方案 | [WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md](WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md) |
+| WK、Layout、Theme 的统一图标系统 | [WK_ICON_SYSTEM_PLAN.zh-CN.md](WK_ICON_SYSTEM_PLAN.zh-CN.md) |
+| 备份规则 | [BACKUP_CONVENTION.md](BACKUP_CONVENTION.md) |
+
+## 历史与专项参考
+
+- [PANEL_FAMILY_MODULE_REBUILD_PLAN.md](PANEL_FAMILY_MODULE_REBUILD_PLAN.md)：家族模块 v2 示例的历史草案，不替代当前 UI Template 重建计划；
+- [BREAKING_CHANGES_REPORT.md](BREAKING_CHANGES_REPORT.md)：一次性 UI Template consumer/export 审计快照，不是长期运行时契约；
+- 历史技术名称如 `Workspace2` 只在测试记录、兼容层和旧数据说明中保留，不能作为新的对外命名依据。

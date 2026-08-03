@@ -147,10 +147,10 @@ export function createTemplateLibraryStore({
     }
   }
 
-  async function saveTemplateLibrary(el) {
+  async function saveTemplateLibrary(el, { render = true } = {}) {
     const data = await postJson("/workspace2/templates/library", { library: state.library });
     state.library = normalizeTemplateLibrary(data.library);
-    if (el?.isConnected) {
+    if (render && el?.isConnected) {
       renderTemplatesPanel(el);
     }
   }

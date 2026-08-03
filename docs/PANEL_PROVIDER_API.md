@@ -7,9 +7,9 @@ their feature behavior; WorkspaceKit owns tab placement and lifecycle.
 {
   apiVersion: 1,
   id: "example.panel",
-  title: "Example",       // required fallback
-  icon: "🧩",              // optional emoji/text icon
-  getTitle: () => "示例",  // optional provider-localized title
+  title: "Example",          // required fallback
+  iconKey: "example",        // optional local icon identity
+  getTitle: () => "示例",     // optional provider-localized title
   render({ headerHost, contextHost, contentHost, surface, app, translate, ui }) {
     // Append only to the supplied hosts; return dispose().
     // ui is optional; an existing Provider may safely ignore it.
@@ -24,9 +24,12 @@ their feature behavior; WorkspaceKit owns tab placement and lifecycle.
 }
 ```
 
-WorkspaceKit displays `icon + getTitle()` when available, otherwise falls back
-to `title`, then `id`. `getTitle()` errors are isolated and never hide a tab.
-Providers must not import WorkspaceKit private modules or mutate its sidebar.
+WorkspaceKit displays the localized title in its top tab strip, falling back to
+`title`, then `id`. It intentionally does not place an emoji before every tab.
+`iconKey` identifies a Provider's local functional/entry icon; a Provider must
+continue to work if the host does not recognize that key. `getTitle()` errors
+are isolated and never hide a tab. Providers must not import WorkspaceKit
+private modules or mutate its sidebar.
 `renderSettings` is optional. When present, WorkspaceKit places it under
 Settings > Advanced > Extension settings; Providers without it create no empty
 settings area.
@@ -39,10 +42,15 @@ valid when they ignore it.
 
 When available, `ui` exposes `version`, `major`, `supports(requiredMajor)`,
 and generic primitive factories such as `createModuleHeader`, `createSection`,
-`createIconButton`, `createSegmentedControl`, `createRangeControl`,
+`createIcon`, `createIconButton`, `createSegmentedControl`, `createRangeControl`,
 `createCommandGrid`, and `createStandaloneShell`. Providers must check the
 major contract they require and keep a safe local presentation fallback when
 `ui` is absent or incompatible.
+
+`ui.createIcon(iconKey, { size, className })` returns the host's local SVG
+element. Use it for functional controls only, after checking that the Provider
+requires the `icon-kit` capability. Do not pass user-entered emoji, file icons,
+or arbitrary SVG markup into this API; those remain Provider/content data.
 
 The UI Template runtime is published independently from the setting that
 allows Providers to merge into the WorkspaceKit tab strip. That setting affects

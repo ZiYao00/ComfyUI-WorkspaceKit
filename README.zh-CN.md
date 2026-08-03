@@ -6,7 +6,7 @@
 >
 > **高效管理工作流、节点收藏与节点模板，用更顺手的编组方式整理复杂画布。**
 
-![Version](https://img.shields.io/badge/version-0.2.4-blue)
+![Version](https://img.shields.io/badge/version-0.2.5-blue)
 ![Status](https://img.shields.io/badge/status-public%20beta-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 

@@ -3,14 +3,26 @@ import { createHash } from "node:crypto";
 export const PANEL_UI_TEMPLATE_EXPORT_FILES = Object.freeze([
   "blueprint.js",
   "compatibility.js",
+  "icons.js",
   "primitives.js",
   "styles.js",
   "template.js",
   "version.js",
 ]);
 
+// Line endings are normalized before hashing. Git's autocrlf rewrites the WK
+// source checkout to CRLF on Windows while the exported Vendor copies stay LF,
+// which made every file report a hash mismatch even when the code was byte-for-
+// byte equivalent. A permanently red verification is worse than none: it hides
+// the real content divergence it exists to catch (a missing Vendor helper once
+// stopped Theme from loading at all). Browsers do not care which terminator a
+// module uses, so equivalence here is the property worth asserting.
+function normalizeForHash(content) {
+  return String(content).replace(/\r\n/g, "\n");
+}
+
 export function sha256(content) {
-  return createHash("sha256").update(content).digest("hex");
+  return createHash("sha256").update(normalizeForHash(content)).digest("hex");
 }
 
 export function createPanelUiTemplateManifest({ uiVersion, sourceCommit, files }) {

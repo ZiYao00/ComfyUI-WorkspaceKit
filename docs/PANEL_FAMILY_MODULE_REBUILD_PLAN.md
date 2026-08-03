@@ -1,8 +1,15 @@
 # Panel Family-Module Provider 重搭方案
 
-> **状态**:planned(等待主仓插件大量修复完成 + 重搭执行窗口)
+> **状态**：历史 v1 → v2 示例草案，未执行。
 > **写于**:2026-07-31,与用户协商确定
 > **目标读者**:本会话后续轮次、其它会话接手本仓维护者、AI 智能体
+
+> **2026-08-02 定位更新**：本文只保留对 `examples/family-module-provider/`
+> v1 问题与未来 v2 示例的设计记录。它不再负责 WK、Layout、Theme 的整体
+> UI 重建或实施进度；后者以
+> [`WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md`](WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md)
+> 为准。v1 示例在新的 Template 经真实家族插件验证前必须保留，不能按本文旧
+> 草案直接删除。
 
 ---
 

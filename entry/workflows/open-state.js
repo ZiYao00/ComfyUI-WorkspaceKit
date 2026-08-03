@@ -199,26 +199,37 @@ export function createWorkflowOpenState({
     });
   }
 
-  function syncOfficialSelection() {
-    if (!state.isOfficialRoot) return;
-    const activeWorkflow = getActiveOfficialWorkflow(app);
-    const path = relativeWorkflowPathFromOfficial(activeWorkflow?.path || "");
-    if (path) state.selectedPath = path;
+  // A render arriving from the official store must not tear down an open inline
+  // rename input. createFolder() schedules such a sync moments after mounting
+  // its input, which is how a brand-new folder used to lose its editor.
+  function isInlineEditing() {
+    return Boolean(state.editingPath) || Boolean(state.workflowRenameInProgress);
   }
 
+  // Deliberately does not touch state.selectedPath any more.
+  // The Browse tree's selection is owned by the user's own clicks.
+  //
+  // This module used to overwrite state.selectedPath with the canvas's active
+  // workflow on every official-store notification, which dragged the Browse
+  // selection onto whatever workflow happened to be open — most visibly right
+  // after creating a folder. Nothing legitimate depended on that write: the Open
+  // section highlights the live workflow by object identity, and
+  // selectedFolderPath() only answers for folders, so a workflow-file path never
+  // influenced where new folders land. The write, and the now-empty function that
+  // performed it, are gone.
+
   function scheduleOfficialPanelRender() {
-    if (state.workflowRenameInProgress) {
+    if (isInlineEditing()) {
       state.officialWorkflowRenderPending = true;
       return;
     }
     if (state.officialWorkflowRenderTimer) window.clearTimeout(state.officialWorkflowRenderTimer);
     state.officialWorkflowRenderTimer = window.setTimeout(() => {
       state.officialWorkflowRenderTimer = null;
-      if (state.workflowRenameInProgress) {
+      if (isInlineEditing()) {
         state.officialWorkflowRenderPending = true;
         return;
       }
-      syncOfficialSelection();
       renderIfWorkflowsActive();
     }, 0);
   }
@@ -231,7 +242,6 @@ export function createWorkflowOpenState({
     }
     officialSyncReady = true;
     subscribeOfficialWorkflowStore(app, scheduleOfficialPanelRender);
-    syncOfficialSelection();
   }
 
   return {
@@ -243,7 +253,6 @@ export function createWorkflowOpenState({
     remapOfficialWorkflowPathState,
     removeOfficialWorkflowPathState,
     setupDirtyTracking,
-    syncOfficialSelection,
     scheduleOfficialPanelRender,
     setupOfficialStoreSync,
   };

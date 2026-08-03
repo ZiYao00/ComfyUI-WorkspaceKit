@@ -43,8 +43,8 @@ Edit these `CHANGE ME` spots:
 
 | File | What to change |
 | --- | --- |
-| `web/ui/provider.js` | `PROVIDER_ID`, `PROVIDER_TITLE`, `PROVIDER_ICON` |
-| `web/ui/standalone-panel.js` | `PANEL_ID`, the standalone `icon` |
+| `web/ui/provider.js` | `PROVIDER_ID`, `PROVIDER_TITLE`, `PROVIDER_ICON_KEY` |
+| `web/ui/standalone-panel.js` | `PANEL_ID`, the ComfyUI SidebarTab class-string fallback |
 | `web/main.js` | `EXTENSION_NAME` |
 | `web/foundation/i18n.js` | the `console.warn` log prefix |
 | `web/ui/module-view.js` | `ROOT_CLASS` (your scoped CSS prefix) |
@@ -62,15 +62,20 @@ const header = ui.createModuleHeader({ title: translate("mything.title") });
 const section = ui.createSection({ title: "…", description: "…" });
 const slider = ui.createRangeControl({ label: "Size", min: 8, max: 40, step: 1,
   formatValue: (v) => `${Math.round(v)}px`, onInput: (v) => applySize(v) });
+const refreshIcon = ui.createIcon("refresh", { size: 16 });
 ```
 
 Available primitives: `createModuleHeader`, `createSection`, `createControlRow`,
-`createButton`, `createIconButton`, `createSegmentedControl`,
+`createButton`, `createIcon`, `createIconButton`, `createSegmentedControl`,
 `createRangeControl`, `createCommandGrid`, `createContentSlots`,
 `createStandaloneShell`, `createPanelBlueprint`.
 
 Declare the capabilities you actually use in `provider.js` `UI_REQUIREMENTS` so
 the host only replaces the bundled copy when it can supply them.
+
+If you use `createIcon`, also require `icon-kit`. It is for stable functional
+icons only. Keep user-selected emoji, folder icons, and generated previews in
+your feature data; do not turn those into host icon keys.
 
 **Custom visuals** (a color picker, a responsive grid, anything the Template
 doesn't provide) are fine — build them on top of the `--workspacekit-ui-*`

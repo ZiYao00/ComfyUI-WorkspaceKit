@@ -1,11 +1,7 @@
 # WorkspaceKit Panel UI Template v1
 
-Status: **implementation active.** Batches 0–4 have implementation and
-contract evidence. Template v1.3.0 adds a public capability contract; v1.2.0 promotes the existing WorkspaceKit product
-header and compact control rhythm into shared primitives; Layout now requires
-that Template (host or generated Vendor) for all visual construction. Real
-dark/light/transparent/frosted comparison of both Layout placements remains
-pending and is not claimed as accepted.  
+Status: **stable public v1.3.0 contract.** New capabilities are added only
+after their compatibility and real-page evidence pass.
 Scope: WorkspaceKit, WorkspaceKit family plugins such as Layout, and optional
 third-party panel Providers.
 
@@ -13,8 +9,9 @@ This document defines the intended UI-sharing boundary. It does not change the
 current Provider API v1 contract or promise that an existing Provider already
 uses these components.
 
-Execution status, backups, batch boundaries, and acceptance evidence are
-tracked separately in the batch-level implementation log under `.dev-docs/` (not published).
+Reproducible acceptance evidence is recorded in [`TESTING.md`](TESTING.md).
+The approved clean-rebuild and Layout/Theme migration sequence is tracked
+separately in [`WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md`](WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md); this public contract changes only after a planned capability has passed that sequence.
 
 ## 1. Product goal
 
@@ -178,6 +175,7 @@ The first version should expose only stable, generic primitives:
 - `ui.version`, `ui.supports(requiredMajor)`, and `ui.contract`;
 - `ui.createModuleHeader({ title, status })`;
 - `ui.createSection({ title, description, actions })`;
+- `ui.createIcon(iconKey, { size, className })`;
 - `ui.createIconButton(options)`;
 - `ui.createSegmentedControl(options)`;
 - `ui.createRangeControl(options)`;

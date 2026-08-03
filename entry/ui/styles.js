@@ -62,6 +62,10 @@ export function styles() {
       --workspace2-danger-soft: rgba(255, 69, 58, 0.10);
       --workspace2-danger-mid: rgba(255, 69, 58, 0.22);
       --workspace2-danger-border: rgba(255, 69, 58, 0.58);
+      --workspace2-info: var(--p-blue-400, #60A5FA);
+      --workspace2-info-soft: color-mix(in srgb, var(--workspace2-info) 12%, transparent);
+      --workspace2-info-mid: color-mix(in srgb, var(--workspace2-info) 22%, transparent);
+      --workspace2-info-border: color-mix(in srgb, var(--workspace2-info) 58%, transparent);
       --workspace2-tab-bg: var(--comfy-menu-secondary-bg, var(--comfy-menu-bg, var(--content-bg, var(--p-tabs-tab-background, #202124))));
       --workspace2-tab-hover-bg: var(--comfy-menu-hover-bg, var(--content-hover-bg, color-mix(in srgb, var(--workspace2-accent) 10%, var(--workspace2-tab-bg))));
       --workspace2-tab-active-bg: color-mix(in srgb, var(--contrast-mix-color, var(--workspace2-accent)) 24%, var(--workspace2-tab-bg));
@@ -830,14 +834,24 @@ export function styles() {
       background: var(--workspace2-hover-glass, var(--workspace2-hover));
     }
     .workspace2-button.is-trash-toggle {
-      border-color: var(--workspace2-accent-border);
-      color: var(--workspace2-accent);
-      background: var(--workspace2-accent-soft);
+      border-color: var(--workspace2-danger-border);
+      color: var(--workspace2-danger);
+      background: var(--workspace2-danger-soft);
     }
-    .workspace2-button.is-trash-toggle:hover,
-    .workspace2-button.is-trash-toggle.is-active {
-      border-color: var(--workspace2-accent);
-      background: var(--workspace2-accent-mid);
+    .workspace2-button.is-trash-toggle:hover {
+      border-color: var(--workspace2-danger);
+      background: var(--workspace2-danger-mid);
+    }
+    /* The active state is navigation back to the library, not a destructive
+       action. Keep it information-blue and use arrowLeft, never restore. */
+    .workspace2-button.is-trash-toggle.is-trash-return {
+      border-color: var(--workspace2-info-border);
+      color: var(--workspace2-info);
+      background: var(--workspace2-info-soft);
+    }
+    .workspace2-button.is-trash-toggle.is-trash-return:hover {
+      border-color: var(--workspace2-info);
+      background: var(--workspace2-info-mid);
     }
     .workspace2-workflow-sort-button:not([data-sort="nameAsc"]) {
       border-color: var(--workspace2-accent-border);
@@ -2127,7 +2141,9 @@ export function styles() {
       box-shadow: 0 10px 30px rgba(0,0,0,.35);
     }
     .workspace2-menu-item {
-      display: block;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       width: 100%;
       min-height: 28px;
       border: 0;
@@ -2137,6 +2153,18 @@ export function styles() {
       text-align: left;
       padding: 5px 9px;
       cursor: pointer;
+    }
+    .workspace2-menu-item-icon {
+      flex: 0 0 15px;
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+    }
+    .workspace2-menu-item-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .workspace2-menu-divider {
       height: 1px;

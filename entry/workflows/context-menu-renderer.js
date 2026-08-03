@@ -7,6 +7,7 @@ export function createWorkflowContextMenuRenderer({
   t,
   closeContextMenu,
   handleError,
+  createIcon,
   onNewSubfolder,
   onPersonalizeFolder,
   onResetFolderStyle,
@@ -30,11 +31,18 @@ export function createWorkflowContextMenuRenderer({
     menu.addEventListener("click", (event) => event.stopPropagation());
     menu.addEventListener("contextmenu", (event) => event.preventDefault());
 
-    const addItem = (label, onClick) => {
+    // Keep menu action callbacks owned by entry.js. This renderer only adds
+    // the Icon Kit glyph and label layout for a clearer action scan.
+    const addItem = (iconName, label, onClick) => {
       const button = document.createElement("button");
       button.className = "workspace2-menu-item";
       button.type = "button";
-      button.textContent = label;
+      const icon = createIcon(iconName);
+      icon.classList.add("workspace2-menu-item-icon");
+      const text = document.createElement("span");
+      text.className = "workspace2-menu-item-label";
+      text.textContent = label;
+      button.append(icon, text);
       button.addEventListener("click", async () => {
         closeContextMenu();
         try {
@@ -47,15 +55,15 @@ export function createWorkflowContextMenuRenderer({
     };
 
     if (item.type === "folder") {
-      addItem(t("menu.newSubfolder"), () => onNewSubfolder(el, item));
-      addItem(t("folder.personalize"), () => onPersonalizeFolder(el, item, { clientX: x, clientY: y }));
-      addItem(t("folder.resetStyle"), () => onResetFolderStyle(el, item));
+      addItem("folderPlus", t("menu.newSubfolder"), () => onNewSubfolder(el, item));
+      addItem("palette", t("folder.personalize"), () => onPersonalizeFolder(el, item, { clientX: x, clientY: y }));
+      addItem("refresh", t("folder.resetStyle"), () => onResetFolderStyle(el, item));
     } else {
-      addItem(t("menu.open"), () => onOpenWorkflow(item.path));
+      addItem("folderOpen", t("menu.open"), () => onOpenWorkflow(item.path));
     }
-    addItem(t("menu.rename"), () => onRename(el, item));
-    addItem(t("menu.moveToRoot"), () => onMoveToRoot(el, item));
-    addItem(t("menu.moveToTrash"), () => onMoveToTrash(el, item));
+    addItem("edit", t("menu.rename"), () => onRename(el, item));
+    addItem("rootArrow", t("menu.moveToRoot"), () => onMoveToRoot(el, item));
+    addItem("trash", t("menu.moveToTrash"), () => onMoveToTrash(el, item));
 
     panel.append(menu);
     state.contextMenuElement = menu;

@@ -95,6 +95,77 @@ export function createPanelUiPrimitives(document = globalThis.document) {
     return { element, leading: leadingElement, trailing: trailingElement };
   };
 
+  // A single disclosure pattern avoids stacking an unrelated border, divider,
+  // and fold-line for every feature. It is intentionally content-agnostic so
+  // a family panel keeps ownership of its own labels and state persistence.
+  const createDisclosureSection = ({ title = "", description = "", open = false, content, actions = [] } = {}) => {
+    const element = document.createElement("details");
+    element.className = "workspacekit-ui-disclosure workspacekit-ui-section";
+    element.open = Boolean(open);
+    const summary = document.createElement("summary");
+    summary.className = "workspacekit-ui-disclosure-summary workspacekit-ui-section-head";
+    const titleElement = document.createElement("span");
+    titleElement.className = "workspacekit-ui-section-title";
+    titleElement.textContent = title;
+    const actionElement = document.createElement("span");
+    actionElement.className = "workspacekit-ui-disclosure-actions";
+    actionElement.append(...actions.filter(Boolean));
+    summary.append(titleElement, actionElement);
+    element.append(summary);
+    if (description) {
+      const descriptionElement = document.createElement("div");
+      descriptionElement.className = "workspacekit-ui-section-description";
+      descriptionElement.textContent = description;
+      element.append(descriptionElement);
+    }
+    const body = document.createElement("div");
+    body.className = "workspacekit-ui-disclosure-body";
+    appendContent(body, content);
+    element.append(body);
+    return { element, summary, title: titleElement, actions: actionElement, body, setOpen(value) { element.open = Boolean(value); } };
+  };
+
+  // This is the shared horizontal action band. It does not decide which
+  // commands are primary or destructive; feature code supplies those buttons.
+  const createCompactActionBar = ({ leading = [], trailing = [] } = {}) => {
+    const element = document.createElement("div");
+    element.className = "workspacekit-ui-compact-action-bar";
+    const leadingElement = document.createElement("div");
+    leadingElement.className = "workspacekit-ui-compact-action-bar-leading";
+    leadingElement.append(...leading.filter(Boolean));
+    const trailingElement = document.createElement("div");
+    trailingElement.className = "workspacekit-ui-compact-action-bar-trailing";
+    trailingElement.append(...trailing.filter(Boolean));
+    element.append(leadingElement, trailingElement);
+    return { element, leading: leadingElement, trailing: trailingElement };
+  };
+
+  // A visible, keyboard-addressable drop target. It deliberately does not read
+  // files itself: the feature that owns the drop decides accepted types, size
+  // limits, parsing, and any Base64 persistence policy.
+  const createDropzoneSurface = ({ label = "", description = "", content, onDrop, onBrowse } = {}) => {
+    const element = document.createElement("button");
+    element.type = "button";
+    element.className = "workspacekit-ui-dropzone";
+    element.setAttribute("aria-label", label || description || "Drop files");
+    const labelElement = document.createElement("span");
+    labelElement.className = "workspacekit-ui-dropzone-label";
+    labelElement.textContent = label;
+    const descriptionElement = document.createElement("span");
+    descriptionElement.className = "workspacekit-ui-dropzone-description";
+    descriptionElement.textContent = description;
+    const contentElement = document.createElement("span");
+    contentElement.className = "workspacekit-ui-dropzone-content";
+    appendContent(contentElement, content);
+    element.append(labelElement, descriptionElement, contentElement);
+    element.addEventListener("dragover", (event) => event.preventDefault());
+    element.addEventListener("drop", (event) => { event.preventDefault(); onDrop?.(event); });
+    if (typeof onBrowse === "function") {
+      element.addEventListener("click", (event) => { event.preventDefault(); onBrowse(event); });
+    }
+    return { element, label: labelElement, description: descriptionElement, content: contentElement };
+  };
+
   const createSegmentedControl = ({ label = "", value, options = [], onChange } = {}) => {
     const element = document.createElement("div");
     element.className = "workspacekit-ui-segmented";
@@ -201,6 +272,9 @@ export function createPanelUiPrimitives(document = globalThis.document) {
     createModuleHeader,
     createSection,
     createControlRow,
+    createDisclosureSection,
+    createCompactActionBar,
+    createDropzoneSurface,
     createButton: createButtonControl,
     createIconButton,
     createSegmentedControl,

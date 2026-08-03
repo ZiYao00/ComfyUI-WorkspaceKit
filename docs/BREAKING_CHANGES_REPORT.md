@@ -1,8 +1,14 @@
 # WorkspaceKit 主仓破坏性变更清单
 
+> **定位**：2026-07-31 的历史审计快照，不是当前公开 API、UI Template 契约或
+> 开发进度真源。
 > **写于**:2026-07-31,在 batch4 中途暂停,响应用户"暂停,先报告契约变更"要求
 > **范围**:本仓 `G:\GitHub\ComfyUI-WorkspaceKit`,不包含 `G:\GitHub\ComfyUI-WorkspaceKit-Theme` / `-Layout` 子项目
 > **目的**:明确 Theme Lab 集成对主仓契约的潜在影响,方便 review 时逐项核对
+
+当前公开契约请查看 `PANEL_PROVIDER_API.md`、`PANEL_BLUEPRINT.md` 和
+`PANEL_UI_TEMPLATE.md`；当前 UI 重建计划请查看
+[`WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md`](WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md)。
 
 ## TL;DR
 

@@ -1,6 +1,6 @@
 # entry.js Structure Map
 
-Navigation index for the **internals** of `entry/entry.js` (~12,200 lines). Its
+Navigation index for the **internals** of `entry/entry.js` (~8,050 lines). Its
 purpose is to let anyone (human or AI) jump straight to the relevant region
 instead of reading the whole file — reading a 12k-line file wastes tokens and
 dilutes working context. See the large-file rules in `CLAUDE.md` / `AGENTS.md`.
@@ -134,12 +134,16 @@ Key: `renderPanel` (L10157), `renderCanvasGroupsPanel` (L10443), `renderTemplate
 `renderNodesPanel` (L10850), `showNodePreview` (L10939), `openNodeContextMenu` (L11151),
 `renderFavoriteGroupFolder` (L11550), `renderEssentialsNodeSection` (L11739), `showFallbackPanel` (L11855).
 
-### Sidebar registration, remount recovery & extension bootstrap — L11865–12178
+### Sidebar registration, remount recovery & extension bootstrap — L7740–8047
 Registers the ComfyUI sidebar tab, remount recovery, context-menu ordering, and
 the `app.registerExtension` composition root with staged `setup()`.
-Key: `registerWorkspace2SidebarTab` (L11874), `installWorkspace2SidebarEmojiIcon` (L11903),
-`recoverWorkspace2SidebarAfterRemount` (L11951), `setupWorkspace2ContextMenuOrdering` (L11991),
-`app.registerExtension({...})` (L12047), staged `setup()` (L12113).
+Key: `registerWorkspace2SidebarTab` (L7740), `installWorkspace2SidebarIcon` (L7769),
+`recoverWorkspace2SidebarAfterRemount` (L7820), `setupWorkspace2ContextMenuOrdering` (L7860),
+`app.registerExtension({...})` (L7916), staged `setup()` (L7982).
+The sidebar entry now renders a local single-colour SVG mask from the Icon Kit;
+`installWorkspace2SidebarIcon` replaced the former emoji-overlay function of a
+similar name. The `icon: "pi pi-sitemap"` in the registration call is a required
+class-string fallback for ComfyUI's `registerSidebarTab()`, not the visible icon.
 
 ---
 
@@ -158,4 +162,8 @@ verification (see Step 3 of the large-file plan).
 | ~~Node search/scoring~~ | ~~L7375–7609~~ | ✅ **Extracted** (2026-07-29): generic primitives → `core/search-scoring.js`, node-specific → `nodes/search.js` via `createNodeSearch` factory. Dead `fuzzySearchMatch`/`nodeSearchText`/`nodePinyinSearchText` removed. See MODULE_MAP |
 | ~~Confirm/notice/inline-confirm dialogs~~ | ~~L2749–3030~~ | ✅ **Extracted** to `entry/ui/dialogs.js` (2026-07-29) via `createWorkspace2Dialogs` factory — see MODULE_MAP |
 
-_Last generated: 2026-07-29. Regenerate after large edits — line numbers drift._
+_Last generated: 2026-07-29. The sidebar-bootstrap region's line numbers and the
+total line count were refreshed on 2026-08-03; every other region below the
+`styles`/`FALLBACK_STRINGS` extractions still carries its pre-extraction offsets
+and is stale by the amounts noted inline. Search by symbol name — treat all line
+numbers here as hints only, and regenerate after large edits._

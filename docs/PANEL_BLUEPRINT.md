@@ -1,8 +1,8 @@
 # WorkspaceKit Panel Blueprint v1
 
-Status: **active staged migration**
+Status: **stable public v1 structural contract**
 
-> **Relationship to other docs**: this file records the visual/structural design intent for panels. The **runtime implementation contract** (versioned UI template, vendor export, host capability protocol) is tracked in [`PANEL_UI_TEMPLATE.md`](PANEL_UI_TEMPLATE.md); the batch-level execution log lives in the internal `.dev-docs/` tree (not published). The Provider surface is in [`PANEL_PROVIDER_API.md`](PANEL_PROVIDER_API.md).
+> **Relationship to other docs**: this file records the visual/structural design intent for panels. The **runtime implementation contract** (versioned UI template, vendor export, host capability protocol) is tracked in [`PANEL_UI_TEMPLATE.md`](PANEL_UI_TEMPLATE.md); the batch-level execution log lives in the internal `.dev-docs/` tree (not published). The Provider surface is in [`PANEL_PROVIDER_API.md`](PANEL_PROVIDER_API.md). The approved-but-not-yet-implemented cross-family rebuild sequence is in [`WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md`](WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md).
 
 ## Product anatomy
 
@@ -29,38 +29,17 @@ no content for that slot; it must not create an empty visual placeholder.
 The Blueprint is optional for external providers. It is the required product
 standard for WorkspaceKit family panels.
 
-## Migration batches
+## Adoption and evidence
 
-| Batch | Scope | Status | Acceptance boundary |
-| --- | --- | --- | --- |
-| B1 | Blueprint factory, scoped styles, Vendor export | Complete | Static Template and Vendor contracts pass |
-| B2 | WorkspaceKit host exposes all four module slots without moving existing content | Done | Existing Workflows/Nodes/Templates still mount unchanged; `contextHost` remains a `toolbarHost` compatibility alias |
-| B3 | Workflows becomes the reference Blueprint panel | Complete | Normal and trash branches, search clear, sorting menu, close/reopen, and Layout tab regression passed; creation/import/drag remain in the broader workflow regression checklist |
-| B4 | Layout consumes the same host slot semantics | Pending | Commands, toolbar modes, density slider, close/reopen and standalone Vendor fallback pass |
-| B5 | Nodes and Templates migrate | Pending | Search, folder operations, template save/rename and shortcut regressions pass |
-| B6 | Theme, narrow width, accessibility and third-party example | Pending | Dark/light/transparent/frosted visual matrix and provider compatibility matrix pass |
+This document intentionally does not track per-batch `Pending`/`Done` state.
+Current implementation work is tracked locally in the development log; only
+reproducible evidence belongs in [`TESTING.md`](TESTING.md). The next approved
+cross-family evolution is recorded in
+[`WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md`](WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md).
 
-## B1 evidence
-
-- `createPanelBlueprint()` produces Header, Toolbar, Controls, and Content
-  slots and hides an empty optional slot.
-- The WorkspaceKit host now exposes the same four named DOM slots through its
-  Provider render contract. This is intentionally structural-only: built-in
-  module renderers retain their current content mount until their own migration
-  batch, and legacy Providers can keep using `contextHost`.
-- `entry/ui-kit/blueprint.js` is part of the deterministic Vendor inventory.
-- WorkspaceKit Template/API/host contracts and Layout Vendor/Provider tests
-  passed on 2026-07-24.
-
-## B3 evidence
-
-- Workflows maps title/status to Header, search/actions to Toolbar, root-drop
-  plus list-scale to Controls, and Open/Browse or Trash to Content.
-- It retains the existing workflow content mount, services, state, and event
-  handlers; this batch does not move workflow data or change any operation.
-- Browser acceptance on the test package confirmed all four slots for both
-  normal and trash branches, search input/clear, sort-menu open/close,
-  close/reopen, and the merged Layout tab without console errors.
+`createPanelBlueprint()` exposes Header, Toolbar, Controls, and Content and
+hides empty optional slots. `contextHost` remains a Toolbar compatibility alias
+for legacy Providers.
 
 ## Guardrails
 

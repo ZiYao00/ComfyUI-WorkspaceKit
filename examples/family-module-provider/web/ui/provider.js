@@ -10,7 +10,9 @@ import { renderModuleView } from "./module-view.js";
 // --- CHANGE ME: plugin identity --------------------------------------------
 export const PROVIDER_ID = "example.family-module";
 export const PROVIDER_TITLE = "Family Module";
-export const PROVIDER_ICON = "🧩";
+// Host metadata only. The standalone SidebarTab API still needs its own
+// class-string fallback; do not use an emoji as Provider identity.
+export const PROVIDER_ICON_KEY = "example";
 // ---------------------------------------------------------------------------
 
 export const PROVIDER_API_VERSION = 1;
@@ -38,7 +40,7 @@ export function createProvider({ app, translate, onHostClaimed }) {
     apiVersion: PROVIDER_API_VERSION,
     id: PROVIDER_ID,
     title: PROVIDER_TITLE,
-    icon: PROVIDER_ICON,
+    iconKey: PROVIDER_ICON_KEY,
     // WorkspaceKit must not import this plugin's locale files. The provider
     // resolves its own current-language title and keeps title as a fallback.
     getTitle: () => translate("example.title"),

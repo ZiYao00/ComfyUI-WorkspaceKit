@@ -30,7 +30,7 @@ const EXPECTED_GLOBALS = [
   'WorkspaceKitPanelUITemplate',
 ];
 const EXPECTED_STYLE_IDS = [
-  'workspace2-sidebar-emoji-icon-style',
+  'workspacekit-sidebar-icon-style',
 ];
 
 function log(step, detail) {
@@ -63,6 +63,39 @@ async function installReadOnlyGuard(page) {
     }
     route.continue();
   });
+}
+
+async function verifyRecycleBinToolbarStates(page) {
+  // This only changes transient panel state in the fresh headless browser
+  // context. The route guard above rejects all WorkspaceKit data mutations.
+  await page.locator('.workspace2-tab-button').click();
+  await page.waitForSelector('.workspace2-button.is-trash-toggle', { timeout: 10_000 });
+
+  async function verifyCurrentPanel(label) {
+    const toggle = page.locator('.workspace2-button.is-trash-toggle');
+    const before = await toggle.evaluate((element) => ({
+      icon: element.querySelector('svg')?.dataset.workspacekitIcon,
+      returnState: element.classList.contains('is-trash-return'),
+    }));
+    await toggle.click();
+    await page.waitForFunction(() => document.querySelector('.workspace2-button.is-trash-toggle svg')?.dataset.workspacekitIcon === 'arrowLeft', null, { timeout: 10_000 });
+    const after = await toggle.evaluate((element) => ({
+      icon: element.querySelector('svg')?.dataset.workspacekitIcon,
+      returnState: element.classList.contains('is-trash-return'),
+    }));
+    if (before.icon !== 'trash' || before.returnState || after.icon !== 'arrowLeft' || !after.returnState) {
+      throw new Error(`${label} recycle-bin icon state mismatch: ${JSON.stringify({ before, after })}`);
+    }
+    log('recycle_toolbar', `${label}: trash -> arrowLeft`);
+  }
+
+  await verifyCurrentPanel('workflows');
+  // Core module order is a stable host contract (Workflows / Nodes / Templates)
+  // while the visible label is localized. Do not hard-code the English word
+  // "Templates" here or Chinese smoke runs produce a false regression.
+  await page.locator('.workspace2-module-tab').nth(2).click();
+  await page.waitForSelector('.workspace2-button.is-trash-toggle', { timeout: 10_000 });
+  await verifyCurrentPanel('templates');
 }
 
 async function main() {
@@ -116,6 +149,21 @@ async function main() {
         extFound: found,
         globalsFound,
         styleFound,
+        rootSidebarMask: (() => {
+          const wrapper = document.querySelector('.workspace2-tab-button .sidebar-icon-wrapper');
+          if (!wrapper) return false;
+          const pseudo = getComputedStyle(wrapper, '::before');
+          return String(pseudo.webkitMaskImage || pseudo.maskImage || '').startsWith('url(')
+            && pseudo.backgroundColor !== 'rgba(0, 0, 0, 0)';
+        })(),
+        providers: typeof window.WorkspaceKitPanelAPI?.getProviders === 'function'
+          ? window.WorkspaceKitPanelAPI.getProviders().map((provider) => ({
+            id: provider.id,
+            title: typeof provider.getTitle === 'function' ? provider.getTitle() : provider.title,
+            tabLabel: provider.tabLabel,
+            iconKey: provider.iconKey,
+          }))
+          : [],
       };
     }, { expectedExtNames: EXPECTED_EXT_NAMES, expectedGlobals: EXPECTED_GLOBALS, expectedStyleIds: EXPECTED_STYLE_IDS });
 
@@ -124,6 +172,13 @@ async function main() {
     for (const [k, v] of Object.entries(report.extFound)) if (!v) failures.push('missing extension: ' + k);
     for (const [k, v] of Object.entries(report.globalsFound)) if (!v) failures.push('missing global: ' + k);
     for (const [k, v] of Object.entries(report.styleFound)) if (!v) failures.push('missing style#' + k);
+    if (!report.rootSidebarMask) failures.push('WorkspaceKit sidebar SVG mask is missing or transparent');
+
+    try {
+      await verifyRecycleBinToolbarStates(page);
+    } catch (error) {
+      failures.push(`recycle-bin toolbar verification failed: ${error.message || String(error)}`);
+    }
 
     // Report console errors, but only fail on the ones that look tied to WorkspaceKit.
     const wkErrs = errs.filter((e) => /workspacekit|workspace2|WorkspaceKit/i.test(e));

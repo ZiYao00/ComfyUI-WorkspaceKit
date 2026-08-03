@@ -11,7 +11,12 @@
 // by built-in panel toolbars, preventing baseline drift in hosted Layout.
 // 1.3.0 publishes a capability contract so family plugins negotiate their
 // required UI surface without treating every visual minor release as a break.
-export const PANEL_UI_TEMPLATE_VERSION = "1.3.0";
+// 1.4.0 adds the dormant shared primitives used by the next Theme migration:
+// disclosure sections, compact action bars, and drop surfaces. Existing
+// family panels keep their current markup until an individual migration batch.
+// 1.5.0 adds a local, versioned icon-kit capability. It is intentionally
+// additive: existing panels can keep their own icons until their migration batch.
+export const PANEL_UI_TEMPLATE_VERSION = "1.5.0";
 export const PANEL_UI_TEMPLATE_MAJOR = 1;
 
 export function supportsPanelUiTemplate(requiredMajor) {

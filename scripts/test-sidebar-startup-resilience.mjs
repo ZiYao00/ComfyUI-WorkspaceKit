@@ -30,7 +30,7 @@ if (!source.includes("localeReady: false") || !source.includes("state.localeRead
 if (!source.includes("function recoverWorkspace2SidebarAfterRemount()") || !source.includes("officialSidebarTabIds()")) {
   throw new Error("Sidebar remount recovery must consult official sidebar state.");
 }
-if (!source.includes('registeredIds === null || registeredIds.has(WORKSPACE2_TAB_ID)') || !source.includes('installWorkspace2SidebarEmojiIcon();')) {
+if (!source.includes('registeredIds === null || registeredIds.has(WORKSPACE2_TAB_ID)') || !source.includes('installWorkspace2SidebarIcon();')) {
   throw new Error("Registered sidebar tabs must recover styling without duplicate registration.");
 }
 if (!source.includes('if (typeof getSidebarTabs !== "function") return null;')

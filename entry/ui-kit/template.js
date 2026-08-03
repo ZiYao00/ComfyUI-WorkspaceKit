@@ -3,6 +3,7 @@ import { createPanelBlueprint } from "./blueprint.js";
 import { installPanelUiTemplateStyles } from "./styles.js";
 import { PANEL_UI_TEMPLATE_MAJOR, PANEL_UI_TEMPLATE_VERSION, supportsPanelUiTemplate } from "./version.js";
 import { createPanelUiTemplateContract, PANEL_UI_TEMPLATE_CAPABILITIES } from "./compatibility.js";
+import { createWorkspaceKitIcon } from "./icons.js";
 
 // This browser-safe factory is the future public UI capability. It does not
 // publish a global or alter Provider registration by itself; Batch 2 will add
@@ -21,6 +22,7 @@ export function createPanelUiTemplate({ document = globalThis.document } = {}) {
     installed,
     supports: supportsPanelUiTemplate,
     createPanelBlueprint: (options = {}) => createPanelBlueprint({ document, ...options }),
+    createIcon: (iconKey, options = {}) => createWorkspaceKitIcon(document, iconKey, options),
     ...primitives,
   });
 }

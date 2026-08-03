@@ -26,7 +26,9 @@ export function registerStandalonePanel({ app, translate }) {
   if (typeof app?.extensionManager?.registerSidebarTab !== "function") return false;
   app.extensionManager.registerSidebarTab({
     id: PANEL_ID,
-    icon: "pi pi-th-large", // CHANGE ME: a PrimeVue icon for standalone mode
+    // ComfyUI currently requires an icon class string here. This is only the
+    // standalone registration fallback; hosted panels use Provider iconKey.
+    icon: "pi pi-th-large",
     title: translate("example.title"),
     tooltip: translate("example.title"),
     type: "custom",

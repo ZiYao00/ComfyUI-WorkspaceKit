@@ -4,6 +4,7 @@ import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260727
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260722_rgthree_fast_groups_p0";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { publishWorkspaceKitPanelUiTemplate } from "./integrations/panel-ui-template-api.js";
+import { createWorkspaceKitIcon, workspaceKitIconMaskDataUri } from "./ui-kit/icons.js";
 import { fetchJson, postJson } from "./core/api.js";
 import { createWorkspaceStartupStageRunner } from "./core/startup-stage.js?v=20260724_startup_stage_isolation_r1";
 import {
@@ -288,6 +289,10 @@ const state = {
   // The same workflow can appear in both Open and Browse. Keep the editor in
   // the surface where it was invoked so a rename never renders two inputs.
   editingSurface: "",
+  // A folder appears and enters rename mode before the filesystem request has
+  // returned.  Keep the request by path so an immediate Enter cannot race the
+  // server-side creation with the follow-up rename.
+  pendingFolderCreates: new Map(),
   // Official rename emits store updates before the local file-tree path map is
   // reconciled. Defer that render until the rename transaction is complete.
   workflowRenameInProgress: false,
@@ -443,6 +448,7 @@ const workflowContextMenu = createWorkflowContextMenuRenderer({
   t,
   closeContextMenu,
   handleError,
+  createIcon: iconSvg,
   onNewSubfolder: (el, item) => createFolder(el, item.path),
   onPersonalizeFolder: (el, item, anchor) => personalizeWorkflowFolder(el, item, anchor),
   onResetFolderStyle: (el, item) => resetWorkflowFolderStyle(el, item),
@@ -1154,7 +1160,12 @@ function setupWorkspaceShortcuts() {
       saveSelectedNodesAsTemplateFromShortcut();
       return;
     }
-    if (event.workspace2Handled || event.altKey || event.metaKey || event.repeat) {
+    // Module shortcuts are an explicit WorkspaceKit reservation.  Other
+    // extensions occasionally set the shared marker without performing a
+    // sidebar action; checking that marker first made Shift+1..4 silently do
+    // nothing when the panel was closed.  Alt/Meta/repeat are still rejected
+    // before resolving the reserved combinations.
+    if (event.altKey || event.metaKey || event.repeat) {
       return;
     }
     if (isEditableTarget(event.target)) {
@@ -1174,6 +1185,11 @@ function setupWorkspaceShortcuts() {
         openWorkspace2Module(moduleId, { closeIfActive: true });
         return;
       }
+    }
+    // Keep the shared marker boundary for all remaining canvas shortcuts. Only
+    // Shift+1..4 need to win over a stale marker from another extension.
+    if (event.workspace2Handled) {
+      return;
     }
     if (event.shiftKey && !event.ctrlKey && event.code === "KeyG") {
       event.preventDefault();
@@ -1278,7 +1294,19 @@ function isWorkspace2PanelOpen() {
   );
 }
 
+// ComfyUI marks the selected sidebar entry with this class. Reading it is what
+// turns a blind "click the button" into "ensure the panel is open": the official
+// button is a toggle, so clicking it while already selected collapses the panel.
+// Declared above every consumer — a const referenced before its own line once
+// broke the whole extension (see the dialogs-factory TDZ incident in TESTING.md).
+const SIDEBAR_SELECTED_CLASS = "side-bar-button-selected";
+
 function closeWorkspace2Sidebar() {
+  if (!isWorkspace2SidebarTabSelected(WORKSPACE2_TAB_ID)) {
+    // Already collapsed. Clicking the toggle now would re-open it.
+    return true;
+  }
+
   const manager = app.extensionManager;
   const methodNames = [
     "closeSidebarTab",
@@ -1293,7 +1321,11 @@ function closeWorkspace2Sidebar() {
     }
     try {
       manager[methodName](WORKSPACE2_TAB_ID);
-      return true;
+      // Same reasoning as activateWorkspace2Tab: accepting the call is not proof
+      // that the panel closed, so verify before reporting success.
+      if (!isWorkspace2SidebarTabSelected(WORKSPACE2_TAB_ID)) {
+        return true;
+      }
     } catch (error) {
       console.debug(`[Workspace2] ${methodName} close failed`, error);
     }
@@ -1738,7 +1770,18 @@ function registerWorkspace2CanvasGroupCommands() {
   }
 }
 
+function isWorkspace2SidebarTabSelected(tabId) {
+  const element = findWorkspace2SidebarTabElement(tabId);
+  return Boolean(element?.classList?.contains(SIDEBAR_SELECTED_CLASS));
+}
+
 function activateWorkspace2Tab(tabId) {
+  if (isWorkspace2SidebarTabSelected(tabId)) {
+    // Already the selected tab. Clicking again would collapse the sidebar, and
+    // the caller asked for activation, not a toggle.
+    return true;
+  }
+
   const manager = app.extensionManager;
   const methodNames = [
     "setActiveSidebarTab",
@@ -1753,7 +1796,12 @@ function activateWorkspace2Tab(tabId) {
     }
     try {
       manager[methodName](tabId);
-      return true;
+      // Not every ComfyUI build exposes a method that actually selects the tab;
+      // some have accepted the call and done nothing. Only report success when
+      // the tab is really selected, otherwise fall through to the DOM path.
+      if (isWorkspace2SidebarTabSelected(tabId)) {
+        return true;
+      }
     } catch (error) {
       console.debug(`[Workspace2] ${methodName} failed`, error);
     }
@@ -1770,6 +1818,18 @@ function activateWorkspace2Tab(tabId) {
 }
 
 function findWorkspace2SidebarTabElement(tabId) {
+  // Our own marker class, applied by installWorkspace2SidebarIcon(), is the most
+  // reliable handle: it survives locale changes and ComfyUI DOM refactors. The
+  // data-attribute selectors below are kept only as a fallback for builds that
+  // expose them, and the title match is last because a loaded locale renames the
+  // tab (the button keeps its original aria-label, so titles stop matching).
+  if (tabId === WORKSPACE2_TAB_ID) {
+    const marked = document.querySelector(".workspace2-tab-button");
+    if (marked instanceof HTMLElement) {
+      return marked;
+    }
+  }
+
   const selectors = [
     `[data-tab-id="${cssEscape(tabId)}"]`,
     `[data-sidebar-tab-id="${cssEscape(tabId)}"]`,
@@ -1783,9 +1843,9 @@ function findWorkspace2SidebarTabElement(tabId) {
     }
   }
 
-  const expectedTitle = tabId === WORKSPACE2_TAB_ID
-    ? (state.localeReady ? t("workspace.title") : "WorkspaceKit")
-    : t("canvasGroups.title");
+  const expectedTitles = tabId === WORKSPACE2_TAB_ID
+    ? [t("workspace.title"), "WorkspaceKit"]
+    : [t("canvasGroups.title")];
   const candidates = document.querySelectorAll("button,[role='tab'],[role='button'],.p-tab,.p-button");
   for (const candidate of candidates) {
     if (!(candidate instanceof HTMLElement)) {
@@ -1793,7 +1853,7 @@ function findWorkspace2SidebarTabElement(tabId) {
     }
     const text = candidate.textContent?.trim();
     const title = candidate.getAttribute("title") || candidate.getAttribute("aria-label") || "";
-    if (text === expectedTitle || title === expectedTitle) {
+    if (expectedTitles.includes(text) || expectedTitles.includes(title)) {
       return candidate;
     }
   }
@@ -2174,12 +2234,20 @@ function setupWorkflowDirtyTracking() {
   workflowOpenState.setupDirtyTracking();
 }
 
-function syncOfficialWorkflowSelection() {
-  workflowOpenState.syncOfficialSelection();
-}
-
 function scheduleOfficialWorkflowPanelRender() {
   workflowOpenState.scheduleOfficialPanelRender();
+}
+
+// Inline editing suppresses official-store renders so the input is not torn
+// down under the user. Ending an edit must therefore release any render that
+// was deferred while it was open, or the Browse tree keeps stale rows.
+function endWorkflowInlineEdit() {
+  state.editingPath = "";
+  state.editingSurface = "";
+  if (state.officialWorkflowRenderPending) {
+    state.officialWorkflowRenderPending = false;
+    scheduleOfficialWorkflowPanelRender();
+  }
 }
 
 function setupOfficialWorkflowStateSync() {
@@ -2250,24 +2318,44 @@ async function setRootPath(el) {
 async function createFolder(el, parent = "") {
   const name = uniqueWorkflowFolderName(parent);
   const path = joinPath(parent, name);
-  const data = await postJson("/workspace2/folder/create", {
-    parent_path: parent,
-    name,
-  });
-  const createdPath = data?.path || path;
+  // Render the local row first.  Waiting for the server round trip here was
+  // shared with the Nodes/Templates lag: users saw no folder (and no rename
+  // input) until the request returned.
   addLocalWorkflowItem({
     type: "folder",
-    name: createdPath.split("/").pop() || name,
-    path: createdPath,
+    name,
+    path,
     updated_at: Date.now(),
   });
   state.expanded.add(parent);
-  state.selectedPath = createdPath;
-  state.editingPath = createdPath;
+  state.selectedPath = path;
+  state.editingPath = path;
   state.editingSurface = "browse";
   state.status = t("status.folderCreated");
   renderPanel(el);
-  refreshOfficialWorkflowsDeferred(250);
+
+  const request = postJson("/workspace2/folder/create", {
+    parent_path: parent,
+    name,
+  });
+  state.pendingFolderCreates.set(path, request);
+  try {
+    const data = await request;
+    const createdPath = data?.path || path;
+    if (createdPath !== path) {
+      remapLocalWorkflowItems(path, createdPath);
+      remapWorkflowPathState(path, createdPath);
+    }
+    refreshOfficialWorkflowsDeferred(250);
+  } catch (error) {
+    removeLocalWorkflowItems(path);
+    removeWorkflowPathState(path);
+    endWorkflowInlineEdit();
+    renderPanel(el);
+    throw error;
+  } finally {
+    state.pendingFolderCreates.delete(path);
+  }
 }
 
 function selectedFolderPath() {
@@ -2327,9 +2415,15 @@ async function createWorkflow(el, parent = selectedFolderPath()) {
 
 async function renameItem(el, item, newName) {
   const oldPath = item.path;
+  // The optimistic new-folder row is immediately editable.  If the user
+  // confirms before its create request returns, wait for that request instead
+  // of issuing a rename against a path that does not exist yet.
+  const pendingCreate = state.pendingFolderCreates.get(oldPath);
+  if (pendingCreate) {
+    await pendingCreate;
+  }
   if (!newName) {
-    state.editingPath = "";
-    state.editingSurface = "";
+    endWorkflowInlineEdit();
     renderPanel(el);
     return;
   }
@@ -2338,8 +2432,7 @@ async function renameItem(el, item, newName) {
   // value with item.name makes an unchanged file look renamed. Compare the
   // normalized target path instead and avoid a self-rename request.
   if (nextPath.toLowerCase() === oldPath.toLowerCase()) {
-    state.editingPath = "";
-    state.editingSurface = "";
+    endWorkflowInlineEdit();
     renderPanel(el);
     return;
   }
@@ -2635,6 +2728,15 @@ async function emptyTrash(el) {
 }
 
 function iconSvg(name) {
+  // All WorkspaceKit functional icons route through one local renderer. The
+  // legacy map below is intentionally fallback-only for unknown third-party
+  // keys; no Workflows, Nodes, Templates, search-toolbar, or Settings key
+  // should take that path.
+  try {
+    return createWorkspaceKitIcon(document, name);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+  }
   const paths = {
     folderPlus: '<path d="M3 7h5l2 2h11v9a2 2 0 0 1-2 2H3z"/><path d="M12 14h6"/><path d="M15 11v6"/>',
     filePlus: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15h6"/><path d="M12 12v6"/>',
@@ -2713,10 +2815,10 @@ function dangerIconButton(iconName, title, onClick) {
   return element;
 }
 
-async function saveNodeLibrary(el) {
+async function saveNodeLibrary(el, { render = true } = {}) {
   const data = await postJson("/workspace2/nodes/library", { library: nodesState.library });
   nodesState.library = normalizeNodeLibrary(data.library);
-  if (el) {
+  if (render && el?.isConnected) {
     renderNodesPanel(el);
   }
 }
@@ -2761,12 +2863,19 @@ async function createTemplateGroup(el, parentId = "") {
   }
   templatesState.expanded.add(id);
   templatesState.editingGroupId = id;
-  await saveTemplateLibrary(el);
+  // Show the editable folder immediately. Persistence stays async so a slow
+  // local service cannot make the toolbar appear unresponsive.
+  renderTemplatesPanel(el);
+  await saveTemplateLibrary(el, { render: false });
 }
 
-async function commitTemplateGroupRename(el, group, value) {
+// Takes the group id, not the object, for the same reason as
+// commitNodeGroupRename: saveTemplateLibrary() replaces templatesState.library
+// with freshly normalized objects.
+async function commitTemplateGroupRename(el, groupId, value) {
+  const group = getTemplateGroup(String(groupId || ""));
   const name = String(value || "").trim();
-  if (!name || name === group.name) {
+  if (!group || !name || name === group.name) {
     templatesState.editingGroupId = "";
     renderTemplatesPanel(el);
     return;
@@ -3980,7 +4089,10 @@ async function createNodeGroup(el, parentId = "") {
   }
   nodesState.expanded.add(group.id);
   nodesState.editingGroupId = group.id;
-  await saveNodeLibrary(el);
+  // Match Templates and Workflows: the editor is a local UI transition, not
+  // something that should wait for the library write to finish.
+  renderNodesPanel(el);
+  await saveNodeLibrary(el, { render: false });
 }
 
 async function changeNodeGroupIcon(el, group) {
@@ -4030,9 +4142,15 @@ async function renameNodeGroup(el, group) {
   renderNodesPanel(el);
 }
 
-async function commitNodeGroupRename(el, group, value) {
+// Takes the group id, not the object. saveNodeLibrary() replaces
+// nodesState.library with freshly normalized objects, so a rename input that
+// was rendered before an in-flight save holds an orphaned group reference.
+// Writing through that orphan silently lost the first rename.
+async function commitNodeGroupRename(el, groupId, value) {
+  const id = String(groupId || "");
+  const group = (nodesState.library?.groups || []).find((entry) => entry.id === id);
   const name = String(value || "").trim();
-  if (!name || name === group.name) {
+  if (!group || !name || name === group.name) {
     nodesState.editingGroupId = "";
     renderNodesPanel(el);
     return;
@@ -5773,8 +5891,7 @@ function createWorkflowRenameInput(el, item, surface) {
     onCommit: (name) => renameItem(el, item, name),
     onError: (error) => handleWorkflowRenameError(el, error),
     onCancel: () => {
-      state.editingPath = "";
-      state.editingSurface = "";
+      endWorkflowInlineEdit();
       renderPanel(el);
     },
     isStillEditing: (path, targetSurface) => state.editingPath === path && state.editingSurface === targetSurface,
@@ -5983,7 +6100,7 @@ function renderPanel(el) {
     }
   });
 
-  const trash = toolbarButton(state.showTrash ? "files" : "archiveTray", state.showTrash ? t("toolbar.showFiles") : t("toolbar.showTrash"), async () => {
+  const trash = toolbarButton(state.showTrash ? "arrowLeft" : "trash", state.showTrash ? t("toolbar.showFiles") : t("toolbar.showTrash"), async () => {
     try {
       state.showTrash = !state.showTrash;
       if (state.showTrash) {
@@ -5998,7 +6115,7 @@ function renderPanel(el) {
   });
   trash.classList.add("is-trash-toggle");
   if (state.showTrash) {
-    trash.classList.add("is-active");
+    trash.classList.add("is-active", "is-trash-return");
   }
 
   const header = createPanelHeader(t("workflows.title"), state.status);
@@ -6326,7 +6443,7 @@ function renderTemplateGroupFolder(el, section, group, query, depth = 0) {
     onToggle: (event) => toggleTemplateGroup(el, group.id, event.ctrlKey || event.metaKey),
     onOpenMenu: (event) => openTemplateGroupContextMenu(el, event, group),
     prepareRenameInput: isolateComfyKeys,
-    onCommitRename: (value) => commitTemplateGroupRename(el, group, value),
+    onCommitRename: (value) => commitTemplateGroupRename(el, group.id, value),
     onRenameError: (error) => {
       templatesState.error = error.message;
       renderTemplatesPanel(el);
@@ -6493,7 +6610,7 @@ function renderTemplatesPanel(el) {
     }
   });
   const trash = toolbarButton(
-    templatesState.showTrash ? "files" : "archiveTray",
+    templatesState.showTrash ? "arrowLeft" : "trash",
     t(templatesState.showTrash ? "templates.showLibrary" : "templates.showTrash"),
     () => {
       templatesState.showTrash = !templatesState.showTrash;
@@ -6501,7 +6618,7 @@ function renderTemplatesPanel(el) {
     },
   );
   trash.classList.add("is-trash-toggle");
-  if (templatesState.showTrash) trash.classList.add("is-active");
+  if (templatesState.showTrash) trash.classList.add("is-active", "is-trash-return");
   const toolbar = createSearchToolbar({
     focusKey: "templates-search",
     placeholder: t("templates.searchPlaceholder"),
@@ -7340,6 +7457,9 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
   const name = document.createElement("div");
   name.className = "workspace2-name";
   if (nodesState.editingGroupId === group.id) {
+    // Capture the id, not the object: an in-flight saveNodeLibrary() can swap
+    // nodesState.library for freshly normalized objects while this input lives.
+    const groupId = group.id;
     const input = document.createElement("input");
     input.className = "workspace2-rename-input";
     input.value = group.name;
@@ -7348,7 +7468,7 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
     input.addEventListener("keydown", async (event) => {
       if (event.key === "Enter") {
         try {
-          await commitNodeGroupRename(el, group, input.value);
+          await commitNodeGroupRename(el, groupId, input.value);
         } catch (error) {
           handleError(el, error);
         }
@@ -7360,7 +7480,7 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
     });
     input.addEventListener("blur", async () => {
       try {
-        await commitNodeGroupRename(el, group, input.value);
+        await commitNodeGroupRename(el, groupId, input.value);
       } catch (error) {
         handleError(el, error);
       }
@@ -7642,27 +7762,30 @@ function registerWorkspace2SidebarTab() {
     render: renderWorkspace2Panel,
   });
   registry.add(WORKSPACE2_TAB_ID);
-  installWorkspace2SidebarEmojiIcon();
+  installWorkspace2SidebarIcon();
   return true;
 }
 
-function installWorkspace2SidebarEmojiIcon() {
-  const styleId = "workspace2-sidebar-emoji-icon-style";
+function installWorkspace2SidebarIcon() {
+  const styleId = "workspacekit-sidebar-icon-style";
   if (!document.getElementById(styleId)) {
     const style = document.createElement("style");
     style.id = styleId;
-    // SidebarTabExtension.icon accepts an icon-class string, not arbitrary
-    // text. Render the agreed emoji in Workspace2's own button only instead
-    // of passing an invalid class to ComfyUI's shared sidebar component.
+    // SidebarTabExtension.icon accepts an icon-class string, not an SVG node.
+    // Keep the public registration compatible, but replace its visual glyph
+    // with the local Icon Kit's monochrome mask.
     style.textContent = `
       .workspace2-tab-button .sidebar-icon-wrapper > .side-bar-button-icon {
         display: none !important;
       }
       .workspace2-tab-button .sidebar-icon-wrapper::before {
-        content: "🧩";
+        content: "";
         display: block;
-        font-size: 16px;
-        line-height: 1;
+        width: 18px;
+        height: 18px;
+        background-color: currentColor;
+        -webkit-mask: url("${workspaceKitIconMaskDataUri("workspacekit")}") center / contain no-repeat;
+        mask: url("${workspaceKitIconMaskDataUri("workspacekit")}") center / contain no-repeat;
       }
     `;
     document.head.append(style);
@@ -7697,10 +7820,10 @@ function officialSidebarTabIds() {
 function recoverWorkspace2SidebarAfterRemount() {
   const registeredIds = officialSidebarTabIds();
   // When the official store still owns the tab, Vue will recreate its DOM.
-  // Only reapply our emoji class; calling registerSidebarTab here would create
+  // Only reapply our icon class; calling registerSidebarTab here would create
   // duplicate entries because the official API intentionally appends tabs.
   if (registeredIds === null || registeredIds.has(WORKSPACE2_TAB_ID)) {
-    installWorkspace2SidebarEmojiIcon();
+    installWorkspace2SidebarIcon();
     return registeredIds === null ? "state-unavailable" : "already-registered";
   }
   const registry = globalThis.__workspace2RegisteredSidebarTabs ||= new Set();

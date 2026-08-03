@@ -39,5 +39,8 @@ assert.match(entrySource, /const moduleShortcut = resolveModuleShortcut\(event\)
 assert.match(entrySource, /isModuleShortcutEnabled\(moduleShortcut\.id,/);
 assert.match(entrySource, /openWorkspace2Module\(moduleId, \{ closeIfActive: true \}\)/);
 assert.match(entrySource, /shouldCloseWorkspaceModule\(/);
+const markerGuard = entrySource.indexOf('if (event.workspace2Handled ||');
+const shortcutResolver = entrySource.indexOf('const moduleShortcut = resolveModuleShortcut(event);');
+assert.ok(markerGuard === -1 || shortcutResolver < markerGuard, 'module shortcuts must resolve before a shared handled marker can suppress them');
 
 console.log("Workspace shortcut-toggle contract passed.");

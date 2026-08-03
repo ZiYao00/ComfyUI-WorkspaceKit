@@ -6,7 +6,7 @@
 >
 > **Manage workflows, node favorites, and reusable templates efficiently, and organize complex canvases with more capable groups.**
 
-![Version](https://img.shields.io/badge/version-0.2.4-blue)
+![Version](https://img.shields.io/badge/version-0.2.5-blue)
 ![Status](https://img.shields.io/badge/status-public%20beta-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 

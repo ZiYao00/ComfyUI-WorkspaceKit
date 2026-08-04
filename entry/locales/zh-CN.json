@@ -181,6 +181,8 @@
   "nodes.renameGroup": "重命名分组",
   "nodes.deleteGroup": "删除分组",
   "nodes.deleteGroupTitle": "删除收藏分组",
+  "nodes.dissolveGroupTitle": "解散此分组及全部子分组；保留内部所有收藏节点。",
+  "nodes.deleteGroupContentsTitle": "删除此分组，并取消其中及子分组内的所有收藏节点。",
   "nodes.promptGroupName": "新建收藏分组名称",
   "nodes.promptRenameGroup": "重命名收藏分组",
   "nodes.confirmDeleteGroup": "删除分组“{name}”？其中的收藏节点会移到默认收藏。",

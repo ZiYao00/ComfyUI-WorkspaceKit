@@ -40,6 +40,57 @@ export function moveTemplateToTrash(library, template, deletedAt = Date.now()) {
   };
 }
 
+export function templateGroupSubtreeIds(library, groupId) {
+  const groups = Array.isArray(library?.groups) ? library.groups : [];
+  const rootId = String(groupId || "");
+  if (!rootId || !groups.some((group) => group?.id === rootId)) {
+    return new Set();
+  }
+  const ids = new Set([rootId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const group of groups) {
+      if (group?.id && ids.has(String(group.parentId || "")) && !ids.has(String(group.id))) {
+        ids.add(String(group.id));
+        changed = true;
+      }
+    }
+  }
+  return ids;
+}
+
+export function dissolveTemplateGroup(library, groupId) {
+  const groups = Array.isArray(library?.groups) ? library.groups : [];
+  const root = groups.find((group) => group?.id === groupId);
+  if (!root) return library;
+  const parentId = String(root.parentId || "");
+  return {
+    ...library,
+    groups: groups
+      .filter((group) => group?.id !== groupId)
+      .map((group) => (group?.parentId === groupId ? { ...group, parentId } : group)),
+    templates: (library?.templates || []).map((template) => (
+      template?.groupId === groupId ? { ...template, groupId: parentId } : template
+    )),
+  };
+}
+
+export function moveTemplateGroupToTrash(library, groupId, deletedAt = Date.now()) {
+  const groupIds = templateGroupSubtreeIds(library, groupId);
+  if (!groupIds.size) return library;
+  let next = library;
+  for (const template of library?.templates || []) {
+    if (groupIds.has(String(template?.groupId || ""))) {
+      next = moveTemplateToTrash(next, template, deletedAt);
+    }
+  }
+  return {
+    ...next,
+    groups: (next.groups || []).filter((group) => !groupIds.has(String(group?.id || ""))),
+  };
+}
+
 export function restoreTemplateFromTrash(library, entry, now = Date.now()) {
   const template = entry?.template;
   if (!template?.id) return library;

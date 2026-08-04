@@ -22,10 +22,16 @@ export function pinyinText(value, mode = "full") {
 }
 
 export function pinyinSearchText(values) {
-  return values
-    .flatMap((value) => [pinyinText(value, "full"), pinyinText(value, "initial")])
-    .filter(Boolean)
-    .join(" ");
+  const variants = values
+    .flatMap((value) => {
+      const full = pinyinText(value, "full");
+      // pinyin-pro correctly keeps ü, but normal keyboard input almost always
+      // uses plain u (for example: hulue rather than hulüe). Keep both forms.
+      const plainFull = full.replace(/ü/g, "u");
+      return [full, plainFull, pinyinText(value, "initial")];
+    })
+    .filter(Boolean);
+  return [...new Set(variants)].join(" ");
 }
 
 export function compactSearchFields(values, pinyinValues = []) {

@@ -56,16 +56,50 @@ export function createNodeFavoriteGroupStore({
     return group;
   };
 
-  const deleteNodeGroup = (groupId) => {
+  const nodeGroupSubtreeIds = (groupId) => {
     if (!state.library || groupId === defaultGroupId || !getNodeGroup(groupId)) {
-      return false;
+      return new Set();
     }
-    for (const favorite of favorites()) {
-      if (favorite.groupId === groupId) {
-        favorite.groupId = defaultGroupId;
+    const ids = new Set([groupId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const group of groups()) {
+        if (group?.id && ids.has(String(group.parentId || "")) && !ids.has(String(group.id))) {
+          ids.add(String(group.id));
+          changed = true;
+        }
       }
     }
-    state.library.groups = groups().filter((group) => group.id !== groupId);
+    return ids;
+  };
+
+  const dissolveNodeGroup = (groupId) => {
+    const group = getNodeGroup(groupId);
+    if (!state.library || !group || groupId === defaultGroupId) {
+      return false;
+    }
+    const ids = nodeGroupSubtreeIds(groupId);
+    if (!ids.size) {
+      return false;
+    }
+    const favoriteParentId = String(group.parentId || defaultGroupId);
+    for (const favorite of favorites()) {
+      if (ids.has(String(favorite.groupId || ""))) {
+        favorite.groupId = favoriteParentId;
+      }
+    }
+    state.library.groups = groups().filter((item) => !ids.has(String(item.id || "")));
+    return true;
+  };
+
+  const deleteNodeGroup = (groupId) => {
+    const ids = nodeGroupSubtreeIds(groupId);
+    if (!ids.size) {
+      return false;
+    }
+    state.library.favorites = favorites().filter((favorite) => !ids.has(String(favorite.groupId || "")));
+    state.library.groups = groups().filter((group) => !ids.has(String(group.id || "")));
     return true;
   };
 
@@ -94,6 +128,8 @@ export function createNodeFavoriteGroupStore({
     uniqueNodeGroupName,
     isNodeGroupDescendant,
     createNodeGroup,
+    nodeGroupSubtreeIds,
+    dissolveNodeGroup,
     deleteNodeGroup,
     moveNodeGroupToParent,
   };

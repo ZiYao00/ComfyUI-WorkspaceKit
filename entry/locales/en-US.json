@@ -181,6 +181,8 @@
   "nodes.renameGroup": "Rename group",
   "nodes.deleteGroup": "Delete group",
   "nodes.deleteGroupTitle": "Delete favorite group",
+  "nodes.dissolveGroupTitle": "Remove this group and all of its subgroups while keeping their favorite nodes.",
+  "nodes.deleteGroupContentsTitle": "Remove this group and cancel all favorite nodes in it and its subgroups.",
   "nodes.promptGroupName": "New favorite group name",
   "nodes.promptRenameGroup": "Rename favorite group",
   "nodes.confirmDeleteGroup": "Delete group \"{name}\"? Favorite nodes in it will move to Default favorites.",

@@ -21,6 +21,14 @@ import { createNodeObjectInfoCache } from "./nodes/object-info-cache.js";
 import { createNodeObjectInfoRefreshCoordinator } from "./nodes/object-info-refresh.js";
 import { createNodeFavoriteStore } from "./nodes/favorite-store.js";
 import { createNodeFavoriteGroupStore } from "./nodes/favorite-group-store.js";
+import { resolveCanvasNodeDefinition } from "./nodes/canvas-favorite-resolver.js";
+import { collectRuntimeNodeTitleProbe } from "./nodes/runtime-title-probe.js";
+import {
+  applyRuntimeNodeTitlePresentation,
+  runtimeNodeTitleFingerprint,
+} from "./nodes/runtime-title-presentation.js";
+import { resolveDdTranslationSearchAliases } from "./nodes/dd-translation-aliases.js";
+import { createDdTranslationSearchAdapter } from "./nodes/dd-translation-search-adapter.js";
 import { createOfficialNodeTreeBuilder } from "./nodes/official-tree.js";
 import { createOfficialNodeTreeRenderer } from "./nodes/official-tree-renderer.js";
 import { createNodeRowRenderer } from "./nodes/row-renderer.js";
@@ -41,10 +49,13 @@ import { createTemplateRowRenderer } from "./templates/row-renderer.js";
 import { renderTemplateContextMenu as renderTemplateContextMenuRenderer } from "./templates/context-menu-renderer.js";
 import { createTemplateMinimap } from "./templates/minimap.js";
 import {
+  dissolveTemplateGroup as dissolveTemplateGroupStore,
   emptyTemplateTrash as emptyTemplateTrashStore,
+  moveTemplateGroupToTrash,
   moveTemplateToTrash,
   permanentlyDeleteTemplateFromTrash,
   restoreTemplateFromTrash,
+  templateGroupSubtreeIds,
 } from "./templates/trash-store.js";
 import { createPersonalizationPanel } from "./ui/personalization-panel.js";
 import { setExpandedRecursive } from "./ui/tree-expansion.js";
@@ -698,6 +709,7 @@ const nodesState = {
   previewPopover: null,
   contextMenuElement: null,
   editingGroupId: "",
+  editingFavoriteType: "",
   nSidebarPreview: null,
   nSidebarLoading: false,
   sortMenuElement: null,
@@ -721,8 +733,14 @@ const nodesState = {
   nodeDefinitionsCache: null,
   nodeDefinitionMapCache: null,
   nodeDefinitionsSource: null,
+  runtimeTitleFingerprint: "",
+  runtimeTitleRecheckTimer: null,
+  ddTranslationAliasIndex: null,
+  ddTranslationAliasLoadStarted: false,
   loadPromise: null,
 };
+
+const ddTranslationSearchAdapter = createDdTranslationSearchAdapter({ fetchJson });
 
 const { positionPreviewPopover: positionNodePreviewPopover } = createPreviewPositioner({
   window,
@@ -749,6 +767,8 @@ const {
   uniqueNodeGroupName,
   isNodeGroupDescendant,
   createNodeGroup: createFavoriteGroup,
+  nodeGroupSubtreeIds,
+  dissolveNodeGroup: dissolveFavoriteGroup,
   deleteNodeGroup: deleteFavoriteGroup,
   moveNodeGroupToParent: moveFavoriteGroupToParent,
 } = createNodeFavoriteGroupStore({
@@ -2983,33 +3003,66 @@ async function commitTemplateGroupRename(el, groupId, value) {
   await saveTemplateLibrary(el);
 }
 
-async function deleteTemplateGroup(el, group) {
-  for (const template of templatesState.library.templates || []) {
-    if (template.groupId === group.id) {
-      template.groupId = "";
-    }
-  }
-  for (const child of templatesState.library.groups || []) {
-    if (child.parentId === group.id) {
-      child.parentId = "";
-    }
-  }
-  templatesState.library.groups = (templatesState.library.groups || []).filter((item) => item.id !== group.id);
+function templateGroupHasContents(groupId) {
+  const library = templatesState.library || emptyTemplateLibrary();
+  const groupIds = templateGroupSubtreeIds(library, groupId);
+  return groupIds.size > 1 || (library.templates || []).some((template) => groupIds.has(String(template.groupId || "")));
+}
+
+async function dissolveTemplateGroup(el, group) {
+  const parentId = String(group.parentId || "");
+  templatesState.library = dissolveTemplateGroupStore(templatesState.library, group.id);
   templatesState.expanded.delete(group.id);
-  normalizeTemplateOrders("");
+  normalizeTemplateOrders(parentId);
+  await saveTemplateLibrary(el);
+}
+
+async function moveTemplateGroupToTrashAction(el, group) {
+  const groupIds = templateGroupSubtreeIds(templatesState.library, group.id);
+  templatesState.library = moveTemplateGroupToTrash(templatesState.library, group.id);
+  for (const groupId of groupIds) {
+    templatesState.expanded.delete(groupId);
+  }
+  templatesState.editingGroupId = "";
   await saveTemplateLibrary(el);
 }
 
 function requestDeleteTemplateGroup(el, group, anchor = null) {
   const target = anchor || el?.querySelector?.(`[data-workspace2-template-group-id="${cssEscape(group.id)}"] .workspace2-actions`);
+  const handleError = (error) => {
+    templatesState.error = error.message;
+    renderTemplatesPanel(el);
+  };
+  if (templateGroupHasContents(group.id)) {
+    workspace2InlineConfirm(target, {
+      confirmText: t("confirm.delete"),
+      confirmTitle: t("folder.deleteTitle"),
+      onConfirm: async () => {
+        try {
+          await moveTemplateGroupToTrashAction(el, group);
+        } catch (error) {
+          handleError(error);
+        }
+      },
+      secondaryText: t("confirm.dissolve"),
+      secondaryTitle: t("folder.dissolveTitle"),
+      onSecondary: async () => {
+        try {
+          await dissolveTemplateGroup(el, group);
+        } catch (error) {
+          handleError(error);
+        }
+      },
+    });
+    return;
+  }
   workspace2InlineConfirm(target, {
     confirmText: t("confirm.delete"),
     onConfirm: async () => {
       try {
-        await deleteTemplateGroup(el, group);
+        await dissolveTemplateGroup(el, group);
       } catch (error) {
-        templatesState.error = error.message;
-        renderTemplatesPanel(el);
+        handleError(error);
       }
     },
   });
@@ -4122,12 +4175,17 @@ function getNodeDefinitions() {
     return nodesState.nodeDefinitionsCache;
   }
 
-  const definitions = mergeNodeDefinitionSources({
+  const rawDefinitions = mergeNodeDefinitionSources({
     objectInfo: objectInfoSource || {},
     registeredNodeTypes,
     wrapObjectInfoNode,
     wrapRegisteredNode,
   });
+  const definitions = applyRuntimeNodeTitlePresentation(
+    rawDefinitions,
+    registeredNodeTypes,
+    (node) => resolveDdTranslationSearchAliases(node, nodesState.ddTranslationAliasIndex),
+  );
   nodesState.nodeDefinitionsSource = objectInfoSource;
   nodesState.registeredNodeTypesSource = registeredNodeTypes;
   nodesState.registeredNodeTypesCount = registeredNodeCount;
@@ -4141,6 +4199,54 @@ function getNodeDefinitionMap() {
     nodesState.nodeDefinitionMapCache = new Map(getNodeDefinitions().map((node) => [node.type, node]));
   }
   return nodesState.nodeDefinitionMapCache;
+}
+
+function refreshRuntimeNodeTitlePresentation() {
+  const registeredNodeTypes = globalThis.LiteGraph?.registered_node_types || {};
+  const fingerprint = runtimeNodeTitleFingerprint(registeredNodeTypes);
+  if (!nodesState.runtimeTitleFingerprint) {
+    nodesState.runtimeTitleFingerprint = fingerprint;
+    return false;
+  }
+  if (nodesState.runtimeTitleFingerprint === fingerprint) {
+    return false;
+  }
+  nodesState.runtimeTitleFingerprint = fingerprint;
+  // Only the browser's derived title/search projection is invalidated here.
+  // The durable /object_info cache and its signature remain untouched.
+  nodesState.nodeDefinitionsCache = null;
+  nodesState.nodeDefinitionMapCache = null;
+  nodesState.nodeDefinitionsSource = null;
+  return true;
+}
+
+function scheduleRuntimeNodeTitlePresentationRecheck() {
+  if (nodesState.runtimeTitleRecheckTimer) {
+    return;
+  }
+  nodesState.runtimeTitleRecheckTimer = window.setTimeout(() => {
+    nodesState.runtimeTitleRecheckTimer = null;
+    if (refreshRuntimeNodeTitlePresentation() && nodesState.renderTarget?.isConnected) {
+      renderNodesPanel(nodesState.renderTarget);
+    }
+  }, 1200);
+}
+
+function ensureDdTranslationSearchAliases() {
+  if (nodesState.ddTranslationAliasLoadStarted) return;
+  nodesState.ddTranslationAliasLoadStarted = true;
+  ddTranslationSearchAdapter.load().then((aliasIndex) => {
+    // The external plugin can be absent, disabled, or have no unique aliases.
+    // In every case no WK error is surfaced and no durable node cache changes.
+    if (!aliasIndex?.size) return;
+    nodesState.ddTranslationAliasIndex = aliasIndex;
+    nodesState.nodeDefinitionsCache = null;
+    nodesState.nodeDefinitionMapCache = null;
+    nodesState.nodeDefinitionsSource = null;
+    if (nodesState.renderTarget?.isConnected) {
+      renderNodesPanel(nodesState.renderTarget);
+    }
+  });
 }
 
 function nodeMatchesQuery(node, query, groupName = "") {
@@ -4168,7 +4274,9 @@ function favoriteDisplayNode(favorite, nodeMap) {
   const definition = nodeMap.get(favorite.type);
   return {
     ...favorite,
-    title: favorite.alias || favorite.title || definition?.title || favorite.type,
+    // Saved favorite titles are historical raw labels. Prefer the live node
+    // presentation so a language switch does not leave Favorites in English.
+    title: favorite.alias || definition?.title || favorite.title || favorite.type,
     category: definition?.category || t("nodes.invalid"),
     definition: definition?.definition || null,
     type: favorite.type,
@@ -4266,8 +4374,68 @@ async function deleteNodeGroup(el, group) {
   await saveNodeLibrary(el);
 }
 
+// Diagnostic only: this exposes title evidence without changing the durable
+// /object_info cache, rendered labels, or search fields. Run in DevTools as
+// __workspace2ProbeNodePresentation("CheckpointLoaderSimple").
+function probeNodePresentation(type) {
+  const result = collectRuntimeNodeTitleProbe({
+    type,
+    rawDefinition: nodesState.objectInfo?.[type] || null,
+    registeredNodeTypes: globalThis.LiteGraph?.registered_node_types || {},
+    nodeDefinitionSources: [
+      { source: "app.nodeDefStore.nodeDefs", container: app?.nodeDefStore?.nodeDefs },
+      { source: "app.nodeDefStore.nodeDefinitions", container: app?.nodeDefStore?.nodeDefinitions },
+      { source: "app.extensionManager.nodeDefStore.nodeDefs", container: app?.extensionManager?.nodeDefStore?.nodeDefs },
+      { source: "app.ui.nodeDefStore.nodeDefs", container: app?.ui?.nodeDefStore?.nodeDefs },
+    ],
+  });
+  console.info("[WorkspaceKit] node presentation probe", result);
+  return result;
+}
+
+async function dissolveNodeGroup(el, group) {
+  const groupIds = nodeGroupSubtreeIds(group.id);
+  if (!dissolveFavoriteGroup(group.id)) {
+    return;
+  }
+  const parentId = String(group.parentId || NODE_DEFAULT_GROUP_ID);
+  for (const groupId of groupIds) {
+    nodesState.expanded.delete(groupId);
+  }
+  normalizeFavoriteOrders(parentId);
+  await saveNodeLibrary(el);
+}
+
+function nodeGroupHasContents(groupId) {
+  const groupIds = nodeGroupSubtreeIds(groupId);
+  return groupIds.size > 1 || (nodesState.library?.favorites || []).some((favorite) => groupIds.has(String(favorite.groupId || "")));
+}
+
 function requestDeleteNodeGroup(el, group, anchor = null) {
   const target = anchor || el?.querySelector?.(`[data-workspace2-favorite-region="${cssEscape(group.id)}"] .workspace2-actions`);
+  if (nodeGroupHasContents(group.id)) {
+    workspace2InlineConfirm(target, {
+      confirmText: t("confirm.delete"),
+      confirmTitle: t("nodes.deleteGroupContentsTitle"),
+      onConfirm: async () => {
+        try {
+          await deleteNodeGroup(el, group);
+        } catch (error) {
+          handleError(el, error);
+        }
+      },
+      secondaryText: t("confirm.dissolve"),
+      secondaryTitle: t("nodes.dissolveGroupTitle"),
+      onSecondary: async () => {
+        try {
+          await dissolveNodeGroup(el, group);
+        } catch (error) {
+          handleError(el, error);
+        }
+      },
+    });
+    return;
+  }
   workspace2InlineConfirm(target, {
     confirmText: t("confirm.delete"),
     onConfirm: async () => {
@@ -4292,15 +4460,56 @@ async function removeFavoriteNode(el, type) {
   }
 }
 
-async function editFavoriteAlias(el, favorite) {
-  const current = favorite.alias || "";
-  const alias = window.prompt(t("nodes.promptAlias"), current);
-  if (alias === null) {
+// The canvas context menu is outside the Nodes tab, so persist through the
+// existing node library and only render the tab when it is currently mounted.
+async function toggleCanvasNodeFavorite(node) {
+  const definition = resolveCanvasNodeDefinition(node, getNodeDefinitionMap());
+  if (!definition) {
     return;
   }
-  if (setFavoriteAlias(favorite.type, alias)) {
-    await saveNodeLibrary(el);
+  const target = nodesState.renderTarget;
+  if (getFavorite(definition.type)) {
+    await removeFavoriteNode(target, definition.type);
+  } else {
+    await addFavoriteNode(target, definition);
   }
+}
+
+async function commitFavoriteAlias(el, type, alias) {
+  nodesState.editingFavoriteType = "";
+  if (setFavoriteAlias(type, alias)) {
+    await saveNodeLibrary(el);
+    return;
+  }
+  renderNodesPanel(el);
+}
+
+function beginFavoriteAliasEdit(el, favorite) {
+  nodesState.editingFavoriteType = favorite.type;
+  renderNodesPanel(el);
+}
+
+function createFavoriteAliasInput(el, favorite) {
+  const input = createWorkflowRenameInputRenderer({
+    item: { ...favorite, path: favorite.type },
+    surface: "favorite",
+    displayName: () => favorite.alias || "",
+    prepareInput: isolateComfyKeys,
+    onCommit: (value) => commitFavoriteAlias(el, favorite.type, value),
+    onError: (error) => {
+      nodesState.error = error.message;
+      nodesState.editingFavoriteType = "";
+      renderNodesPanel(el);
+    },
+    onCancel: () => {
+      nodesState.editingFavoriteType = "";
+      renderNodesPanel(el);
+    },
+    isStillEditing: (path, surface) => surface === "favorite" && nodesState.editingFavoriteType === path,
+  });
+  input.placeholder = favorite.title || favorite.type;
+  input.title = t("nodes.promptAlias");
+  return input;
 }
 
 async function moveFavoriteToGroup(el, type, targetGroupId, beforeType = "") {
@@ -6857,6 +7066,9 @@ function renderNodesPanel(el) {
   closeNodeSortMenu();
   closeOfficialFavoritesMenu();
   prepareWorkspaceModuleMount(el);
+  refreshRuntimeNodeTitlePresentation();
+  scheduleRuntimeNodeTitlePresentationRecheck();
+  ensureDdTranslationSearchAliases();
 
   const panel = document.createElement("div");
   panel.className = "workspace2-panel";
@@ -7114,15 +7326,17 @@ function openNodeGroupContextMenu(el, event, group) {
   menu.addEventListener("click", (menuEvent) => menuEvent.stopPropagation());
   menu.addEventListener("contextmenu", (menuEvent) => menuEvent.preventDefault());
 
-  const addItem = (label, handler) => {
+  const addItem = (label, handler, { keepOpen = false } = {}) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "workspace2-menu-item";
     button.textContent = label;
     button.addEventListener("click", async (clickEvent) => {
       clickEvent.stopPropagation();
-      closeNodeContextMenu();
-      await handler();
+      if (!keepOpen) {
+        closeNodeContextMenu();
+      }
+      await handler(button);
     });
     menu.append(button);
   };
@@ -7131,7 +7345,7 @@ function openNodeGroupContextMenu(el, event, group) {
   addItem(t("nodes.renameGroup"), async () => renameNodeGroup(el, group));
   addItem(t("folder.personalize"), async () => personalizeNodeGroup(el, group, event));
   addItem(t("folder.resetStyle"), async () => resetNodeGroupStyle(el, group));
-  addItem(t("nodes.deleteGroup"), () => requestDeleteNodeGroup(el, group));
+  addItem(t("nodes.deleteGroup"), (button) => requestDeleteNodeGroup(el, group, button), { keepOpen: true });
 
   document.body.append(menu);
   const rect = menu.getBoundingClientRect();
@@ -7171,7 +7385,7 @@ function openNodeContextMenu(el, event, node, options = {}) {
 
   const favorite = getFavorite(node.type);
   if (options.favorite) {
-    addItem(t("nodes.editAlias"), async () => editFavoriteAlias(el, options.favorite));
+    addItem(t("nodes.editAlias"), async () => beginFavoriteAliasEdit(el, options.favorite));
     addItem(t("nodes.removeFavorite"), async () => removeFavoriteNode(el, options.favorite.type));
   } else if (favorite) {
     addItem(t("nodes.removeFavorite"), async () => removeFavoriteNode(el, node.type));
@@ -7707,16 +7921,20 @@ function renderFavoriteNodeRow(el, favorite) {
 
   const info = document.createElement("div");
   info.className = "workspace2-name";
-  const name = document.createElement("div");
-  name.className = "workspace2-name";
-  name.textContent = favorite.title;
-  info.append(name);
+  if (nodesState.editingFavoriteType === favorite.type) {
+    info.append(createFavoriteAliasInput(el, favorite));
+  } else {
+    const name = document.createElement("div");
+    name.className = "workspace2-name";
+    name.textContent = favorite.title;
+    info.append(name);
+  }
 
   const actions = document.createElement("div");
   actions.className = "workspace2-actions";
   actions.append(
     iconButton("edit", t("nodes.editAlias"), async () => {
-      await editFavoriteAlias(el, favorite);
+      beginFavoriteAliasEdit(el, favorite);
     }),
   );
   const favoriteButton = iconButton("starFilled", t("nodes.removeFavorite"), async () => {
@@ -8091,7 +8309,8 @@ app.registerExtension({
   // it declarative avoids the legacy global LiteGraph menu monkey-patch from
   // leaking Workspace2 items into other extensions' menus.
   getNodeMenuItems(node) {
-    return [
+    const favoriteDefinition = resolveCanvasNodeDefinition(node, getNodeDefinitionMap());
+    const items = [
       {
         content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuCreateSelected", "Group Selected Nodes (Ctrl+G)")}`,
         callback: () => {
@@ -8105,9 +8324,23 @@ app.registerExtension({
         },
       },
     ];
+    if (favoriteDefinition) {
+      const isFavorite = Boolean(getFavorite(favoriteDefinition.type));
+      items.push({
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel(
+          isFavorite ? "nodes.removeFavorite" : "nodes.addFavorite",
+          isFavorite ? "Remove from favorites" : "Add to favorites",
+        )}`,
+        callback: () => {
+          toggleCanvasNodeFavorite(node);
+        },
+      });
+    }
+    return items;
   },
   async setup() {
     installPerformanceDebugApi();
+    globalThis.__workspace2ProbeNodePresentation = probeNodePresentation;
     const finish = startPerformanceSpan("workspace.setup");
 
     // Keep the official sidebar registration outside every optional startup

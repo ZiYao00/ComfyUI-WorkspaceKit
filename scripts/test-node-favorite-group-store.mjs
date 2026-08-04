@@ -31,10 +31,18 @@ assert.equal(child.order, 2);
 
 const orphan = store.createNodeGroup("Orphan", parent.id);
 state.library.favorites[0].groupId = parent.id;
-assert.equal(store.deleteNodeGroup(parent.id), true);
+assert.equal(store.dissolveNodeGroup(parent.id), true);
 assert.equal(state.library.favorites[0].groupId, "root");
 assert.equal(store.getNodeGroup(parent.id), null);
-assert.equal(store.getNodeGroup(orphan.id).parentId, parent.id);
+assert.equal(store.getNodeGroup(orphan.id), null, "dissolve removes every descendant group");
+assert.equal(store.getNodeGroup(child.id).parentId, "", "unrelated siblings remain in place");
+const deleteParent = store.createNodeGroup("Delete parent");
+const nested = store.createNodeGroup("Nested", deleteParent.id);
+state.library.favorites[0].groupId = nested.id;
+assert.equal(store.deleteNodeGroup(deleteParent.id), true);
+assert.equal(state.library.favorites.length, 0, "delete cancels favorites in the selected group tree");
+assert.equal(store.getNodeGroup(deleteParent.id), null);
+assert.equal(store.getNodeGroup(nested.id), null, "delete removes nested groups with the selected group");
 assert.equal(store.deleteNodeGroup("root"), false);
 assert.equal(store.moveNodeGroupToParent("root", child.id), null);
 

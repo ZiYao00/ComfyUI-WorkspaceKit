@@ -11,15 +11,17 @@ export function openTemplateGroupContextMenu({
   menu.addEventListener("pointerdown", (e) => e.stopPropagation());
   menu.addEventListener("click", (e) => e.stopPropagation());
   menu.addEventListener("contextmenu", (e) => e.preventDefault());
-  const addItem = (label, action) => {
+  const addItem = (label, action, { keepOpen = false } = {}) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "workspace2-menu-item";
     button.textContent = label;
     button.addEventListener("click", async (clickEvent) => {
       clickEvent.stopPropagation();
-      closeMenu();
-      try { await action(); } catch (error) { onError(error); }
+      if (!keepOpen) {
+        closeMenu();
+      }
+      try { await action(button); } catch (error) { onError(error); }
     });
     menu.append(button);
   };
@@ -27,7 +29,9 @@ export function openTemplateGroupContextMenu({
   addItem(t("templates.renameGroup"), () => onRename(el, group.id));
   addItem(t("folder.personalize"), () => onPersonalize(el, group, event));
   addItem(t("folder.resetStyle"), () => onResetStyle(el, group));
-  addItem(t("templates.deleteGroup"), () => onDelete(el, group));
+  // Keep the menu mounted until the shared inline confirmation has replaced it.
+  // Closing it first detaches the anchor and makes the confirmation invisible.
+  addItem(t("templates.deleteGroup"), (button) => onDelete(el, group, button), { keepOpen: true });
   document.body.append(menu);
   const rect = menu.getBoundingClientRect();
   menu.style.left = String(Math.max(8, Math.min(event.clientX, window.innerWidth - rect.width - 8))) + "px";

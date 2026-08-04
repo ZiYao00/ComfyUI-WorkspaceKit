@@ -33,7 +33,7 @@ export function createWorkflowContextMenuRenderer({
 
     // Keep menu action callbacks owned by entry.js. This renderer only adds
     // the Icon Kit glyph and label layout for a clearer action scan.
-    const addItem = (iconName, label, onClick) => {
+    const addItem = (iconName, label, onClick, { keepOpen = false } = {}) => {
       const button = document.createElement("button");
       button.className = "workspace2-menu-item";
       button.type = "button";
@@ -44,9 +44,11 @@ export function createWorkflowContextMenuRenderer({
       text.textContent = label;
       button.append(icon, text);
       button.addEventListener("click", async () => {
-        closeContextMenu();
+        if (!keepOpen) {
+          closeContextMenu();
+        }
         try {
-          await onClick();
+          await onClick(button);
         } catch (error) {
           handleError(el, error);
         }
@@ -63,7 +65,7 @@ export function createWorkflowContextMenuRenderer({
     }
     addItem("edit", t("menu.rename"), () => onRename(el, item));
     addItem("rootArrow", t("menu.moveToRoot"), () => onMoveToRoot(el, item));
-    addItem("trash", t("menu.moveToTrash"), () => onMoveToTrash(el, item));
+    addItem("trash", t("menu.moveToTrash"), (button) => onMoveToTrash(el, item, button), { keepOpen: true });
 
     panel.append(menu);
     state.contextMenuElement = menu;

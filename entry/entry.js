@@ -455,7 +455,7 @@ const workflowContextMenu = createWorkflowContextMenuRenderer({
   onOpenWorkflow: (path) => openWorkflow(path),
   onRename: (el, item) => beginWorkflowRename(el, item.path, "browse"),
   onMoveToRoot: (el, item) => moveItem(el, item.path, ""),
-  onMoveToTrash: (el, item) => moveToTrash(el, item),
+  onMoveToTrash: (el, item, anchor) => requestMoveWorkflowToTrash(el, item, anchor),
 });
 
 // Trash operations remain in this entry module; the renderer only presents
@@ -2587,6 +2587,55 @@ async function moveToTrash(el, item) {
     restoreTreeScrollTop(el, scrollTop);
   }
   refreshOfficialWorkflowsDeferred(250);
+}
+
+function workflowFolderHasContents(folderPath) {
+  const prefix = `${String(folderPath || "").replace(/\/+$/, "")}/`;
+  return Boolean(prefix) && state.items.some((entry) => String(entry.path || "").startsWith(prefix));
+}
+
+async function dissolveWorkflowFolder(el, item) {
+  const scrollTop = getTreeScrollTop(el);
+  const data = await postJson("/workspace2/folder/dissolve", { path: item.path });
+  state.expanded.delete(item.path);
+  state.expanded.add(parentPath(item.path));
+  state.folderMeta = data?.folder_meta || state.folderMeta;
+  state.status = t("status.folderDissolved");
+  await refreshPanel(el, { scrollTop });
+  refreshOfficialWorkflowsDeferred(250);
+}
+
+function requestMoveWorkflowToTrash(el, item, anchor = null) {
+  const performDelete = async () => {
+    try {
+      await moveToTrash(el, item);
+    } catch (error) {
+      handleError(el, error);
+    }
+  };
+
+  if (item?.type === "folder" && workflowFolderHasContents(item.path)) {
+    workspace2InlineConfirm(anchor, {
+      confirmText: t("confirm.delete"),
+      confirmTitle: t("folder.deleteTitle"),
+      onConfirm: performDelete,
+      secondaryText: t("confirm.dissolve"),
+      secondaryTitle: t("folder.dissolveTitle"),
+      onSecondary: async () => {
+        try {
+          await dissolveWorkflowFolder(el, item);
+        } catch (error) {
+          handleError(el, error);
+        }
+      },
+    });
+    return;
+  }
+
+  workspace2InlineConfirm(anchor, {
+    confirmText: t("confirm.delete"),
+    onConfirm: performDelete,
+  });
 }
 
 async function loadTrash() {
@@ -5931,7 +5980,7 @@ function renderNode(el, list, node, depth) {
     onOpenWorkflowLocation: openWorkflowLocation,
     onCopyWorkflow: copyWorkflow,
     onRename: (target, path) => beginWorkflowRename(target, path, "browse"),
-    onMoveToTrash: (target, item) => moveToTrash(target, item),
+    onMoveToTrash: (target, item, anchor) => requestMoveWorkflowToTrash(target, item, anchor),
     onError: handleError,
   }, el, list, node, depth);
 }

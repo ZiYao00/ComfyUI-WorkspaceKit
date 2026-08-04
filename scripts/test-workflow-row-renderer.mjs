@@ -53,7 +53,7 @@ renderWorkflowBrowseNode({
   onOpenWorkflowLocation: async () => {},
   onCopyWorkflow: async (_el, item) => calls.push(`copy:${item.path}`),
   onRename: () => calls.push("rename"),
-  onMoveToTrash: async () => {},
+  onMoveToTrash: async (_el, item, anchor) => calls.push(`trash:${item.path}:${anchor?.icon}`),
   onError: (error) => { throw error; },
 }, "panel", list, node, 0);
 
@@ -61,6 +61,7 @@ const actions = list.children[0].children[4];
 assert.deepEqual(actions.children.map((button) => button.icon), ["folderOpen", "copy", "edit", "trash"]);
 const event = { preventDefault() {}, stopPropagation() {} };
 await actions.children[1].listeners.get("click")(event);
-assert.deepEqual(calls, ["copy:folder/example.json"]);
+await actions.children[3].listeners.get("click")({ ...event, currentTarget: actions.children[3] });
+assert.deepEqual(calls, ["copy:folder/example.json", "trash:folder/example.json:trash"]);
 
 console.log("Workflow row renderer copy contract passed.");

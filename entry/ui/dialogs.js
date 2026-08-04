@@ -224,24 +224,37 @@ export function createWorkspace2Dialogs({ t, isolateComfyKeys, closeOverlays }) 
     });
   }
   
-  function workspace2InlineConfirm(anchor, { confirmText = t("confirm.delete"), onConfirm } = {}) {
+  function workspace2InlineConfirm(anchor, {
+    confirmText = t("confirm.delete"),
+    confirmTitle = "",
+    onConfirm,
+    secondaryText = "",
+    secondaryTitle = "",
+    onSecondary = null,
+  } = {}) {
     if (!anchor || typeof onConfirm !== "function") {
       return;
     }
     if (workspace2InlineConfirmClose) {
       workspace2InlineConfirmClose();
     }
-    closeOverlays();
-  
-    const container = anchor.classList?.contains("workspace2-actions")
+    const contextMenu = anchor.closest?.(".workspace2-context");
+    const container = contextMenu || (anchor.classList?.contains("workspace2-actions")
       ? anchor
-      : anchor.closest?.(".workspace2-actions") || anchor.closest?.(".workspace2-root-row") || anchor.parentElement;
+      : anchor.closest?.(".workspace2-actions") || anchor.closest?.(".workspace2-root-row") || anchor.parentElement);
     if (!container) {
       return;
     }
+    // The workflow context menu is itself the replacement surface. Closing all
+    // overlays before mounting would detach that surface and leave the action
+    // row invisible; ordinary row/root confirmations keep the old behavior.
+    if (!contextMenu) {
+      closeOverlays();
+    }
     const replaceActions = container.classList?.contains("workspace2-actions");
     const replaceRootRowControl = container.classList?.contains("workspace2-root-row");
-    const originalChildren = (replaceActions || replaceRootRowControl) ? Array.from(container.childNodes) : [];
+    const replaceContextMenu = container.classList?.contains("workspace2-context");
+    const originalChildren = (replaceActions || replaceRootRowControl || replaceContextMenu) ? Array.from(container.childNodes) : [];
     const inline = document.createElement("span");
     inline.className = "workspace2-inline-confirm";
     isolateComfyKeys(inline);
@@ -254,7 +267,25 @@ export function createWorkspace2Dialogs({ t, isolateComfyKeys, closeOverlays }) 
     confirm.type = "button";
     confirm.className = "workspace2-inline-confirm-button is-danger";
     confirm.textContent = confirmText;
-    inline.append(cancel, confirm);
+    if (confirmTitle) {
+      confirm.title = confirmTitle;
+      confirm.setAttribute("aria-label", confirmTitle);
+    }
+
+    let secondary = null;
+    if (secondaryText && typeof onSecondary === "function") {
+      secondary = document.createElement("button");
+      secondary.type = "button";
+      secondary.className = "workspace2-inline-confirm-button is-secondary";
+      secondary.textContent = secondaryText;
+      if (secondaryTitle) {
+        secondary.title = secondaryTitle;
+        secondary.setAttribute("aria-label", secondaryTitle);
+      }
+      inline.append(cancel, secondary, confirm);
+    } else {
+      inline.append(cancel, confirm);
+    }
   
     const cleanup = () => {
       if (workspace2InlineConfirmClose !== cleanup) {
@@ -264,7 +295,7 @@ export function createWorkspace2Dialogs({ t, isolateComfyKeys, closeOverlays }) 
       if (!container.isConnected) {
         return;
       }
-      if (replaceActions || replaceRootRowControl) {
+      if (replaceActions || replaceRootRowControl || replaceContextMenu) {
         container.replaceChildren(...originalChildren);
       } else {
         inline.remove();
@@ -282,10 +313,16 @@ export function createWorkspace2Dialogs({ t, isolateComfyKeys, closeOverlays }) 
       cleanup();
       await onConfirm();
     });
+    secondary?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      cleanup();
+      await onSecondary();
+    });
     inline.addEventListener("pointerdown", (event) => event.stopPropagation());
     inline.addEventListener("click", (event) => event.stopPropagation());
   
-    if (replaceActions) {
+    if (replaceActions || replaceContextMenu) {
       container.replaceChildren(inline);
     } else if (replaceRootRowControl) {
       container.replaceChildren(originalChildren[0], inline);

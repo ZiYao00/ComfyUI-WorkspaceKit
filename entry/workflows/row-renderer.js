@@ -158,12 +158,10 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
     }));
   }
   actions.append(iconButton("edit", t("row.rename"), () => onRename(el, node.path)));
-  actions.append(dangerIconButton("trash", t("row.moveToTrash"), async () => {
-    try {
-      await onMoveToTrash(el, node);
-    } catch (error) {
-      onError(el, error);
-    }
+  actions.append(dangerIconButton("trash", t("row.moveToTrash"), (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onMoveToTrash(el, node, event.currentTarget);
   }));
 
   row.append(reorderHandle, disclosure, icon, nameCell, actions);

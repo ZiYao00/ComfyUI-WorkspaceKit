@@ -11,6 +11,7 @@ import server
 from aiohttp import web
 
 from .service.folder_meta_service import read_folder_meta, write_folder_meta
+from .service.folder_dissolve_service import dissolve_folder
 from .service.n_sidebar_migration import (
     build_n_sidebar_preview,
     candidate_n_sidebar_settings_paths,
@@ -468,6 +469,19 @@ async def workspace2_create_folder(request):
             return _json_error("Target already exists", status=409)
         target.mkdir()
         return _json_response({"ok": True, "path": safe_relative_path(root, target)})
+    except Exception as exc:
+        return _json_error(str(exc), status=400)
+
+
+@server.PromptServer.instance.routes.post("/workspace2/folder/dissolve")
+async def workspace2_dissolve_folder(request):
+    try:
+        data = await request.json()
+        rel_path = _require_relative_path(data.get("path", ""))
+        result = await asyncio.to_thread(dissolve_folder, get_workflows_root(), comfy_path, rel_path)
+        return _json_response({"ok": True, **result})
+    except FileExistsError as exc:
+        return _json_error(str(exc), status=409)
     except Exception as exc:
         return _json_error(str(exc), status=400)
 

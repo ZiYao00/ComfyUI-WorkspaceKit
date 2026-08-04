@@ -38,7 +38,7 @@ const renderer = createWorkflowContextMenuRenderer({
   onOpenWorkflow: () => calls.push("open"),
   onRename: () => calls.push("rename"),
   onMoveToRoot: () => calls.push("root"),
-  onMoveToTrash: () => calls.push("trash"),
+  onMoveToTrash: (_el, _item, anchor) => calls.push(`trash:${anchor?.className}`),
 });
 
 const panel = new Element("div");
@@ -49,4 +49,6 @@ assert.deepEqual(menu.children.map((button) => button.children[1].textContent), 
 
 await menu.children[0].listeners.get("click")({});
 assert.deepEqual(calls, ["close", "open"]);
+await menu.children[3].listeners.get("click")({});
+assert.deepEqual(calls, ["close", "open", "trash:workspace2-menu-item"]);
 console.log("Workflow context-menu icon contract passed.");

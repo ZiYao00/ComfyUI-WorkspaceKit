@@ -11,6 +11,7 @@ export function createWorkflowResultsRenderer({
   visibleChildren,
   renderNode,
   makeDropTarget,
+  getActiveTrail,
   t,
   searchRenderDelay,
 }) {
@@ -28,8 +29,12 @@ export function createWorkflowResultsRenderer({
       tree.append(empty);
       return;
     }
+    // Resolved once per body render rather than per row: it is the same value
+    // for every node, and reading the official Store per row would be wasteful
+    // on a large tree.
+    const activeTrail = getActiveTrail?.() ?? null;
     for (const child of children) {
-      renderNode(el, tree, child, 0);
+      renderNode(el, tree, child, 0, activeTrail);
     }
   }
 

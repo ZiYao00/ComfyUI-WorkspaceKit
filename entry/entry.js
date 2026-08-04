@@ -91,6 +91,7 @@ import {
 } from "./workflows/official-adapter.js";
 import { createWorkflowRecentStore } from "./workflows/recents.js";
 import { createWorkflowOpenState } from "./workflows/open-state.js";
+import { createActiveWorkflowTrail, activeTrailRole } from "./workflows/active-trail.js";
 import { createWorkflowSectionRenderer } from "./workflows/sections.js";
 import { createWorkflowResultsRenderer } from "./workflows/results-renderer.js";
 import { createWorkflowContextMenuRenderer } from "./workflows/context-menu-renderer.js";
@@ -318,6 +319,10 @@ const state = {
   localeTimer: null,
   workflowsTarget: null,
   resultsRefreshTimer: null,
+  // Last user-driven Browse scroll position. Survives the clear-then-rebuild
+  // that a first-time workflow open performs, which a per-render snapshot alone
+  // cannot: see scrollSnapshot().
+  browseScrollTop: 0,
   workflowDirty: false,
   workflowSnapshot: "",
   officialWorkflowSnapshots: new Map(),
@@ -437,6 +442,7 @@ const workflowResults = createWorkflowResultsRenderer({
   visibleChildren,
   renderNode,
   makeDropTarget,
+  getActiveTrail: currentActiveWorkflowTrail,
   t,
   searchRenderDelay: WORKFLOW_SEARCH_RENDER_DELAY,
 });
@@ -1059,12 +1065,26 @@ function setupWorkspacePanelProviderLifecycle(api) {
   });
 }
 
+// Browse scroll position lives in state, not only in a per-render snapshot.
+//
+// A snapshot taken inside renderPanel() cannot survive every path: opening a
+// workflow for the first time calls setCurrentWorkflowCleanState(), which
+// schedules a settle re-render 300ms later. By then the tree has already been
+// cleared and rebuilt once, and clearing a scroll container makes the browser
+// reset scrollTop to 0 on its own — no code assigns it, so the value that later
+// render would save is already 0. state.browseScrollTop is written directly from
+// the tree's scroll event, so it predates any rebuild.
 function scrollSnapshot(el) {
   const tree = el?.querySelector?.(".workspace2-tree");
   const active = document.activeElement;
   const activeInPanel = active instanceof HTMLElement && el?.contains?.(active);
+  const liveTop = tree?.scrollTop || 0;
+  // Prefer the live position when the tree still holds content; fall back to the
+  // remembered one when this render follows a rebuild that already zeroed it.
+  const top = liveTop > 0 ? liveTop : (state.browseScrollTop || 0);
+  if (liveTop > 0) state.browseScrollTop = liveTop;
   return {
-    top: tree?.scrollTop || 0,
+    top,
     activeSelector: activeInPanel ? active.dataset?.workspace2Focus || "" : "",
     selectionStart: activeInPanel && "selectionStart" in active ? active.selectionStart : null,
     selectionEnd: activeInPanel && "selectionEnd" in active ? active.selectionEnd : null,
@@ -1075,7 +1095,13 @@ function restoreScrollSnapshot(el, snapshot) {
   requestAnimationFrame(() => {
     const tree = el?.querySelector?.(".workspace2-tree");
     if (tree) {
-      tree.scrollTop = snapshot?.top || 0;
+      const target = snapshot?.top || 0;
+      // Clamp: the tree may be shorter than before (a folder collapsed, a search
+      // filtered rows), and assigning past the end would silently land at the
+      // bottom instead of where the user was.
+      const maxTop = Math.max(0, tree.scrollHeight - tree.clientHeight);
+      tree.scrollTop = Math.min(target, maxTop);
+      state.browseScrollTop = tree.scrollTop;
     }
     if (snapshot?.activeSelector) {
       const active = el?.querySelector?.(`[data-workspace2-focus="${cssEscape(snapshot.activeSelector)}"]`);
@@ -1084,6 +1110,26 @@ function restoreScrollSnapshot(el, snapshot) {
         try {
           active.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd ?? snapshot.selectionStart);
         } catch {}
+      }
+    }
+
+    // A newly created folder is inserted in sort order — often far from where
+    // the user was reading — so its rename input can land outside the scrollport
+    // and the user would be typing into something they cannot see. This is
+    // keyed on the inline-edit state rather than on the pre-render focus target,
+    // because a brand-new row's input did not exist when the snapshot was taken
+    // and so never appears in snapshot.activeSelector. Only an out-of-view input
+    // is pulled in; one already visible is left alone so the view does not drift
+    // on renders triggered while typing.
+    if (tree && state.editingPath) {
+      const editing = tree.querySelector(".workspace2-rename-input");
+      if (editing) {
+        const inputRect = editing.getBoundingClientRect();
+        const treeRect = tree.getBoundingClientRect();
+        if (inputRect.top < treeRect.top || inputRect.bottom > treeRect.bottom) {
+          editing.scrollIntoView({ block: "nearest" });
+          state.browseScrollTop = tree.scrollTop;
+        }
       }
     }
   });
@@ -1422,6 +1468,9 @@ const {
   setPanelOpacityValue,
   setPanelBackgroundModeValue,
   setGlassBlurValue,
+  // Resolved lazily: extensionManager is not populated when this factory runs
+  // during module evaluation, so capturing the store here would capture nothing.
+  getSidebarTabStore: () => app.extensionManager?.sidebarTab ?? null,
 });
 
 function closeWorkspaceSettings() {
@@ -5947,16 +5996,35 @@ function createWorkflowRenameInput(el, item, surface) {
   });
 }
 
-function renderNode(el, list, node, depth) {
+// Trail of the workflow currently being edited, used by Browse to tint that
+// file and every folder above it. Only the *active* workflow is tracked, not
+// every open tab: tinting all of them would light up large parts of a deep
+// tree and stop pointing anywhere in particular.
+function currentActiveWorkflowTrail() {
+  if (!state.isOfficialRoot || !getOfficialWorkflowStore(app)) {
+    return createActiveWorkflowTrail(state.selectedPath);
+  }
+  const active = getActiveOfficialWorkflow(app);
+  return createActiveWorkflowTrail(relativeWorkflowPathFromOfficial(active?.path || ""));
+}
+
+function renderNode(el, list, node, depth, activeTrail = null) {
   // Keep the narrow adapter here: this is evaluated only while Browse renders,
   // never while entry.js registers the sidebar. All callbacks preserve their
   // existing transaction order in the composition root.
+  //
+  // activeTrail travels inside deps because the renderer recurses into child
+  // rows with the same deps object; a positional argument would have to be
+  // forwarded at every recursive call, and one missed call would silently drop
+  // the tint on nested rows.
   renderWorkflowBrowseNode({
     state,
     t,
     matchesQuery,
     visibleChildren,
     parentPath,
+    activeTrail,
+    activeTrailRole,
     workflowFolderMeta,
     applyDecoratedIcon,
     defaultFolderIconClass: DEFAULT_FOLDER_ICON_CLASS,
@@ -6220,6 +6288,11 @@ function renderPanel(el) {
 
   const tree = document.createElement("div");
   tree.className = "workspace2-tree";
+  // Record where the user actually scrolls to, so the position is known even
+  // when the next render happens after this element has been discarded.
+  tree.addEventListener("scroll", () => {
+    state.browseScrollTop = tree.scrollTop;
+  }, { passive: true });
 
   const moveRootRow = createRootActionRow({
     title: t("root.dropTitle"),

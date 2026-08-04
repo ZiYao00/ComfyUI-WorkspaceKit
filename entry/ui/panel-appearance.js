@@ -16,6 +16,10 @@
 //   panelBackgroundMode, glassTransparency, panelOpacity, glassBlurPixels,
 //   setPanelOpacityValue, setPanelBackgroundModeValue, setGlassBlurValue
 //                               - getters/setters from createPanelBackgroundState
+//   getSidebarTabStore          - returns ComfyUI's sidebarTab Pinia store, or
+//                                 null. Injected rather than reaching for `app`
+//                                 here so this module keeps owning appearance
+//                                 only, and so the lookup stays testable.
 export function createPanelAppearance({
   workspaceState,
   t,
@@ -28,6 +32,7 @@ export function createPanelAppearance({
   setPanelOpacityValue,
   setPanelBackgroundModeValue,
   setGlassBlurValue,
+  getSidebarTabStore = () => null,
 }) {
   function isPanelGlassEnabled() {
     return panelBackgroundMode() === "glass";
@@ -252,6 +257,19 @@ export function createPanelAppearance({
     }
   }
   
+  // True when ComfyUI's sidebar is showing some other tab (or none). In glass
+  // mode the shell is re-parented to <body>, so it is no longer inside the host
+  // ComfyUI hides on a tab switch — without this check the overlay stays on
+  // screen, floating above whichever panel the user switched to.
+  function isWorkspaceSidebarTabInactive() {
+    const store = getSidebarTabStore();
+    if (!store) return false;
+    const activeId = store.activeSidebarTabId;
+    // A null/empty id means the sidebar is collapsed entirely, which also has to
+    // hide the overlay. Only an explicit match keeps it visible.
+    return activeId !== WORKSPACE2_TAB_ID;
+  }
+
   function syncWorkspaceGlassOverlay() {
     const host = workspaceState.renderTarget;
     const shell = workspaceState.glassPortalElement
@@ -260,7 +278,10 @@ export function createPanelAppearance({
       return;
     }
     if (isPanelGlassEnabled()) {
-      if (!isElementVisible(host)) {
+      // The store is consulted before measuring the host: during a tab switch
+      // the host can still report a non-zero box for a frame, so geometry alone
+      // would briefly keep the overlay up.
+      if (isWorkspaceSidebarTabInactive() || !isElementVisible(host)) {
         shell.classList.add("is-workspace2-overlay-hidden");
         return;
       }
@@ -295,6 +316,25 @@ export function createPanelAppearance({
     window.addEventListener("resize", () => {
       window.requestAnimationFrame(syncWorkspaceGlassOverlay);
     });
+
+    // Resize alone is not enough. Switching sidebar tabs — by clicking another
+    // entry or via ComfyUI's own N/W/M shortcuts — changes no window dimension,
+    // so the overlay was never told to hide and stayed layered over the panel
+    // the user had switched to. ComfyUI's sidebarTab store is the authoritative
+    // signal, and subscribing costs nothing per frame the way polling would.
+    const store = getSidebarTabStore();
+    if (typeof store?.$subscribe !== "function") {
+      // Older or trimmed builds may not expose the store. The geometry check in
+      // syncWorkspaceGlassOverlay() still covers resize-driven changes, so this
+      // degrades rather than throwing.
+      console.debug("[WorkspaceKit] Sidebar tab store unavailable; glass overlay syncs on resize only.");
+      return;
+    }
+    // `detached` keeps the subscription alive independently of any Vue component
+    // scope, matching how the workflow store is consumed elsewhere.
+    store.$subscribe(() => {
+      window.requestAnimationFrame(syncWorkspaceGlassOverlay);
+    }, { detached: true });
   }
   
   function setPanelOpacity(value) {

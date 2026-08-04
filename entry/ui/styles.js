@@ -58,6 +58,12 @@ export function styles() {
       --workspace2-accent-mid: color-mix(in srgb, var(--workspace2-accent) 18%, transparent);
       --workspace2-accent-strong: color-mix(in srgb, var(--workspace2-accent) 30%, transparent);
       --workspace2-accent-border: color-mix(in srgb, var(--workspace2-accent) 42%, transparent);
+      /* Recessed wash marking the active workflow and the folders leading to it.
+         Derived from the panel's own foreground colour rather than a fixed dark
+         value, so it darkens on light themes and lightens on dark ones instead
+         of disappearing into one of them. Kept translucent so the transparent
+         and frosted panel backgrounds still show through. */
+      --workspace2-active-trail: color-mix(in srgb, var(--p-text-color, var(--fg-color, #ddd)) 14%, transparent);
       --workspace2-danger: #FF453A;
       --workspace2-danger-soft: rgba(255, 69, 58, 0.10);
       --workspace2-danger-mid: rgba(255, 69, 58, 0.22);
@@ -939,6 +945,23 @@ export function styles() {
     }
     .workspace2-row:hover {
       background: var(--workspace2-hover-glass, var(--workspace2-hover));
+    }
+    /* Trail of the workflow currently being edited. A recessed dark wash rather
+       than the accent colour, so it reads as "this is where you are" and cannot
+       be mistaken for the accent-coloured selection below. Folders on the trail
+       are deliberately lighter than the file itself, giving the eye a gradient
+       to follow inward; both are visible whether the folder is open or closed.
+       Declared before .is-selected so a clicked row still shows as selected. */
+    .workspace2-row.is-active-workflow-path {
+      background: color-mix(in srgb, var(--workspace2-active-trail) 45%, transparent);
+    }
+    .workspace2-row.is-active-workflow {
+      background: var(--workspace2-active-trail);
+      box-shadow: inset 2px 0 0 color-mix(in srgb, var(--workspace2-accent) 62%, transparent);
+    }
+    .workspace2-row.is-active-workflow-path:hover,
+    .workspace2-row.is-active-workflow:hover {
+      background: color-mix(in srgb, var(--workspace2-active-trail) 82%, var(--workspace2-hover));
     }
     .workspace2-row.is-selected {
       background: var(--workspace2-accent-mid);

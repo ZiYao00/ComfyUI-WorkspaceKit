@@ -10,6 +10,8 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
     matchesQuery,
     visibleChildren,
     parentPath,
+    activeTrail,
+    activeTrailRole,
     workflowFolderMeta,
     applyDecoratedIcon,
     defaultFolderIconClass,
@@ -48,6 +50,14 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
   row.draggable = false;
   if (state.selectedPath === node.path) {
     row.classList.add("is-selected");
+  }
+  // Two distinct marks that can coexist on one row: `is-selected` is where the
+  // user last clicked, `is-active-*` is where the workflow being edited lives.
+  const trailRole = activeTrailRole?.(activeTrail, node.path, node.type);
+  if (trailRole === "file") {
+    row.classList.add("is-active-workflow");
+  } else if (trailRole === "folder") {
+    row.classList.add("is-active-workflow-path");
   }
 
   row.addEventListener("click", async (event) => {

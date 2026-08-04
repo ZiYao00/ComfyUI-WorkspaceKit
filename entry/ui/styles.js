@@ -58,12 +58,20 @@ export function styles() {
       --workspace2-accent-mid: color-mix(in srgb, var(--workspace2-accent) 18%, transparent);
       --workspace2-accent-strong: color-mix(in srgb, var(--workspace2-accent) 30%, transparent);
       --workspace2-accent-border: color-mix(in srgb, var(--workspace2-accent) 42%, transparent);
-      /* Recessed wash marking the active workflow and the folders leading to it.
-         Derived from the panel's own foreground colour rather than a fixed dark
-         value, so it darkens on light themes and lightens on dark ones instead
-         of disappearing into one of them. Kept translucent so the transparent
-         and frosted panel backgrounds still show through. */
-      --workspace2-active-trail: color-mix(in srgb, var(--p-text-color, var(--fg-color, #ddd)) 14%, transparent);
+      /* Hue marking the active workflow and the folders leading to it.
+         A fixed amber rather than a tint of the panel's own foreground: a
+         grey wash lands in the same neutral family as :hover and as the
+         theme's own row shading, so it reads as "slightly lighter row"
+         instead of as a mark. Amber is also opposite the blue accent that
+         :hover and .is-selected both use, so the two marks stay tellable
+         apart when they land on the same row. Mid-luminance, so it survives
+         both light and dark themes without being flipped per theme. */
+      --workspace2-active-trail: var(--p-amber-400, #FBBF24);
+      /* Kept translucent so the transparent and frosted panel backgrounds still
+         show through. The file wash is deliberately ~2.4x the folder wash: the
+         gradient is what tells the eye which end of the trail is the leaf. */
+      --workspace2-active-trail-mid: color-mix(in srgb, var(--workspace2-active-trail) 26%, transparent);
+      --workspace2-active-trail-soft: color-mix(in srgb, var(--workspace2-active-trail) 11%, transparent);
       --workspace2-danger: #FF453A;
       --workspace2-danger-soft: rgba(255, 69, 58, 0.10);
       --workspace2-danger-mid: rgba(255, 69, 58, 0.22);
@@ -946,22 +954,30 @@ export function styles() {
     .workspace2-row:hover {
       background: var(--workspace2-hover-glass, var(--workspace2-hover));
     }
-    /* Trail of the workflow currently being edited. A recessed dark wash rather
-       than the accent colour, so it reads as "this is where you are" and cannot
-       be mistaken for the accent-coloured selection below. Folders on the trail
-       are deliberately lighter than the file itself, giving the eye a gradient
-       to follow inward; both are visible whether the folder is open or closed.
-       Declared before .is-selected so a clicked row still shows as selected. */
+    /* Trail of the workflow currently being edited. Amber rather than the blue
+       accent, so it reads as "this is where you are" and cannot be mistaken for
+       the accent-coloured selection below — the two can land on the same row.
+       Folders on the trail are deliberately lighter than the file itself, giving
+       the eye a gradient to follow inward; both are visible whether the folder
+       is open or closed. Declared before .is-selected so a clicked row still
+       shows as selected. */
     .workspace2-row.is-active-workflow-path {
-      background: color-mix(in srgb, var(--workspace2-active-trail) 45%, transparent);
+      background: var(--workspace2-active-trail-soft);
+      box-shadow: inset 2px 0 0 color-mix(in srgb, var(--workspace2-active-trail) 40%, transparent);
     }
     .workspace2-row.is-active-workflow {
-      background: var(--workspace2-active-trail);
-      box-shadow: inset 2px 0 0 color-mix(in srgb, var(--workspace2-accent) 62%, transparent);
+      background: var(--workspace2-active-trail-mid);
+      box-shadow: inset 2px 0 0 var(--workspace2-active-trail);
     }
-    .workspace2-row.is-active-workflow-path:hover,
+    /* Hover mixes against the same token the plain-row hover above uses, so the
+       glass background gets the translucent white and opaque backgrounds get the
+       theme's grey. Mixing against the opaque token in glass mode would push a
+       dark grey behind the amber and mute it. */
+    .workspace2-row.is-active-workflow-path:hover {
+      background: color-mix(in srgb, var(--workspace2-active-trail-soft) 70%, var(--workspace2-hover-glass, var(--workspace2-hover)));
+    }
     .workspace2-row.is-active-workflow:hover {
-      background: color-mix(in srgb, var(--workspace2-active-trail) 82%, var(--workspace2-hover));
+      background: color-mix(in srgb, var(--workspace2-active-trail-mid) 82%, var(--workspace2-hover-glass, var(--workspace2-hover)));
     }
     .workspace2-row.is-selected {
       background: var(--workspace2-accent-mid);

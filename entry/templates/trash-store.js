@@ -76,6 +76,29 @@ export function dissolveTemplateGroup(library, groupId) {
   };
 }
 
+/**
+ * Remove a group and every subgroup under it, promoting all their templates.
+ *
+ * Unlike `dissolveTemplateGroup`, which promotes one level and preserves the
+ * inner structure, this keeps no structure at all. No template is ever
+ * discarded: a template whose group disappears is re-parented to the removed
+ * group's parent, so flatten can never become a silent delete.
+ */
+export function flattenTemplateGroup(library, groupId) {
+  const groups = Array.isArray(library?.groups) ? library.groups : [];
+  const root = groups.find((group) => group?.id === groupId);
+  if (!root) return library;
+  const parentId = String(root.parentId || "");
+  const groupIds = templateGroupSubtreeIds(library, groupId);
+  return {
+    ...library,
+    groups: groups.filter((group) => !groupIds.has(String(group?.id || ""))),
+    templates: (library?.templates || []).map((template) => (
+      groupIds.has(String(template?.groupId || "")) ? { ...template, groupId: parentId } : template
+    )),
+  };
+}
+
 export function moveTemplateGroupToTrash(library, groupId, deletedAt = Date.now()) {
   const groupIds = templateGroupSubtreeIds(library, groupId);
   if (!groupIds.size) return library;

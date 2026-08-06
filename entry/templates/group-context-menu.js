@@ -1,7 +1,7 @@
 // Presentation-only Template group context menu. All mutations are callbacks.
 export function openTemplateGroupContextMenu({
   document, window, state, t, el, event, group, closeMenu, closeOnEvent, onError,
-  onNewSubfolder, onRename, onPersonalize, onResetStyle, onDelete,
+  onNewSubfolder, onRename, onPersonalize, onResetStyle, onDelete, onFlatten,
 }) {
   event.preventDefault();
   event.stopPropagation();
@@ -29,6 +29,12 @@ export function openTemplateGroupContextMenu({
   addItem(t("templates.renameGroup"), () => onRename(el, group.id));
   addItem(t("folder.personalize"), () => onPersonalize(el, group, event));
   addItem(t("folder.resetStyle"), () => onResetStyle(el, group));
+  if (typeof onFlatten === "function") {
+    // Dissolve stays on the delete confirmation as the non-destructive
+    // alternative; flatten discards the whole inner structure, so it is its own
+    // menu choice. Keep the menu mounted for its confirmation, as delete does.
+    addItem(t("templates.flattenGroup"), (button) => onFlatten(el, group, button), { keepOpen: true });
+  }
   // Keep the menu mounted until the shared inline confirmation has replaced it.
   // Closing it first detaches the anchor and makes the confirmation invisible.
   addItem(t("templates.deleteGroup"), (button) => onDelete(el, group, button), { keepOpen: true });

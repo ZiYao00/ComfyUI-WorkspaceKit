@@ -15,6 +15,7 @@ export function createWorkflowContextMenuRenderer({
   onRename,
   onMoveToRoot,
   onMoveToTrash,
+  onFlattenFolder,
 }) {
   function render(el, panel) {
     state.contextMenuElement?.remove();
@@ -65,6 +66,13 @@ export function createWorkflowContextMenuRenderer({
     }
     addItem("edit", t("menu.rename"), () => onRename(el, item));
     addItem("rootArrow", t("menu.moveToRoot"), () => onMoveToRoot(el, item));
+    if (item.type === "folder" && typeof onFlattenFolder === "function") {
+      // Dissolve stays on the delete confirmation, where it reads as the
+      // non-destructive alternative. Flatten discards the whole inner
+      // structure, so it is a deliberate menu choice of its own and keeps the
+      // menu open for its confirmation.
+      addItem("arrowsUpDown", t("menu.flattenFolder"), (button) => onFlattenFolder(el, item, button), { keepOpen: true });
+    }
     addItem("trash", t("menu.moveToTrash"), (button) => onMoveToTrash(el, item, button), { keepOpen: true });
 
     panel.append(menu);

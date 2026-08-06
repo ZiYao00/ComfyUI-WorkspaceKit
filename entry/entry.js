@@ -50,6 +50,7 @@ import { renderTemplateContextMenu as renderTemplateContextMenuRenderer } from "
 import { createTemplateMinimap } from "./templates/minimap.js";
 import {
   dissolveTemplateGroup as dissolveTemplateGroupStore,
+  flattenTemplateGroup as flattenTemplateGroupStore,
   emptyTemplateTrash as emptyTemplateTrashStore,
   moveTemplateGroupToTrash,
   moveTemplateToTrash,
@@ -473,6 +474,7 @@ const workflowContextMenu = createWorkflowContextMenuRenderer({
   onRename: (el, item) => beginWorkflowRename(el, item.path, "browse"),
   onMoveToRoot: (el, item) => moveItem(el, item.path, ""),
   onMoveToTrash: (el, item, anchor) => requestMoveWorkflowToTrash(el, item, anchor),
+  onFlattenFolder: (el, item, anchor) => requestFlattenWorkflowFolder(el, item, anchor),
 });
 
 // Trash operations remain in this entry module; the renderer only presents
@@ -2671,13 +2673,64 @@ function workflowFolderHasContents(folderPath) {
 
 async function dissolveWorkflowFolder(el, item) {
   const scrollTop = getTreeScrollTop(el);
-  const data = await postJson("/workspace2/folder/dissolve", { path: item.path });
+  const data = await postJson("/workspace2/folder/dissolve", {
+    path: item.path,
+    // The server owns all filename construction; locale only chooses the
+    // documented number-suffix style and can never become a path fragment.
+    locale: getLocale(),
+  });
   state.expanded.delete(item.path);
   state.expanded.add(parentPath(item.path));
   state.folderMeta = data?.folder_meta || state.folderMeta;
-  state.status = t("status.folderDissolved");
+  const renamed = Number(data?.renamed_count || 0);
+  // Auto-numbering changes names the user chose, so it is always reported.
+  // Staying silent would leave them hunting for a folder that no longer has
+  // the name they remember.
+  state.status = renamed > 0
+    ? t("status.folderDissolvedRenamed", { count: renamed })
+    : t("status.folderDissolved");
   await refreshPanel(el, { scrollTop });
   refreshOfficialWorkflowsDeferred(250);
+}
+
+async function flattenWorkflowFolder(el, item) {
+  const scrollTop = getTreeScrollTop(el);
+  const data = await postJson("/workspace2/folder/flatten", {
+    path: item.path,
+    locale: getLocale(),
+  });
+  // Flatten removes the whole subtree, so every expansion state below the
+  // source names a folder that no longer exists.
+  const prefix = `${String(item.path || "").replace(/\/+$/, "")}/`;
+  for (const path of Array.from(state.expanded)) {
+    if (path === item.path || String(path).startsWith(prefix)) {
+      state.expanded.delete(path);
+    }
+  }
+  state.expanded.add(parentPath(item.path));
+  state.folderMeta = data?.folder_meta || state.folderMeta;
+  const renamed = Number(data?.renamed_count || 0);
+  state.status = renamed > 0
+    ? t("status.folderFlattenedRenamed", { count: renamed })
+    : t("status.folderFlattened");
+  await refreshPanel(el, { scrollTop });
+  refreshOfficialWorkflowsDeferred(250);
+}
+
+function requestFlattenWorkflowFolder(el, item, anchor = null) {
+  // Flatten destroys the folder structure the user built by hand, and unlike a
+  // one-level dissolve it cannot be undone step by step. Always confirm.
+  workspace2InlineConfirm(anchor, {
+    confirmText: t("confirm.flatten"),
+    confirmTitle: t("folder.flattenTitle"),
+    onConfirm: async () => {
+      try {
+        await flattenWorkflowFolder(el, item);
+      } catch (error) {
+        handleError(el, error);
+      }
+    },
+  });
 }
 
 function requestMoveWorkflowToTrash(el, item, anchor = null) {
@@ -3021,6 +3074,38 @@ async function dissolveTemplateGroup(el, group) {
   templatesState.expanded.delete(group.id);
   normalizeTemplateOrders(parentId);
   await saveTemplateLibrary(el);
+}
+
+async function flattenTemplateGroupAction(el, group) {
+  const parentId = String(group.parentId || "");
+  // Collect the subtree before mutating: afterwards those groups are gone and
+  // their expansion state would be left pointing at ids that no longer exist.
+  const groupIds = templateGroupSubtreeIds(templatesState.library, group.id);
+  templatesState.library = flattenTemplateGroupStore(templatesState.library, group.id);
+  for (const groupId of groupIds) {
+    templatesState.expanded.delete(groupId);
+  }
+  templatesState.editingGroupId = "";
+  normalizeTemplateOrders(parentId);
+  await saveTemplateLibrary(el);
+}
+
+function requestFlattenTemplateGroup(el, group, anchor = null) {
+  const target = anchor || el?.querySelector?.(`[data-workspace2-template-group-id="${cssEscape(group.id)}"] .workspace2-actions`);
+  // Flatten discards the group structure the user built and, unlike a
+  // one-level dissolve, cannot be undone step by step. Always confirm.
+  workspace2InlineConfirm(target, {
+    confirmText: t("confirm.flatten"),
+    confirmTitle: t("templates.flattenGroupTitle"),
+    onConfirm: async () => {
+      try {
+        await flattenTemplateGroupAction(el, group);
+      } catch (error) {
+        templatesState.error = error.message;
+        renderTemplatesPanel(el);
+      }
+    },
+  });
 }
 
 async function moveTemplateGroupToTrashAction(el, group) {
@@ -3856,6 +3941,7 @@ function openTemplateGroupContextMenu(el, event, group) {
     onPersonalize: personalizeTemplateGroup,
     onResetStyle: resetTemplateGroupStyle,
     onDelete: requestDeleteTemplateGroup,
+    onFlatten: requestFlattenTemplateGroup,
   });
 }
 

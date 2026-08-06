@@ -51,4 +51,74 @@ await menu.children[0].listeners.get("click")({});
 assert.deepEqual(calls, ["close", "open"]);
 await menu.children[3].listeners.get("click")({});
 assert.deepEqual(calls, ["close", "open", "trash:workspace2-menu-item"]);
+
+// A file row must never offer Flatten: there is no structure to flatten, and
+// the callback is optional so an older host keeps working without it.
+const fileCalls = [];
+const fileRenderer = createWorkflowContextMenuRenderer({
+  state,
+  t: (key) => key,
+  closeContextMenu: () => {},
+  handleError: (error) => { throw error; },
+  createIcon: (key) => {
+    const icon = new Element("svg");
+    icon.icon = key;
+    icon.classList = { add: () => {} };
+    return icon;
+  },
+  onNewSubfolder: () => {},
+  onPersonalizeFolder: () => {},
+  onResetFolderStyle: () => {},
+  onOpenWorkflow: () => {},
+  onRename: () => {},
+  onMoveToRoot: () => {},
+  onMoveToTrash: () => {},
+  onFlattenFolder: () => fileCalls.push("flatten"),
+});
+const filePanel = new Element("div");
+fileRenderer.render("panel", filePanel);
+assert.deepEqual(
+  filePanel.children[0].children.map((button) => button.children[0].icon),
+  ["folderOpen", "edit", "rootArrow", "trash"],
+);
+
+// T-048: a folder row gains Flatten, placed directly before Move to trash so
+// the two structure-destroying actions sit together at the bottom.
+const folderCalls = [];
+const folderState = {
+  contextMenuElement: null,
+  contextMenu: { item: { type: "folder", path: "folder" }, x: 20, y: 30 },
+};
+const folderRenderer = createWorkflowContextMenuRenderer({
+  state: folderState,
+  t: (key) => key,
+  closeContextMenu: () => folderCalls.push("close"),
+  handleError: (error) => { throw error; },
+  createIcon: (key) => {
+    const icon = new Element("svg");
+    icon.icon = key;
+    icon.classList = { add: () => {} };
+    return icon;
+  },
+  onNewSubfolder: () => {},
+  onPersonalizeFolder: () => {},
+  onResetFolderStyle: () => {},
+  onOpenWorkflow: () => {},
+  onRename: () => {},
+  onMoveToRoot: () => {},
+  onMoveToTrash: () => folderCalls.push("trash"),
+  onFlattenFolder: (_el, _item, anchor) => folderCalls.push(`flatten:${anchor?.className}`),
+});
+const folderPanel = new Element("div");
+folderRenderer.render("panel", folderPanel);
+const folderMenu = folderPanel.children[0];
+assert.deepEqual(
+  folderMenu.children.map((button) => button.children[1].textContent),
+  ["menu.newSubfolder", "folder.personalize", "folder.resetStyle", "menu.rename", "menu.moveToRoot", "menu.flattenFolder", "menu.moveToTrash"],
+);
+// Flatten must keep the menu mounted, like trash: closing it first detaches the
+// anchor and leaves the inline confirmation invisible.
+await folderMenu.children[5].listeners.get("click")({});
+assert.deepEqual(folderCalls, ["flatten:workspace2-menu-item"]);
+
 console.log("Workflow context-menu icon contract passed.");

@@ -1,5 +1,76 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-06 - Dissolve fixes shipped: T-046, T-047, T-048 (T-049 deferred)
+
+Follow-up to the investigation logged below. All three approved items are
+implemented and verified; the success-flash request (T-049) was deliberately left
+open by the user.
+
+### What changed
+
+| Item | Change |
+| --- | --- |
+| T-046 | `_relative_key()` now collapses `Path(".")` to `""`, so a top-level dissolve no longer writes `./child` metadata keys. `normalize_folder_meta()` strips any `./` prefix on every read and write, so metadata already poisoned by earlier builds heals with no migration step. |
+| T-047 | A name collision is now numbered (`flow (2).json` / `流程（2）.json`) instead of refusing the whole operation. New `service/name_sequence_service.py` owns the naming; the extension always stays last. |
+| T-048 | Resolved as option C: `解散` keeps promoting one level, and a separate `全部拍平` was added to both the Workflows folder menu and the Templates group menu. Flatten always asks for confirmation. |
+
+### T-046 confirmed against the live server before and after
+
+The running 8190 server still had the pre-fix Python, which made a clean
+before/after possible on the real filesystem:
+
+| Step | Result |
+| --- | --- |
+| Dissolve top-level `wkT1` on the **old** code | `parent_path: "."`, metadata keys `./wkT2`, `./wkT2/wkT3` |
+| Panel after reload | `wkT2` row present, its 🌟 **gone** (`iconText: ""`) — the reported symptom |
+| Same poisoned file through the **fixed** normalizer | keys healed to `wkT2`, `wkT2/wkT3`, 🌟 preserved |
+| Dissolve top-level `wkT2` with the **fixed** service | `parent_path: ""`, no poisoned keys, promoted folder kept its colour |
+
+### Two bugs found by testing, not by reading the code
+
+**A child sharing its parent folder's name failed outright.** `A/B/B` dissolving
+`B`: the source directory is still on disk while its children are moved, so
+treating its name as free produced `renamed_count: 0` and then a hard
+`FileExistsError`. Both dissolve and flatten now count the source folder's own
+name as taken. This is a legitimate structure, and the first implementation broke
+it — it is covered by a contract test now.
+
+**Locale bracket width is not interchangeable.** `same（2）.json` and
+`same (2).json` are different filenames, so numbering restarts at 2 per style
+rather than continuing one series across locales. Asserted explicitly so a future
+"normalization" of the suffix does not silently start overwriting files.
+
+### Flatten rollback verified at its worst moment
+
+Flatten removes directories, so a failure after the files have moved is the
+dangerous case. Simulating a metadata-write failure at exactly that point:
+every file restored byte-for-byte, the metadata restored, and the subtree
+directories recreated. Covered by a contract test that injects the failure.
+
+### Verification
+
+`86` JavaScript contracts, `6` Python contracts (two of them new:
+`test-name-sequence-service.py` and the extended dissolve suite), release-version
+check `0.2.5`. Live UI verified for both panels: `全部拍平` appears on folder and
+group rows but **not** on file rows, its confirmation mounts in place with
+`取消 / 全部拍平`, and flattening a 3-level template tree removed all three levels
+while keeping the template.
+
+**The new `/workspace2/folder/flatten` route needs a ComfyUI restart to load.**
+The server was left running (the canvas had unsaved changes), so the flatten
+route was exercised by calling the service directly against the real workflows
+directory rather than through HTTP.
+
+Every probe artifact was removed afterwards: folders `wkT1`/`wkT2`/`wkT3`/`wkC`/
+`wkF`, the promoted `deep.json`/`dup*.json`, the seeded template groups, and the
+`./` metadata keys the old-code probe created. `folder_meta` was restored to
+`{SD: ✨, flux2_Klein: #FF453A}` and the template library to empty.
+
+> A `curl -d` with an emoji in the body silently mangled `SD`'s `✨` to `?`,
+> writing corruption into the user's real metadata. It was caught and restored
+> immediately. **Post JSON containing non-ASCII text through Python with
+> explicit UTF-8 encoding, never through a shell `curl -d` literal.**
+
 ## 2026-08-06 - Folder/group dissolve: two rounds of live investigation (T-046..T-049)
 
 The user reported that dissolving the top level of a 5-level tree "does nothing",

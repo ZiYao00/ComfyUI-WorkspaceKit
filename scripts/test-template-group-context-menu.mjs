@@ -28,4 +28,29 @@ await bodyMenu.children[0].listeners.get("click")({stopPropagation(){}});
 assert.deepEqual(calls,["close","close","new"]);
 await bodyMenu.children[4].listeners.get("click")({stopPropagation(){}});
 assert.deepEqual(calls,["close","close","new","delete-anchor"], "delete keeps its menu anchor mounted for inline confirmation");
+
+// T-048: flatten is a separate menu choice, ordered just before delete so the
+// two structure-destroying actions sit together at the bottom.
+const flatCalls=[];
+let flatMenu;
+const flatDocument={
+  createElement:()=>new E(),
+  body:{append:(x)=>{flatMenu=x;}},
+  addEventListener(){},
+};
+openTemplateGroupContextMenu({
+  document:flatDocument,window:{innerWidth:300,innerHeight:200,setTimeout:(f)=>f()},state:{},t:(k)=>k,el:"panel",event,group:{id:"g"},
+  closeMenu:()=>{},closeOnEvent:()=>{},onError:()=>{},
+  onNewSubfolder:async()=>{},onRename:async()=>{},onPersonalize:async()=>{},onResetStyle:async()=>{},
+  onDelete:async()=>flatCalls.push("delete"),
+  onFlatten:async(_el,_group,button)=>flatCalls.push(button === flatMenu.children[4] ? "flatten-anchor" : "flatten-missing-anchor"),
+});
+assert.equal(flatMenu.children.length,6);
+assert.equal(flatMenu.children[4].textContent,"templates.flattenGroup");
+assert.equal(flatMenu.children[5].textContent,"templates.deleteGroup");
+// Flatten must keep the menu mounted: closing it first would detach the anchor
+// and leave its confirmation invisible, exactly as for delete.
+await flatMenu.children[4].listeners.get("click")({stopPropagation(){}});
+assert.deepEqual(flatCalls,["flatten-anchor"]);
+
 console.log("template group context-menu contract passed");

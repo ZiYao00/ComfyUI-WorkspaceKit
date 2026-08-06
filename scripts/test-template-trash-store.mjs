@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   dissolveTemplateGroup,
+  flattenTemplateGroup,
   emptyTemplateTrash,
   moveTemplateGroupToTrash,
   moveTemplateToTrash,
@@ -65,6 +66,28 @@ assert.equal(dissolved.groups.some((item) => item.id === "parent"), false);
 assert.equal(dissolved.groups.find((item) => item.id === "child").parentId, "");
 assert.equal(dissolved.templates.find((item) => item.id === "parent-template").groupId, "");
 assert.equal(dissolved.templates.find((item) => item.id === "grandchild-template").groupId, "grandchild");
+
+// T-048: flatten removes the whole subtree, so unlike dissolve no inner group
+// survives. Every template lands in the removed group's parent.
+const flattened = flattenTemplateGroup(nestedLibrary, "parent");
+assert.deepEqual(flattened.groups.map((item) => item.id), ["sibling"]);
+for (const id of ["parent-template", "child-template", "grandchild-template"]) {
+  assert.equal(flattened.templates.find((item) => item.id === id).groupId, "", id);
+}
+// Flatten must never lose a template - that would make it a silent delete.
+assert.equal(flattened.templates.length, nestedLibrary.templates.length);
+// A group outside the subtree keeps its own templates untouched.
+assert.equal(flattened.templates.find((item) => item.id === "sibling-template").groupId, "sibling");
+assert.deepEqual(flattened.trash, []);
+
+// Flattening a mid-level group promotes into that group's parent, not the root.
+const midFlattened = flattenTemplateGroup(nestedLibrary, "child");
+assert.deepEqual(midFlattened.groups.map((item) => item.id).sort(), ["parent", "sibling"]);
+assert.equal(midFlattened.templates.find((item) => item.id === "grandchild-template").groupId, "parent");
+assert.equal(midFlattened.templates.find((item) => item.id === "parent-template").groupId, "parent");
+
+// An unknown id is a no-op rather than a library-wiping edge case.
+assert.equal(flattenTemplateGroup(nestedLibrary, "missing"), nestedLibrary);
 
 const groupTrashed = moveTemplateGroupToTrash(nestedLibrary, "parent", 404);
 assert.equal(groupTrashed.groups.some((item) => item.id === "parent"), false);

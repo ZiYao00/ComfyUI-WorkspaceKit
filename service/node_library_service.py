@@ -1,9 +1,17 @@
 import json
+import os
+import tempfile
+import threading
 import time
 from pathlib import Path
 
 
 DEFAULT_GROUP_ID = "default"
+# Node-library saves can arrive from multiple browser tabs through
+# ``asyncio.to_thread``.  A direct ``open(path, "w")`` lets overlapping writes
+# leave bytes from an older writer after a newer, shorter document.  Serialize
+# promotion in this server process and replace only fully written JSON.
+_node_library_write_lock = threading.RLock()
 
 
 def default_node_library():
@@ -133,10 +141,41 @@ def read_node_library(comfy_path):
         return normalize_node_library(json.load(file))
 
 
+def _atomic_write_node_library(path, library):
+    """Write one validated library through a same-directory temporary file."""
+    path = Path(path)
+    payload = json.dumps(library, ensure_ascii=False, indent=2).encode("utf-8")
+    decoded = json.loads(payload.decode("utf-8"))
+    if not isinstance(decoded, dict):
+        raise ValueError("Node library must serialize to a JSON object.")
+
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.stem}-",
+            suffix=".tmp",
+            delete=False,
+        ) as file:
+            temporary_path = Path(file.name)
+            file.write(payload)
+            file.flush()
+            os.fsync(file.fileno())
+        os.replace(temporary_path, path)
+    except Exception:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+
+
 def write_node_library(comfy_path, data):
     library = normalize_node_library(data)
     path = node_library_path(comfy_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as file:
-        json.dump(library, file, ensure_ascii=False, indent=2)
+    with _node_library_write_lock:
+        _atomic_write_node_library(path, library)
     return library

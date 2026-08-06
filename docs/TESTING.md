@@ -1,18 +1,619 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-06 - Folder/group dissolve: two rounds of live investigation (T-046..T-049)
+
+The user reported that dissolving the top level of a 5-level tree "does nothing",
+in both the Workflows and Templates panels. Investigation only this round — no
+code was changed. **Both premises in the report turned out to be false**, but the
+investigation found one real defect and two product-semantics splits.
+
+### Depth is irrelevant; name collision is the actual trigger
+
+Measured on the live 8190 page:
+
+| Tree | Target | Result |
+| --- | --- | --- |
+| 5 levels, no collision | top level | **200 OK**, child promoted to root |
+| 5 levels, no collision | each of levels 2–5 | **200 OK** |
+| 2 levels, child name exists at root | top level | **409 `Target already exists: SD`** |
+
+So a 5-level dissolve succeeds and a 2-level dissolve fails. `dissolve_folder()`
+pre-checks every destination before moving anything and refuses the whole
+operation on conflict — nothing moves. That refusal is **correct** (otherwise it
+would overwrite the user's existing folder). The problem is purely that the error
+lands only in the small status line (`错误：Target already exists: SD`) with no
+dialog and no highlight, so it reads as a dead button.
+
+This is why it reproduced in the user's real directory and not in a clean test
+directory: real trees have repeated folder names, freshly-created probe trees
+don't. **When a user reports "no effect", check for a silently-surfaced refusal
+before looking for a broken handler.**
+
+### The Templates panel did not reproduce at all
+
+Built 5 nested groups with the template only in level 5, expanded every level,
+clicked dissolve on level 1. **Level 1 is what disappeared:**
+
+```
+visibleBefore: ["第1层","第2层","第3层","第4层","第5层"]
+visibleAfter:  [       "第2层","第3层","第4层","第5层"]
+serverAfter:   第2层(K2)<-ROOT, 第3层(K3)<-K2, 第4层(K4)<-K3, 第5层(K5)<-K4
+templateNow:   我的模板@K5
+```
+
+The likely reason the user read this as "only level 5 was dissolved": with one
+level gone, every remaining row shifts one indent step left, so the screen looks
+like "the outermost is still there and an inner one vanished".
+
+**Assert hierarchy bugs by name, never by indent position or row number.** A
+whole round was spent reproducing a defect that does not exist because the report
+described a visual position rather than an identity.
+
+### The one real defect (T-046): top-level dissolve loses icons and colours
+
+`dissolve_folder()` derives the parent key with `str(rel.parent)`. For a
+top-level folder `Path('A').parent` is `'.'`, not `''`, so promoted entries get
+metadata keys like `'./N2'` while the tree looks them up as `'N2'`.
+
+Measured — set 🌟 + green on `N1/N2`, then dissolved `N1`:
+
+```
+metaBefore : ["N1", "N1/N2", "N1/N2/N3", "N1/N2/N3/N4"]
+parent_path: "."                      <-- should be ""
+metaAfter  : ["./N2", "./N2/N3", "./N2/N3/N4"]
+metaHasPlainN2: false   metaHasDotN2: true   n2HasIconGlyph: false
+```
+
+Middle levels are unaffected (`'A/B'` correctly yields `'A'`). Files themselves
+are never lost — only the custom icon/colour.
+
+### Two behaviours that look like "no response" but are correct
+
+- **Empty folder**: 400 `Cannot dissolve an empty folder`. Deliberate — an empty
+  folder should be deleted, not dissolved.
+- **Dissolve promotes one level only**. `A/B/C/D/E` dissolving `A` moves `B` with
+  `C/D/E` intact to root; it does not flatten all five levels.
+
+### Cleanup
+
+Every probe folder, template group, and the `'./'` metadata keys the probes
+created were removed; `folder_meta` was restored to its pre-test contents
+(`SD`, `flux2_Klein`) and the root folder list verified back to
+`123, __WK_TEST__, SD, 新建文件夹`.
+
+## 2026-08-06 - Canvas groups (T-045): one border width, three call sites
+
+Four follow-up reports from the user after T-044. Three were the same underlying
+problem in different places; the fourth was a UI preference.
+
+### The one that mattered: a stored preset was winning
+
+T-044 set the built-in default border width to 1px, and a probe on a clean
+browser confirmed it (`builtInBw: 1`). The user still saw 2px on new groups. Both
+observations were correct.
+
+`readStylePresets()` merges `localStorage` **over** the built-in style, so a user
+who had ever saved a style preset kept whatever width that preset stored. The
+default was right and the stored preset was overriding it. Probing the user-facing
+path rather than the constant is what surfaced this — reading
+`getBuiltInStyle().borderWidth` alone would have "confirmed" the bug was fixed.
+
+Fixed with a narrow one-time migration (`migrateLegacyPresetBorderWidth()`):
+`borderWidth` only, only from the single legacy value, gated on a persisted flag.
+A width the user deliberately chose survives, and a 2px chosen *after* the
+migration is never touched.
+
+### The other two: the same value in three places
+
+`PRESET_BORDER_WIDTH = 1` now backs all three paths that must agree — a new
+group, applying a colour swatch, and native → WK conversion. Previously each
+carried its own literal, so "the border is 1px" was true in one and false in two.
+
+Applying a colour swatch now also sets the width: a preset is a **complete** look.
+Note the deliberate asymmetry — the custom colour picker does **not** reset the
+width, because that is a colour-only edit, not a preset.
+
+Native → WK conversion gained a `CONVERTED_STYLE` distinct from the generic
+`DEFAULT_STYLE`: white text, 1px white border. `useUnifiedColor: true` is
+load-bearing — it is what carries white through to the border, and setting the
+font white without it leaves the border gold, which is the half-applied state the
+user was reporting.
+
+### Results
+
+Acceptance on the real test package at `http://127.0.0.1:8190/`:
+
+| check | result |
+|---|---|
+| legacy 2px presets migrated | pass — `[2,2,4,2]` → `[1,1,4,1]`, the deliberate 4px survived |
+| other preset fields untouched | pass — `titleColor #FFD700` preserved |
+| migration flag persisted, storage rewritten | pass |
+| new group, record and drawn border | pass — `borderWidth 1`, drawn `1px` at scale 1 |
+| colour swatch sets width, slider and label | pass — record `1`, slider `1`, label `1px`, redrawn at `1px` |
+| width slider still usable after a preset | pass — moved to 3 |
+| native → WK: font, border, unified flag | pass — `#FFFFFF`, drawn `rgba(255,255,255,0.65)` at `1px`, `useUnifiedColor true` — both a shorthand (`#A88`) and a modern (`#a1309b`) native colour |
+| title bar still keeps native colour | pass — red paints `rgba(214,81,81,0.5)`, stored `rgba(170,136,136,0.5)` |
+| archived group round trip | pass — kept its own `#00FF00` font, size 22, border 5 rather than the converted white look |
+| double-click copy: no dialog | pass — clipboard `red`, outline flash on, zero notices, restored after 450ms |
+
+Regression 18/18: an existing group keeps its own 4px through a rebuild; the
+custom colour picker stores verbatim **and does not reset the width**; `black`
+still pins `#828282` and opacity 50; the opacity slider still moves; single click
+still applies a colour and preserves the current alpha; display brightening still
+intact (green stored `rgba(136,170,136,…)`, painted `rgba(84,192,84,…)`);
+serialization keeps the native colour; bypass magenta still overrides; a 2px
+chosen after the migration survives and a new group honours it. Zero WorkspaceKit
+console errors.
+
+Suite: 86 JS + 5 Python, release version `0.2.5`.
+
+### Probe note
+
+Two apparent failures in the first regression run were probe faults, verified as
+such rather than assumed:
+
+- **"new group DOM border is 1px" failed with `0.9px`.** The border is drawn
+  scaled (`borderWidth * scale`) and the canvas was at 0.9. Correct behaviour;
+  the probe was comparing a scaled value against an unscaled literal. Pin
+  `app.canvas.ds.scale = 1` before asserting drawn pixel widths.
+- **"a deliberate 2px survives" failed.** That page had never run the migration,
+  so writing 2px presets *then* reading them let the migration run for the first
+  time and correctly treat them as legacy. The check only means anything when the
+  flag is already set — seed `borderWidthMigrated: '1'` first.
+
+## 2026-08-06 - Canvas groups (T-044): group colour presets — store native, paint bright
+
+Five requests from the user about the ten colour swatches in the group settings
+dialog. Answering them required measuring the native palette and reading
+rgthree's filter, both of which contradicted an assumption in the request.
+
+### Two findings that changed the work
+
+**The native palette has nine entries, not nine-plus-"no colour".** Measured
+order: `red, brown, green, blue, pale_blue, cyan, purple, yellow, black`. The
+`No color` item in the native right-click submenu is not a colour — it is an
+operation that **deletes** the colour field, after which the group serializes
+with no `color` key at all and falls back to `#333` / `#AAA`. The user's
+recollection of the order included "no colour" and omitted `black`.
+
+**The swatch order was already correct.** Read straight out of the live dialog,
+the ten buttons were in exactly the native order. What looked like a shuffle was
+a legibility problem: five native entries are three-digit shorthands whose
+channels all sit between `0x88` and `0xAA`, so `red #aa8888`, `green #88aa88`,
+`blue #8888aa` and `cyan #88aaaa` are nearly indistinguishable at 18px, and the
+old tenth filler `#cfafaf` was a washed pink one step from red. No ordering
+change was made; fixing the colours removed the symptom.
+
+### The split: identity vs appearance
+
+LiteGraph's hex is colour **identity** — rgthree's `matchColors` and WK ⇄ native
+conversion both compare it exactly. So the two values were separated:
+
+- `headerBgColor` / `nativeGroupColor` store the **untouched native RGB**
+- every paint path runs it through `displayColorForNativeHex()` first
+
+New pure module `entry/canvas-groups/preset-color-display.js`. **Hue is never
+touched** — only saturation and lightness; a shifted hue would make "red" stop
+reading as red after a native round-trip, the exact mismatch the split prevents.
+Only the four muddy shorthands are brightened; the four modern hexes and any
+user-picked colour pass through byte-identical.
+
+`black` is the deliberate exception, using the user's own measured values: it
+paints true `#000000` at the 0.5 opacity cap with a pinned `#828282` font,
+rather than being brightened to mid-grey. A brightened black would lose the
+"low priority" meaning the dark swatch carries, and the luma-based font rule
+would pick white on near-black.
+
+### Why the tenth swatch copies a hex, not a name
+
+`rgthree-comfy/src_web/comfyui/fast_groups_muter.ts` L150–176: a word is looked
+up in `node_colors` and, **failing that, treated as a hex**. So an invented label
+like `other` becomes the colour `#other`, matches nothing, and fails silently —
+no error, no warning. The user's suggestion to name the tenth swatch `other` was
+therefore declined; it copies `#e0508f` instead. Also recorded there: a group
+with no colour is skipped entirely (`if (!groupColor) continue`), so a
+"no colour" group would vanish from the Fast Groups list — which is why the
+"no colour" idea was dropped in favour of a real tenth colour.
+
+The tenth is a rose at ~330°, filling the widest gap in the native hue
+distribution (purple 303° → red 0°, 57° empty) and staying more than 20° from
+every native hue.
+
+### Results
+
+Acceptance, on the real test package at `http://127.0.0.1:8190/`:
+
+| check | result |
+|---|---|
+| swatch row: ten entries, native order, brightened display | pass — `red rgb(214,81,81)`, `green rgb(84,192,84)`, `blue rgb(100,100,206)`, `cyan rgb(76,189,189)` |
+| stored value stays native after applying red | pass — `rgba(170,136,136,0.25)`, `nativeGroupColor #aa8888` |
+| painted value differs from stored | pass — `rgba(214,81,81,0.25)` |
+| double-click `red` swatch → clipboard | pass — `red` |
+| double-click rose swatch → clipboard | pass — `#e0508f` |
+| double-click `pale_blue` → clipboard | pass — `pale_blue` (the underscore form a user would not guess) |
+| black preset: font, opacity, paint | pass — `#828282`, slider `50`, `rgba(0,0,0,0.5)` |
+| native → WK conversion opacity | pass — both groups at `0.5` |
+| shorthand `#A88` expanded on conversion | pass — `rgba(170,136,136,0.5)` |
+| WK → native round-trip keeps identity | pass — `#A88` → `#aa8888`, rose exact |
+| new group defaults | pass — `borderWidth 1`, unified colour ticked |
+
+**rgthree compatibility, the point of the whole exercise** — replicating its
+resolution verbatim against a WK-coloured group:
+
+| filter word | resolves to | matches group `#aa8888` |
+|---|---|---|
+| `red` | `#aa8888` | **yes** |
+| `#d65151` (the brightened display value) | `#d65151` | no — proves the display colour never reached storage |
+| `other` | `#other` | no — fails silently, as predicted |
+
+Regression 14/14: an existing group keeps its own configured 4px border (the new
+1px default applies to new groups only); a custom `#123456` is stored **and
+painted** verbatim; the opacity slider still moves after a preset pinned it;
+single click still applies a colour and preserves the current alpha; body fill
+still follows the title bar; serialization stores the native colour; bypass tint
+still overrides the display colour and un-bypass returns to it; a second new
+group also picks up the new defaults. Zero WorkspaceKit console errors
+throughout.
+
+Suite: 86 JS + 5 Python, release version `0.2.5`. New contract
+`scripts/test-group-preset-color-display.mjs`;
+`scripts/test-group-reverse-conversion-plan.mjs` and
+`scripts/test-group-settings-colors.mjs` updated for the new expectations.
+
+### Probe note
+
+The T-043 entry's two probe traps still apply. A third surfaced here: waiting on
+`window.Workspace2CanvasGroups?.overlay` alone is not enough when a probe also
+needs `LiteGraph.LGraphGroup` or `app.graph.add` — the overlay exists slightly
+before the graph does, and a probe that starts too early fails with
+`Cannot read properties of undefined (reading 'graph')`, which looks like a bug
+in the code under test. Gate on every global the probe actually uses.
+
+## 2026-08-05 - Canvas groups (T-043): a frame that followed the bare cursor forever
+
+A user-reported defect, diagnosed first on request, then fixed. Investigating it
+turned up a **second** bug in the same code with the same root cause, which the
+original report had masked.
+
+### What the user saw
+
+Double-click a frame's title bar, drag one of the nodes inside it, release. From
+then on the frame followed the mouse pointer with no button held. Escape did
+nothing, Delete did nothing; the only escape was ungrouping.
+
+### Root cause — one wrong assumption, two symptoms
+
+The "node and border move together" drag starts from a press on a **node**, which
+LiteGraph owns. LiteGraph responds with `setPointerCapture` plus `preventDefault`,
+and inside such a gesture the browser stops emitting the compatibility mouse
+events. Measured on the live page:
+
+| event | during the drag | on release | after release |
+| --- | --- | --- | --- |
+| `pointermove` | fires | – | fires |
+| `mousemove` | **0** | – | fires again |
+| `pointerup` | – | **1** | – |
+| `mouseup` | – | **0** | – |
+
+The code listened for `mousemove` and `mouseup`, so it received the exact inverse
+of what it needed:
+
+1. **The reported bug.** `mouseup` never arrived, so teardown never ran. The move
+   listener stayed bound and every later mouse motion was treated as "the drag
+   continues". Escape and Delete were powerless because that surviving listener
+   recorded which frame to move when it was bound and never re-reads the
+   selection — which is also why the user's Shift-deselect did not help.
+   `_suspendMembershipSync` stayed stuck `true` as well, silently disabling
+   member auto-capture until the next successful drag.
+2. **The bug the first one masked.** `mousemove` was suppressed for the whole
+   drag, so the frame never followed the node *while* dragging either. Measured:
+   the node moved `[200,300] → [267,344]` while the frame sat at `[188,229]`.
+   Nobody had reported this because the runaway was so much louder.
+
+Fixed by listening on both event families for both motion and teardown, plus a
+second independent net: a move reporting `buttons === 0` ends the drag itself, so
+a missed release is self-healing rather than permanent. Teardown is once-guarded
+because a normal release now delivers more than one end signal.
+
+### Why this surfaced now
+
+The path requires pressing a node that is *already selected*. Before T-036 no
+single action selected a frame's whole contents, so it was hard to reach. T-036's
+double-click-selects-contents made a pre-existing defect reliably reproducible in
+two steps. The joint-drag code itself is uncommitted T-036-batch work, so this
+never shipped to a user in a release.
+
+### One consequence worth preserving
+
+Because two event families now report the same physical motion, the frame delta
+must stay **absolute** from the gesture start. Accumulating it (`dx += ...`) would
+double every movement. The contract test asserts both the absolute form and the
+absence of `+=`, and acceptance checks the frame and node deltas are equal
+(measured `[67,44]` and `[67,44]`).
+
+### Results
+
+- **T-043 acceptance: 16/16.** The user's exact sequence, listener counts by
+  event name before/during/after, frame-tracks-node delta equality, Escape and
+  Delete no longer followed by motion, membership sync resumed, and a *second*
+  joint drag still working (the once-guard must not disarm the next gesture).
+- **Regression: 19/19.** The three drag paths this did not touch (title-bar drag,
+  corner resize, dragging an unselected node) still behave; `pointercancel` mid
+  gesture ends it cleanly; members still reconcile; serialization still writes the
+  frame into `extra.xzgGroups`.
+- **Suites: 85/85 JavaScript + 5/5 Python** (84 → 85: `test-group-drag-teardown.mjs`).
+
+### Two probe traps that cost real time here
+
+- **The canvas-groups module is fetched twice in the test package** — once by
+  ComfyUI's extension-directory scan (unversioned) and once by `entry.js`'s
+  versioned import. Both assign `window.Workspace2CanvasGroups`, but only the
+  versioned copy gets `init()` called, so whichever resolves last wins the
+  global. When the unversioned copy wins, the global has a **null `overlay`** and
+  creating a frame throws inside `renderGroup`, which looks exactly like a bug in
+  the code under test. Probes must wait on `window.Workspace2CanvasGroups?.overlay`
+  (the instance), not on `#xzg-group-overlay` (the element — the initialized copy
+  put it there, so it is present either way), and reload if it never appears.
+- **A stationary probe cursor sits on top of an action icon.** Now that the five
+  title-bar icons appear when the pointer enters the frame, pressing "the middle
+  of the title bar" lands on one, and their `mousedown` handlers `stopPropagation`
+  so no drag starts. This read as "title-bar drag is broken" (`frameDelta=[0,0]`)
+  until the event target turned out to be an `svg`. Aim header presses at the
+  strip left of `.xzg-group-header-actions`, measured from the live DOM after a
+  hover (61px wide in the default theme).
+
+## 2026-08-05 - Canvas groups (T-038 + T-039): native ignore/disable visuals, hover-shown icons, execute-icon availability
+
+Not a defect report — new behaviour, plus one wrong assumption of mine that
+measurement overturned before it shipped.
+
+### What changed
+
+- **Ignore/disable now use ComfyUI's own node visuals instead of an invented
+  purple.** The old code painted a bypassed frame with `hsla(280,60%,55%)` while
+  the nodes inside it went magenta, so the frame and its contents told the user
+  two different stories. Now: ignore = the bypass colour + 20% frame opacity,
+  disable = no colour change + 40%, straight from `getNodeModeAlpha`. Ignore is
+  deliberately *fainter* than disable (`.2 < .4`), matching native.
+- **All five title-bar icons hide until the pointer enters the frame**, and the
+  icon activation tiles are gone (the whole frame carries the state now).
+- **T-039: the execute icon dims when the group has no output node**, reusing the
+  same count the click path already checks.
+
+### The wrong assumption, caught by measurement
+
+The plan said the magenta is theme-overridable via `NODE_BYPASS_BGCOLOR`, so I
+read that first. On the live page it is **`#cba6f7`, a lavender** — and a real
+bypassed node paints `hsla(300,100%,50%,0.9)`, i.e. `#FF00FF`. So the node
+rendering path reads `NODE_DEFAULT_BYPASS_COLOR` and ignores the theme-schema
+name entirely. My original order produced exactly the divergence this task exists
+to remove: a lavender frame around magenta nodes. Fixed to read
+`NODE_DEFAULT_BYPASS_COLOR` first, with `NODE_BYPASS_BGCOLOR` as fallback. All
+four measured values are now recorded in `docs/NATIVE_BEHAVIOR_REFERENCE.md` §4
+so this is not re-derived. `app.extensionManager.setting.get('Comfy.ColorPalette')`
+returned `null` and is not a usable source.
+
+The acceptance suite now asserts this the robust way rather than against a literal
+hex: it asks an actual bypassed node what colour it paints and requires the frame
+to match (`node=hsla(300, 100%, 50%, 0.9) → rgb(255, 0, 255)`, `frame=rgb(255, 0,
+255)`).
+
+### Two design points worth keeping
+
+- **Visibility could not be CSS `:hover`.** The user's trigger is the whole frame,
+  but `.xzg-group-body` is `pointer-events:none` so nodes stay clickable — the
+  frame's middle never receives a mouse event and cannot report hover. It is a
+  per-frame geometric test instead, re-run every frame because the graph moves
+  under a stationary pointer. Verified with a point 30px above the frame's bottom
+  edge, deep in the body: all five icons appeared.
+- **Hiding uses `visibility`, not `display`.** Measured: hidden icons keep a
+  17.69px box and the title width is byte-identical hidden vs visible
+  (`63.59` both), so the title never jumps. Also verified a hidden icon does not
+  swallow clicks in its reserved space (`elementFromPoint` returns the actions
+  container, not the button).
+
+### Results
+
+- **Acceptance 39/39** on the live test package: hidden-when-outside; all five
+  visible from a body-deep point; title width unchanged; no activation tiles;
+  execute icon `1` with an output node and `0.35` without; other icons unaffected;
+  only the hovered frame shows icons; ignore sets nodes to mode 4 and the frame to
+  `0.2` with header `rgba(255,0,255,0.45)` (user's own alpha preserved) and border
+  `rgb(255,0,255)`; disable sets mode 2 and `0.4` keeping `rgba(40,80,120,0.45)`;
+  restore returns opacity, colour and every node's original mode; the canvas fill
+  dims too (`0.225 → 0.045` bypass, `0.09` mute, back to `0.225`); icons stay
+  visible through a drag that outruns the pointer and hide on release; an open
+  rename box pins them; a runtime colour change reaches both title bar and border;
+  icons appear/hide correctly at 0.5× and 2×.
+- **Regression 51/51**: all six animation effects (`default`, `rainbow`, `pulse`,
+  `marquee`, `marqueebreathe`, `glow`) dim to `0.2`/`0.4` and restore to `1` while
+  keeping a solid border; the rainbow border still animates on a normal frame
+  (`rgba(232,148,48,.65)` → `rgba(48,166,232,.65)`); the mode survives
+  serialization and a full `rebuildAllEls()`; the settings dialog still opens,
+  previews live and closes on a dimmed frame; selection outlines still work when
+  dimmed; a visible icon is still hit-testable and its click still toggles.
+- **Suites: 84/84 JavaScript + 5/5 Python.**
+
+### Probe-harness error worth recording
+
+26 of the regression checks first "failed" with **every computed style empty** for
+all five real effects while `default` passed. That signature means a detached
+element. It was not: I had cached `wk.groupEls[gid]` once and reused it across
+`page.evaluate` boundaries. Five separate diagnostic probes — element identity,
+mutation observation, overlay attachment, parent-chain walk, ghost detection —
+all showed a single correctly attached box. Fix: query
+`#xzg-group-overlay .xzg-group-box[data-group-id="..."]` fresh inside each
+evaluate, and assert `trackedIsLive` so a genuine ghost (the module styling one
+element while another is on screen) would still be caught. It passed for all six
+effects in all four modes.
+
+One of those diagnostics also produced a false alarm of its own: walking parents
+with `parentElement` stops at `<html>` and never reaches `#document`, which made a
+correctly attached overlay look detached. Use `parentNode` when the question is
+"is this in the document", or just `document.contains()`.
+
+## 2026-08-05 - Canvas groups (T-036): header click/double-click semantics + rename box width
+
+Three defects, and the second turned out to be the cause of the third.
+
+- **Defect 1 — a plain header click never reset the selection.** The header's
+  `mousedown` went straight to `prepareGroupDrag`, which only adds the frame if
+  absent. ComfyUI's native node selection was never touched, so `startDrag` saw
+  `selectedNodeIds.length > 0` and took its **multi-drag** branch, carrying nodes
+  the user had clicked earlier somewhere else on the canvas. Measured: with an
+  unrelated node selected, dragging a group header moved that node from
+  `[900,620]` to `[970,670]`.
+- **Defect 2 — the double-click gesture was completely dead**, and the reason was
+  not in the listener. `bringToFront()` ran `el.parentElement.appendChild(el)` on
+  every header `mousedown`. Moving a node in the DOM between `mousedown` and
+  `mouseup` makes the browser abandon the click sequence, so **`click` and
+  `dblclick` never fired at all**. Instrumenting `document` in capture phase
+  showed only `mousedown`/`mouseup` arriving, with no `click` at any `detail`.
+  Suppressing just that one self-re-append made `click detail=1`,
+  `click detail=2` and `dblclick` appear immediately, and the recursive selection
+  resolved correctly to `{groupIds:[parent,child], nodeIds:[1,2]}`. **The plan
+  module (`contents-selection-plan.js`) was correct all along and had simply
+  never been reached** — worth remembering before debugging a "broken" handler.
+- **Defect 3 — the rename box ignored zoom.** It is created in `startRename`,
+  outside `updatePositions()`, with a hardcoded `width:120px` and the raw
+  `group.fontSize`. Measured at 0.5× / 1× / 2×: width stayed exactly `120px` and
+  font size exactly `14px` at all three.
+
+**Fixes.** Two new pure modules:
+`entry/canvas-groups/header-click-selection.js` (an unmodified click on an
+unselected frame resets both selections; on an already-selected frame it keeps
+them so a multi-item drag can start; any modifier defers to `pointer-actions.js`)
+and `entry/canvas-groups/rename-input-metrics.js` (per-zoom font/padding/border
+metrics). `bringToFront()` now raises `z-index` through a monotonic `_frontZ`
+counter instead of restructuring the DOM. The rename input became a flex child
+(`flex:1 1 auto; min-width:0`) of the header's title wrapper, so the browser fits
+it to the space left of the action icons at any zoom — deliberately **not**
+computed arithmetic, which would drift out of sync with the icons.
+
+**Two secondary issues found and fixed while in there:** committing a rename
+rebuilt the title span without its ellipsis rules (a long title would escape the
+header after every rename) and left the stale span in the per-frame `_xzgRefs`
+cache.
+
+**One design conflict my own contract test caught before shipping:** the metrics
+module originally clamped font size to a 6px floor. That floor activates below
+0.43× — a zoom ComfyUI allows — and would have made the title visibly *jump* on
+entering edit mode, because `updatePositions()` scales the span with no floor.
+Parity with the span matters more than a legibility floor the user chose to zoom
+past, so the clamp was removed from the font size and kept only on the box chrome
+(one device pixel, so the border can never vanish).
+
+- **Contracts:** `scripts/test-group-header-click-selection.mjs` (the four
+  decision rules, modifier coverage, malformed-input safety defaulting to the
+  non-destructive branch, purity, and call-site assertions that a reset clears
+  the native node selection **and** that `bringToFront` performs no DOM
+  restructuring at all) and `scripts/test-group-rename-input-metrics.mjs`
+  (exact `fontSize * scale` parity with the span at 7 zoom levels × 5 font sizes,
+  width deliberately absent from the result, device-pixel floors, malformed
+  input, purity, and call sites in both `startRename` and `updatePositions`).
+- **Real-page acceptance** (test package `http://127.0.0.1:8190/`, Playwright
+  headless Chromium, disposable in-memory graph, nothing saved) — **31/31**:
+  - Plain header click after selecting an unrelated node: only that frame
+    selected, native node selection cleared.
+  - Dragging that header afterwards: the unrelated node stayed at `[895,757]`
+    while the frame moved `[62,168]` → `[140,223]`.
+  - Double-click: both parent and nested child frames selected, both member nodes
+    selected, the outsider node **not** selected; plan
+    `{g:[parent,child], n:[1,2]}`.
+  - Grabbing the header of an already-selected frame while two are selected: both
+    stayed selected (no reset).
+  - Rename box at 0.5× / 1× / 2×: font `7 / 14 / 28px`, width `172 / 351 / 709px`,
+    gap to the action icons `2 / 3 / 6px`, never overlapping them, never escaping
+    the header.
+  - Rename commit: title stored and displayed, span keeps `nowrap` + `ellipsis`,
+    cached ref points at the live span.
+  - Stacking: touching a frame raised its `z-index` with the DOM order provably
+    unchanged.
+- **Stacking regression suite (8/8):** with two frames whose drag strips overlap,
+  clicking each header flipped ownership of the shared band (`gB` → `gA` → `gB`)
+  purely by `z-index`; `rebuildAllEls()` correctly returns every frame to the base
+  `5` while the counter stays monotonic; 5,000 simulated raises confirmed the
+  overlay is itself a stacking context (`position:fixed; z-index:10`), so no
+  counter value can escape it and cover ComfyUI's own UI.
+- **Multi-drag regression suite (13/13):** two selected frames dragged by one
+  header moved by identical deltas with both members following and a loose node
+  untouched; a natively-selected node plus a selected frame moved together;
+  clicking an *unselected* frame's header while another frame and a node were
+  selected reset to just that frame and left the others exactly where they were.
+- **Probe-design errors worth recording** (both mine, neither a product fault):
+  aiming the stacking probe at a point covered by one frame's **body** proved
+  nothing, because the body is deliberately `pointer-events:none` — stacking is
+  only observable where both frames offer a hit-testable surface, so the frames
+  were repositioned so their drag strips coincide. And my first rebuild assertion
+  expected the `z-index` style to be absent after `rebuildAllEls()`; it is
+  actually `5`, since the rebuild re-runs `buildGroupEl` and the base value comes
+  from the markup. The assertion was wrong, not the code.
+- **Suite:** 82/82 Node contracts, 5/5 Python contracts.
+
+## 2026-08-05 - Canvas groups (T-037): node membership switched to native centre-point containment
+
+- **User report:** dragging a *node* into a group past its centre worked; dragging a *group* onto a node past its centre did not. Two directions, apparently asymmetric.
+- **Actual root cause — not asymmetric:** both directions run the same rule. `syncNodeMembership()` required `_isFullyContained()` (all four node edges inside the frame), so **neither** direction admitted on centre-crossing. A measured sweep confirmed it: dragging the node in at 57%, 77% and 96% area overlap all returned `member=false` while the centre was inside; dragging the group on at 60% and 80% also returned `member=false`, and only became `true` at 100% overlap, i.e. exactly when full containment happened to be satisfied. The direction that "worked" had simply ended up fully inside.
+- **Fix:** new pure module `entry/canvas-groups/node-membership.js` implementing native `containsCentre` — a node belongs to a group iff its centre point is inside the bounds, edges inclusive ([NATIVE_BEHAVIOR_REFERENCE.md](NATIVE_BEHAVIOR_REFERENCE.md) §2). Applied at all five node-membership / node-control call sites: `syncNodeMembership`, `startDrag`'s legacy geometric fallback, its child-group member collection, its partially-overlapping-group controlled-node test, and the same test in `toggleBypass`. No inline four-edge node arithmetic remains in the file (asserted).
+- **Group-in-group nesting deliberately unchanged:** `_isFullyContained` survives for group nesting, because native nesting also uses `containsRect`, not `containsCentre`.
+- **Two guards deliberately removed** alongside the 20% `retainedOverlapThreshold`: "member count fell to zero → clear" and "member count fell below 30% → skip this pass". All three existed to mask fractional-area jitter. A centre point cannot jitter across an edge, and retaining a node after its centre has left would produce "dragged out but still stuck".
+- **Contract:** `scripts/test-group-node-membership.mjs` — centre-in/edges-out admission, area-overlap irrelevance in both directions, edge-inclusive boundaries, degenerate and malformed rects, `id: 0` not dropped as falsy, purity, and the call-site assertions above.
+- **Real-page acceptance** (test package `http://127.0.0.1:8190/`, Playwright headless Chromium, disposable in-memory graph, nothing saved):
+  - **Direction 1** (drag the node in), centre 20 / 60 / 120 px inside the edge at 57% / 77% / 96% overlap, never fully contained: member in all three.
+  - **Direction 2** (drag the group on), edge 20 / 60 / 120 px past the node centre at 60% / 80% / 100% overlap: member in all three.
+  - **Boundary sweep:** targeting the node's centre at −30, −5, +5, +30 px relative to the group's right edge yielded member `true, true, false, false` — the transition lands on the edge, as native does.
+  - **Exit:** a node pulled in (member, 2 members) then dragged out (`centreOffset=+150`) was released immediately, leaving 1 member. No clinging.
+  - **Group drag intact:** grabbing a bottom-strip point with no node under it moved the group `{688,229}` → `{828,324}` with its member following and membership preserved.
+- **One probe artifact worth recording:** an initial run reported "group did not move" on a group drag. Investigation showed the grab point was the bottom strip's midpoint, which had a node beneath it — T-041 was correctly yielding to that node. Re-running with a node-free grab point moved the group normally. Confirmed by reproducing the exact geometry and reading `passThrough=true` / `pointerEvents=none` at that point. Not a regression; the probe was at fault.
+- **Suite:** 80/80 Node contracts, 5/5 Python contracts.
+
+## 2026-08-05 - Canvas groups (T-041): frame hit regions yield to nodes underneath
+
+- **Defect:** the group frame's three 10px drag strips (`.xzg-border-left/right/bottom`) and its 14px `.xzg-resize-handle` carry `pointer-events:auto` in a DOM overlay that sits above every node pixel. A node adjacent to a group edge could not be clicked or dragged inside those bands — the gesture started a group drag instead. This inverts native order, which resolves `getNodeOnPos` before any group (see [NATIVE_BEHAVIOR_REFERENCE.md](NATIVE_BEHAVIOR_REFERENCE.md) §3).
+- **Approach and why not re-dispatch:** the pre-existing middle-click path re-dispatches a synthetic `PointerEvent` to the canvas. That is unsuitable here because LiteGraph calls `element.setPointerCapture(e.pointerId)` on every `pointerdown`, and a synthesised pointer has no live pointer to capture — acceptable for a one-shot pan, wrong for a click-and-drag. Instead the four regions stop intercepting while a node sits under the cursor, so LiteGraph receives a genuine browser event and owns the whole gesture.
+- **Two decisions worth recording:** (1) the check runs every frame from a stored pointer position, not only on `pointermove`, because the graph can move under a stationary pointer during a canvas pan, node drag or zoom, with no pointer event to react to; (2) pass-through is suppressed whenever any mouse button is held, so an in-flight group drag is never re-targeted mid-gesture.
+- **Contract:** `scripts/test-group-hit-region-passthrough.mjs` — region selector membership (title bar and body deliberately excluded), the four decision rules, malformed-input safety (defaults to intercepting, so a failure can never leave a frame permanently undraggable), module purity, and the call-site assertions (canvas-coordinate `getNodeOnPos` probe, per-frame invocation, cache invalidation in all three places).
+- **Real-page acceptance** (test package `http://127.0.0.1:8190/`, Playwright headless Chromium, disposable in-memory graph, nothing saved):
+  - Node overlapping the left strip: `pointer-events` flipped `auto` → `none`, `document.elementFromPoint` at that spot resolved to the LiteGraph canvas, and a drag from that point moved the **node** `[348,400]` → `[468,460]` while the group's bounds stayed at `x=388,y=329`.
+  - Same strip over blank canvas: stayed `auto`; a drag moved the **group** `{438,529}` → `{528,569}` and its member node followed.
+  - Resize handle over blank canvas: stayed `auto`; the group resized `524x283` → `594x333`.
+  - Title bar with a node directly beneath it: header remained `auto` (it carries the rename input and action buttons) while the strips correctly read `none`.
+  - No page errors beyond the test package's pre-existing `404` / `isPermanent` / `ComfyApp graph accessed before initialization` noise.
+- **Suite:** 79/79 Node contracts, 5/5 Python contracts.
+
+## 2026-08-05 - Contract suite restored to green (two stale group assertions)
+
+Two contracts were failing before this batch on unrelated, already-shipped design changes. Neither was a product defect; both assertions described mechanisms that had been deliberately replaced, so the tests were updated to assert the current design.
+
+- **`test-canvas-group-action-icons.mjs`**: asserted exactly three header action glyphs; a fourth (rename) had been added. Rewritten to assert that *every* action button carries exactly one scalable glyph (button count equals glyph count) plus the presence of the rename action, which is the property that actually matters for uniform zoom scaling — it no longer hardcodes a total.
+- **`test-group-settings-colors.mjs`**: asserted a hue-keyed swatch preset (`data-hue` → `computeGroupColorPreset(hue, light)`) and an `isLightGroupTheme()` probe of `--p-content-background`. Both were replaced by native-colour compatibility: swatches now carry LiteGraph's exact `groupcolor` hex in `data-color`, and the readable font colour is derived from the chosen background's luma via `groupTitleColorForBackground()`. Assertions updated to the current mechanism, with `doesNotMatch` guards so the removed paths cannot silently return.
+- Verified against `git show HEAD:` that both source regions were consistent at the last commit, confirming the drift came from the uncommitted batch rather than from a regression.
+
+## 2026-08-05 - Canvas groups: nested real-page acceptance and native-color persistence regression
+
+- **Test environment:** test package `http://127.0.0.1:8190/`; disposable workflow fixture `__WK_TEST__/nested-color-rgthree.json`, based on `C6_Native_Added_Group.json` and written through WorkspaceKit's own workflow-save endpoint. The fixture contains a parent WK group, a fully contained child WK group, and two child member nodes.
+- **Nested interaction evidence:** both overlay groups rendered after loading the fixture. Double-clicking the parent title opened ComfyUI's multi-selection toolbar. Dragging an already selected internal node kept the parent/child frames nested and moved the selection without an observed double displacement. This accepts the parent/child double-click and one nested node-drag path. Shift-removing only the parent selection and a two-independent-group joint drag remain pending.
+- **rgthree bridge evidence:** adding `Fast Groups Bypasser (rgthree)` to the fixture rendered one Enable row per WK test group, and the page logged `[WorkspaceKit] rgthree Fast Groups bridge installed`. This proves real enumeration through the bridge, not `@matchColors` filtering or queue execution.
+- **Persistence regression found:** the fixture initially contained `nativeGroupColor`, but after an ordinary workflow save the returned file no longer contained that field. Root cause: `serializeGroup()` omitted it, so both `graph.extra.xzgGroups` and per-node recovery copies lost the native colour identity.
+- **Fix and repeatable checks:** `serializeGroup()` now writes `nativeGroupColor: resolveWorkspaceKitGroupNativeColor(g)`. `scripts/test-native-group-color-compat.mjs` now asserts that serialization contract. The native-colour contract, reverse/forward conversion contracts, multi-drag, contents-selection and pointer-action contracts passed; both edited JavaScript modules passed `node --check`; locale JSON parsing and `git diff --check` passed.
+- **Unaccepted boundary:** after a fresh-page reload, the WK sidebar content did not render and the two existing overlay headers measured around `y=-19258/-19366px`. The page also has a pre-existing `ComfyApp graph accessed before initialization` error. No causal claim is made yet. Therefore the required **save → refresh → re-read nativeGroupColor** check and rgthree `@matchColors=pale_blue` filter check are explicitly pending, not passed.
+
 This document records reproducible test evidence and unresolved errors found while validating WorkspaceKit. Historical endpoint, storage, and implementation names such as `Workspace2` remain in individual records where they identify the compatibility layer. A recorded error is not treated as a confirmed WorkspaceKit root cause until the owning call chain is isolated.
 
 ## Current baseline (updated per batch)
 
-- **WorkspaceKit contracts (Node `.mjs`)**: 68/68 passing.
-- **WorkspaceKit contracts (Python `.py`)**: 3/3 passing (`test-trash-service.py`, `test-workspace-data-bundle.py`, `test-workflow-copy.py`).
+- **WorkspaceKit contracts (Node `.mjs`)**: 86/86 passing. Count with
+  `npm run test:contracts`, not `ls scripts/*.mjs` — that directory also holds
+  `run-contract-tests.mjs` and `export-panel-ui-template.mjs`, which are not
+  tests, so a raw file count overstates the suite by two.
+- **WorkspaceKit contracts (Python `.py`)**: 5/5 passing (`test-trash-service.py`, `test-workspace-data-bundle.py`, `test-workflow-copy.py`, `test-folder-dissolve-service.py`, `test-node-library-service.py`).
 - **Node syntax + locale JSON**: `entry/entry.js`, `entry/settings/*.js`, `entry/workspace2_canvas_groups.js`, `entry/canvas-groups/{conversion-archive,conversion-result,reverse-conversion-plan}.js` and `entry/locales/*.json` all pass. Note that `node --check` parses this repository's browser ES modules as CommonJS and therefore does **not** surface their parse errors; use a real `import()` when validating a module in isolation.
 - **Playwright real-page smoke** (`scripts/e2e/smoke-workspacekit-sidebar.mjs`): passing on the test package at `http://127.0.0.1:8190/`. Verifies that `window.app.extensions` contains both `comfyui.workspace2` and `WorkspaceKit.ThemeLab`, that `window.WorkspaceKitPanelAPI` and `window.WorkspaceKitPanelUITemplate` are exposed, and that `workspacekit-sidebar-icon-style` is injected. No WorkspaceKit-related console errors.
 - **Vendor runtime sync**: `node scripts/export-panel-ui-template.mjs --all --verify` passes for both Layout and Theme at `uiVersion 1.5.0`.
-- **Last baseline re-run**: 2026-08-03 (`npm test`, full suite green).
+- **Last baseline re-run**: 2026-08-06 (`npm run test:contracts` 86/86, `npm run test:python` 5/5).
 - **Current release-version source**: `pyproject.toml` is `0.2.5`. Dated
   historical records below retain the version observed when they were run.
-- **Historical figures** in older entries reflect the contract count at that batch; the current figure is `68/68`.
+- **Historical figures** in older entries reflect the contract count at that batch; the current figure is `86/86`.
 
 Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.zh-CN.md` (T-xxx).
 

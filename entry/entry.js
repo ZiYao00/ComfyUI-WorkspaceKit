@@ -1,7 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
-import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260727_group_reverse_conversion_c6_4";
-import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260722_rgthree_fast_groups_p0";
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260805_native_group_color_persistence_r2";
+import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260804_native_group_color_r1";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { publishWorkspaceKitPanelUiTemplate } from "./integrations/panel-ui-template-api.js";
 import { createWorkspaceKitIcon, workspaceKitIconMaskDataUri } from "./ui-kit/icons.js";
@@ -72,7 +72,7 @@ import { createWorkspacePanelHost } from "./ui/workspace-panel-host.js";
 import { resolveWorkspacePanelProviderLabel } from "./ui/provider-label.js";
 import { PINNED_PROVIDER_KEY, createWorkspaceTabPlan } from "./ui/provider-tabs.js";
 import { MODULE_SHORTCUTS, isModuleShortcutEnabled, moduleShortcutStorageKey, resolveModuleShortcut } from "./ui/module-shortcuts.js";
-import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, GROUP_POINTER_MODIFIER, normalizeGroupPointerBindings, swapGroupPointerBinding } from "./canvas-groups/pointer-actions.js?v=20260724_configurable_modifiers_r1";
+import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, GROUP_POINTER_MODIFIER, normalizeGroupPointerBindings, swapGroupPointerBinding } from "./canvas-groups/pointer-actions.js?v=20260804_group_gesture_disable_r1";
 // Settings controls and sections change their return contracts independently.
 // Keep their cache keys aligned with entry.js to avoid a refreshed entry using
 // an older child module from a long-lived ComfyUI browser session.
@@ -80,7 +80,7 @@ import { createSettingsControls } from "./settings/controls.js?v=20260727_group_
 // Bump this query when the section return contract changes. ComfyUI browser
 // sessions can retain an imported child module after entry.js has refreshed;
 // an old section factory would otherwise omit a newly added section.
-import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260727_group_reverse_conversion_c6_3";
+import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260804_group_gesture_disable_r1";
 import { createSettingsDialogShell } from "./settings/dialog-shell.js";
 import { configureI18n, getLocale, t as translate } from "./core/i18n.js";
 import { FALLBACK_STRINGS } from "./core/fallback-strings.js";
@@ -1300,7 +1300,18 @@ function groupPointerShortcutOptions() {
     value: action,
     label: t(`settings.groupPointerActions.${action}`),
   }));
-  return [GROUP_POINTER_MODIFIER.CONTROL, GROUP_POINTER_MODIFIER.ALT, GROUP_POINTER_MODIFIER.SHIFT].map((modifier) => ({
+  const refreshControls = (next) => {
+    const settingsRoot = workspaceState.settingsElement;
+    for (const select of settingsRoot?.querySelectorAll?.("[data-workspace2-group-pointer-modifier]") || []) {
+      const selectModifier = select.dataset.workspace2GroupPointerModifier;
+      if (next[selectModifier]) select.value = next[selectModifier];
+    }
+  };
+  const restoreDefaults = () => {
+    localStorage.removeItem(GROUP_POINTER_BINDINGS_KEY);
+    refreshControls(normalizeGroupPointerBindings(null));
+  };
+  const shortcuts = [GROUP_POINTER_MODIFIER.CONTROL, GROUP_POINTER_MODIFIER.ALT, GROUP_POINTER_MODIFIER.SHIFT].map((modifier) => ({
     modifier,
     label: t(`settings.groupPointerModifiers.${modifier}`),
     value: bindings[modifier],
@@ -1308,16 +1319,11 @@ function groupPointerShortcutOptions() {
     onChange: (nextAction) => {
       const next = swapGroupPointerBinding(bindings, modifier, nextAction);
       localStorage.setItem(GROUP_POINTER_BINDINGS_KEY, JSON.stringify(next));
-      // The three modifier bindings are a one-to-one mapping. Refresh only
-      // their controls in place after a swap: reopening the full dialog used
-      // to reset the user to the first Settings page.
-      const settingsRoot = workspaceState.settingsElement;
-      for (const select of settingsRoot?.querySelectorAll?.("[data-workspace2-group-pointer-modifier]") || []) {
-        const selectModifier = select.dataset.workspace2GroupPointerModifier;
-        if (next[selectModifier]) select.value = next[selectModifier];
-      }
+      refreshControls(next);
     },
   }));
+  shortcuts.restoreDefaults = restoreDefaults;
+  return shortcuts;
 }
 
 function buildProviderSettingsSection() {

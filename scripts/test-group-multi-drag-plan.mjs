@@ -36,6 +36,23 @@ const legacyFallback = buildMultiGroupDragPlan({
 });
 assert.deepEqual(new Set(legacyFallback.nodeIds), new Set(["3", "4"]));
 
+const jointHeaderDrag = buildMultiGroupDragPlan({
+  groups,
+  nodes,
+  selectedGroupIds: ["parent"],
+  selectedNodeIds: [2, 3, 999],
+});
+assert.deepEqual(new Set(jointHeaderDrag.groupIds), new Set(["parent", "child"]));
+assert.deepEqual(new Set(jointHeaderDrag.nodeIds), new Set(["1", "2", "3"]));
+
+const nativeOnlySelection = buildMultiGroupDragPlan({
+  groups,
+  nodes,
+  selectedNodeIds: [3, 4, 999],
+});
+assert.deepEqual(nativeOnlySelection.groupIds, []);
+assert.deepEqual(new Set(nativeOnlySelection.nodeIds), new Set(["3", "4"]));
+
 assert.equal(hasNodePosition({ pos: new Float64Array([12, 34]) }), true);
 assert.equal(hasNodePosition({ pos: [12, 34] }), true);
 assert.equal(hasNodePosition({ pos: null }), false);

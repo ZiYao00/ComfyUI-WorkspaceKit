@@ -27,9 +27,11 @@ assert.equal(plan.groups["wk-one"].title, "Edited native title");
 assert.deepEqual(plan.groups["wk-one"].bounds, { x: 30, y: 40, w: 330, h: 180 });
 assert.deepEqual(plan.groups["wk-one"].nodeIds, ["1", "2"]);
 assert.equal(plan.groups["wk-one"].fontSize, 18);
-assert.equal(plan.groups["wk-one"].headerBgColor, "#ff0000");
+assert.equal(plan.groups["wk-one"].headerBgColor, "rgba(255,0,0,0.5)");
+assert.equal(plan.groups["wk-one"].nativeGroupColor, "#ff0000");
 assert.equal(plan.groups.native_8.allowEmpty, true);
-assert.equal(plan.groups.native_8.headerBgColor, "#00ff00");
+assert.equal(plan.groups.native_8.headerBgColor, "rgba(0,255,0,0.5)");
+assert.equal(plan.groups.native_8.nativeGroupColor, "#00ff00");
 assert.equal(plan.groups.native_8.fontSize, 14);
 assert.deepEqual(plan.archivedGroupIdsWithoutNativeMatch, []);
 
@@ -37,7 +39,8 @@ const noArchivePlan = createNativeToWorkspaceKitConversionPlan({
   nativeGroups: [{ id: 12, title: "Original native", bounding: [1, 2, 120, 80], color: "#abcdef", nodeIds: ["9"] }],
 });
 assert.deepEqual(noArchivePlan.newGroupIds, ["native_12"]);
-assert.equal(noArchivePlan.groups.native_12.headerBgColor, "#abcdef");
+assert.equal(noArchivePlan.groups.native_12.headerBgColor, "rgba(171,205,239,0.5)");
+assert.equal(noArchivePlan.groups.native_12.nativeGroupColor, "#abcdef");
 
 assert.throws(() => createNativeToWorkspaceKitConversionPlan({ archive, nativeGroupIds: {}, nativeGroups: [] }), /no native groups exist/);
 assert.throws(() => createNativeToWorkspaceKitConversionPlan({ archive: {}, nativeGroupIds: {}, nativeGroups: [{ id: 1, bounding: [0, 0, 10, 10] }] }), /Cannot restore WorkspaceKit groups/);
@@ -69,5 +72,84 @@ const collisionPlan = createNativeToWorkspaceKitConversionPlan({
 });
 assert.deepEqual(collisionPlan.restoredGroupIds, [], "mapped id collided with a live group, so no restore");
 assert.deepEqual(collisionPlan.newGroupIds, ["native_5"], "falls back to a fresh id");
+
+/*
+ * T-044: a converted native group gets its title bar at the opacity cap.
+ *
+ * A native group paints one solid colour across its whole body, so at WK's
+ * default 0.25 the converted frame looks washed out next to what the user had.
+ */
+const alphaOf = (rgba) => Number(String(rgba).match(/,\s*([\d.]+)\)$/)?.[1]);
+for (const [label, group] of [
+  ["restored", plan.groups["wk-one"]],
+  ["fresh", plan.groups.native_8],
+  ["no-archive", noArchivePlan.groups.native_12],
+  ["collision fallback", collisionPlan.groups.native_5],
+]) {
+  assert.equal(alphaOf(group.headerBgColor), 0.5,
+    `${label}: a converted group's title bar must sit at the 0.5 opacity cap`);
+  assert.match(group.headerBgColor, /^rgba\(\d+,\d+,\d+,[\d.]+\)$/,
+    `${label}: WK renders a translucent rgba title bar, not native's solid hex`);
+}
+
+// The native hex itself must survive untouched: rgthree's colour filter and the
+// forward conversion both compare that exact value, so folding the opacity into
+// nativeGroupColor would break colour identity.
+assert.equal(plan.groups["wk-one"].nativeGroupColor, "#ff0000");
+assert.equal(collisionPlan.groups.native_5.nativeGroupColor, "#123456");
+
+// Three-digit native shorthands must expand, not be pasted into rgba() raw.
+const shorthandPlan = createNativeToWorkspaceKitConversionPlan({
+  nativeGroups: [{ id: 21, title: "Shorthand", bounding: [0, 0, 100, 80], color: "#A88", nodeIds: [] }],
+});
+assert.equal(shorthandPlan.groups.native_21.headerBgColor, "rgba(170,136,136,0.5)",
+  "#A88 must expand to its six-digit channels before becoming rgba()");
+
+// An unusable native colour falls through to the default rather than producing
+// a malformed rgba() string.
+const colorlessPlan = createNativeToWorkspaceKitConversionPlan({
+  nativeGroups: [
+    { id: 31, title: "No colour", bounding: [0, 0, 100, 80], nodeIds: [] },
+    { id: 32, title: "Junk colour", bounding: [0, 0, 100, 80], color: "not-a-colour", nodeIds: [] },
+  ],
+});
+assert.equal(colorlessPlan.groups.native_31.headerBgColor, "rgba(0,0,0,0.25)",
+  "a native group with no colour keeps the default title bar");
+assert.equal(colorlessPlan.groups.native_32.headerBgColor, "rgba(0,0,0,0.25)",
+  "an unparseable native colour must not yield a malformed rgba()");
+
+/*
+ * T-045: a native-origin group lands on a neutral white-on-white look.
+ *
+ * A native group carries only a colour, title and geometry — no font colour,
+ * border or effect to preserve. WK's generic default (gold text on a 2px gold
+ * border) is tuned for a group the user built themselves, so a converted group
+ * gets white text with a matching 1px white border instead.
+ *
+ * `useUnifiedColor` is load-bearing: it is what makes the border follow the
+ * title colour. Setting the font white without it leaves a gold border, which is
+ * exactly the half-applied state reported after the first attempt.
+ */
+for (const [label, group] of [
+  ["fresh", plan.groups.native_8],
+  ["no-archive", noArchivePlan.groups.native_12],
+  ["collision fallback", collisionPlan.groups.native_5],
+  ["shorthand", shorthandPlan.groups.native_21],
+  ["colourless", colorlessPlan.groups.native_31],
+]) {
+  assert.equal(group.titleColor, "#FFFFFF", `${label}: converted title text must be white`);
+  assert.equal(group.useUnifiedColor, true,
+    `${label}: unified colour is what carries white through to the border`);
+  assert.equal(group.borderWidth, 1, `${label}: converted border must be 1px`);
+  assert.equal(group.colorSat, 0, `${label}: border saturation 0 is how white is stored`);
+  assert.equal(group.colorLit, 100, `${label}: border lightness 100 is how white is stored`);
+}
+
+// A group that was WorkspaceKit before must get its OWN saved style back — that
+// round trip is the point of the archive, and the converted look must not
+// overwrite it.
+assert.equal(plan.groups["wk-one"].fontSize, 18, "a restored group keeps its archived font size");
+assert.notEqual(plan.groups["wk-one"].titleColor, "#FFFFFF",
+  "a restored group must not be repainted with the converted-group look");
 
 console.log("Native-to-WorkspaceKit conversion plan contract passed.");

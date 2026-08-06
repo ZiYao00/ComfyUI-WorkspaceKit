@@ -103,17 +103,34 @@ assert.equal(expectedHues.length, 10);
 assert.match(source, /GROUP_BACKGROUND_SWATCH_SATURATION = 25;/);
 assert.match(source, /GROUP_BACKGROUND_SWATCH_LIGHTNESS = 75;/);
 
-// 8. T-212a: clicking a swatch applies a COMPLETE theme-aware color preset
-//    (title + font + border) derived from its hue, keeps the header alpha, and
-//    turns unified color on. The swatch carries data-hue for this.
+// 8. T-212a → superseded 2026-08-04 by native-colour compatibility: clicking a
+//    swatch applies a COMPLETE preset (title bar + font + border), keeps the
+//    header alpha, and turns unified colour on. The swatch now carries
+//    `data-color` holding LiteGraph's exact `groupcolor` hex rather than
+//    `data-hue`, so WK → native conversion and rgthree colour filters see the
+//    same colour identity.
+//
+//    T-044 (2026-08-06): the font is derived from the DISPLAY colour, not the
+//    stored native hex. The two differ for the muddy shorthands, and the font
+//    has to contrast with what is actually painted — deriving it from #aa8888
+//    while the bar paints a brighter red would pick the wrong side of the
+//    luminance threshold. A preset may also pin its own font and opacity
+//    (only `black` does).
 assert.match(
   source,
-  /const applyColorPreset = hue => \{[\s\S]*?computeGroupColorPreset\(hue, light\)/
+  /const applyColorPreset = hex => \{[\s\S]*?const nativeHex = normalizeHexColor\(hex\);[\s\S]*?groupTitleColorForBackground\(displayColorForNativeHex\(nativeHex\) \|\| nativeHex\)/,
+  "swatch click must apply LiteGraph's exact groupcolor hex and derive the font from the colour actually painted"
 );
 assert.match(
   source,
-  /for \(const btn of bgSwatchButtons\) \{\s*btn\.addEventListener\('click', \(\) => \{\s*applyColorPreset\(parseInt\(btn\.dataset\.hue, 10\) \|\| 0\);/
+  /const applyColorPreset = hex => \{[\s\S]*?titleColorForNativeHex\(nativeHex\)/,
+  "a preset that pins its own font colour must be honoured before the luma rule"
 );
+assert.match(
+  source,
+  /for \(const btn of bgSwatchButtons\) \{\s*btn\.addEventListener\('click', \(\) => \{\s*applyColorPreset\(btn\.dataset\.color\);/
+);
+assert.doesNotMatch(source, /btn\.dataset\.hue/, "hue-keyed swatches were replaced by native hex swatches");
 assert.match(source, /unifiedToggle\.checked = true;\s*group\.useUnifiedColor = true;/);
 assert.match(
   source,
@@ -232,10 +249,15 @@ assert.equal(computeGroupColorPreset(216, false).fontHex, "#cce0ff");
 assert.deepEqual(computeGroupColorPreset(216, true).titleRgb, { r: 179, g: 199, b: 230 });
 assert.equal(computeGroupColorPreset(216, true).fontHex, "#ffffff");
 
-// 21. Theme detection reads a content-background variable and thresholds luma.
-assert.match(source, /const isLightGroupTheme = \(\) => \{/);
-assert.match(source, /--p-content-background/);
-assert.match(source, /rgbLuma\([\s\S]*?\) > 0\.5/);
+// 21. Font/background contrast is decided by luma. The earlier
+//     `isLightGroupTheme()` probe of `--p-content-background` was removed on
+//     2026-08-04: swatches now carry LiteGraph's own group colours, so the
+//     readable font colour is derived from the chosen background's luma rather
+//     than from the surrounding canvas theme.
+assert.match(source, /const groupTitleColorForBackground = hex => \{/);
+assert.match(source, /rgbLuma\(\{ r, g, b \}\) > 0\.56 \? '#17212b' : '#ffffff'/);
+assert.doesNotMatch(source, /isLightGroupTheme/, "canvas-theme probing was replaced by per-background luma");
+assert.doesNotMatch(source, /--p-content-background/);
 
 // 22. Header opacity capped at 50%.
 assert.match(source, /const MAX_HEADER_OPACITY = 0\.5;/);

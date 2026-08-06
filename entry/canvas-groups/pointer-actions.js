@@ -5,6 +5,7 @@ export const GROUP_POINTER_ACTION = Object.freeze({
   BYPASS: "group.toggleIgnore",
   MUTE: "group.toggleDisable",
   SELECT: "group.toggleSelection",
+  DISABLED: "group.disabled",
 });
 
 export const GROUP_POINTER_MODIFIER = Object.freeze({
@@ -27,7 +28,8 @@ const ACTIONS = Object.freeze(Object.values(GROUP_POINTER_ACTION));
 export function normalizeGroupPointerBindings(candidate) {
   const bindings = candidate && typeof candidate === "object" ? candidate : {};
   const values = MODIFIERS.map((modifier) => bindings[modifier]);
-  if (values.every((action) => ACTIONS.includes(action)) && new Set(values).size === ACTIONS.length) {
+  const activeValues = values.filter((action) => action !== GROUP_POINTER_ACTION.DISABLED);
+  if (values.every((action) => ACTIONS.includes(action)) && new Set(activeValues).size === activeValues.length) {
     return Object.freeze(Object.fromEntries(MODIFIERS.map((modifier) => [modifier, bindings[modifier]])));
   }
   return DEFAULT_GROUP_POINTER_BINDINGS;
@@ -36,8 +38,13 @@ export function normalizeGroupPointerBindings(candidate) {
 export function swapGroupPointerBinding(bindings, modifier, nextAction) {
   const current = normalizeGroupPointerBindings(bindings);
   if (!MODIFIERS.includes(modifier) || !ACTIONS.includes(nextAction)) return current;
+  if (nextAction === GROUP_POINTER_ACTION.DISABLED) {
+    return Object.freeze({ ...current, [modifier]: GROUP_POINTER_ACTION.DISABLED });
+  }
   const previousModifier = MODIFIERS.find((item) => current[item] === nextAction);
-  if (!previousModifier || previousModifier === modifier) return current;
+  if (!previousModifier || previousModifier === modifier) {
+    return Object.freeze({ ...current, [modifier]: nextAction });
+  }
   return Object.freeze({
     ...current,
     [modifier]: nextAction,
@@ -51,13 +58,13 @@ export function resolveGroupPointerAction(event, bindings = DEFAULT_GROUP_POINTE
   const resolved = normalizeGroupPointerBindings(bindings);
 
   if (event.shiftKey && !hasControl && !event.altKey) {
-    return resolved[GROUP_POINTER_MODIFIER.SHIFT];
+    return resolved[GROUP_POINTER_MODIFIER.SHIFT] === GROUP_POINTER_ACTION.DISABLED ? null : resolved[GROUP_POINTER_MODIFIER.SHIFT];
   }
   if (hasControl && !event.shiftKey && !event.altKey) {
-    return resolved[GROUP_POINTER_MODIFIER.CONTROL];
+    return resolved[GROUP_POINTER_MODIFIER.CONTROL] === GROUP_POINTER_ACTION.DISABLED ? null : resolved[GROUP_POINTER_MODIFIER.CONTROL];
   }
   if (event.altKey && !hasControl && !event.shiftKey) {
-    return resolved[GROUP_POINTER_MODIFIER.ALT];
+    return resolved[GROUP_POINTER_MODIFIER.ALT] === GROUP_POINTER_ACTION.DISABLED ? null : resolved[GROUP_POINTER_MODIFIER.ALT];
   }
   return null;
 }

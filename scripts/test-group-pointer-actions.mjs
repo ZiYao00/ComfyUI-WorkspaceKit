@@ -16,4 +16,11 @@ assert.equal(swapped.shift, GROUP_POINTER_ACTION.BYPASS);
 assert.equal(resolveGroupPointerAction(pointer({ ctrlKey: true }), swapped), GROUP_POINTER_ACTION.SELECT);
 assert.equal(resolveGroupPointerAction(pointer({ shiftKey: true }), swapped), GROUP_POINTER_ACTION.BYPASS);
 
+const controlDisabled = swapGroupPointerBinding(DEFAULT_GROUP_POINTER_BINDINGS, GROUP_POINTER_MODIFIER.CONTROL, GROUP_POINTER_ACTION.DISABLED);
+assert.equal(controlDisabled.control, GROUP_POINTER_ACTION.DISABLED);
+assert.equal(resolveGroupPointerAction(pointer({ ctrlKey: true }), controlDisabled), null);
+assert.equal(resolveGroupPointerAction(pointer({ altKey: true }), controlDisabled), GROUP_POINTER_ACTION.MUTE);
+const rebound = swapGroupPointerBinding(controlDisabled, GROUP_POINTER_MODIFIER.CONTROL, GROUP_POINTER_ACTION.BYPASS);
+assert.equal(rebound.control, GROUP_POINTER_ACTION.BYPASS);
+
 console.log("Canvas group pointer actions contract passed.");

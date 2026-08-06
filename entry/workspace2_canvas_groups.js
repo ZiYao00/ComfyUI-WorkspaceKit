@@ -7,7 +7,39 @@ import { app } from "../../scripts/app.js";
 import { t } from "./core/i18n.js";
 import { ensureWorkspaceKitDialogStyles } from "./core/dialog_styles.js";
 import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, normalizeGroupPointerBindings, resolveGroupPointerAction } from "./canvas-groups/pointer-actions.js?v=20260724_configurable_modifiers_r1";
-import { buildMultiGroupDragPlan, hasNodePosition } from "./canvas-groups/multi-drag-plan.js?v=20260723_group_membership_r5";
+import { buildMultiGroupDragPlan, hasNodePosition } from "./canvas-groups/multi-drag-plan.js?v=20260804_joint_drag_r1";
+import { buildGroupContentsSelectionPlan } from "./canvas-groups/contents-selection-plan.js?v=20260804_group_header_select_contents_r1";
+import { GROUP_HIT_REGION_SELECTOR, shouldPassThroughGroupHitRegions } from "./canvas-groups/hit-region-passthrough.js?v=20260805_group_node_hit_priority_r1";
+import { isNodeInsideGroup } from "./canvas-groups/node-membership.js?v=20260805_group_centre_membership_r1";
+import { HEADER_CLICK_SELECTION, hasSelectionModifier, resolveHeaderClickSelection } from "./canvas-groups/header-click-selection.js?v=20260805_group_header_click_reset_r1";
+import { resolveRenameInputMetrics } from "./canvas-groups/rename-input-metrics.js?v=20260805_group_rename_input_zoom_r1";
+import { GROUP_MODE_STATE, hexToRgbTriplet, resolveGroupFillPaint, resolveGroupModeVisuals } from "./canvas-groups/group-mode-visuals.js?v=20260805_group_mode_native_visuals_r1";
+import {
+    ACTION_ICON_VISIBILITY,
+    isPointInsideBounds,
+    resolveActionIconVisibility,
+    resolveQueueIconOpacity,
+} from "./canvas-groups/action-icon-visibility.js?v=20260805_group_action_icon_hover_r1";
+import {
+    DRAG_MOVE_EVENT_NAMES,
+    DRAG_TEARDOWN_EVENT_NAMES,
+    createOnceGuard,
+    shouldAbortDragFromMove,
+} from "./canvas-groups/drag-teardown.js?v=20260805_joint_drag_teardown_r1";
+import {
+    normalizeHexColor,
+    readNativeGroupColorPresets,
+    resolveWorkspaceKitGroupNativeColor,
+} from "./canvas-groups/native-color-compat.js?v=20260804_native_group_color_r1";
+import {
+    CUSTOM_PRESET_COLOR,
+    clipboardValueForPreset,
+    displayColorForNativeHex,
+    headerOpacityForNativeHex,
+    migrateLegacyPresetBorderWidth,
+    presetCopiesNativeName,
+    titleColorForNativeHex,
+} from "./canvas-groups/preset-color-display.js?v=20260806_preset_color_display_r1";
 import {
     shouldClearGroupSelectionFromKeyEvent,
     shouldClearGroupSelectionFromPointerEvent,
@@ -32,6 +64,31 @@ const DEFAULT_STYLE_KEY = 'workspace2.canvasGroups.defaultStyle';
 const PRESET_STYLE_KEY = 'workspace2.canvasGroups.stylePresets';
 const ACTIVE_PRESET_KEY = 'workspace2.canvasGroups.activePreset';
 const PRESET_COUNT = 4;
+/*
+ * T-045: the border width every preset path lands on.
+ *
+ * One constant rather than a literal per call site, because three separate
+ * places must agree — a new group's built-in style, applying a colour swatch,
+ * and native → WK conversion. When they disagreed, "the border is 1px" was true
+ * in one place and false in the other two.
+ *
+ * Note the border is drawn scaled (`borderWidth * scale`), so at a zoomed-out
+ * canvas 1px would round to nothing; `renderGroup`/`updateGroupStyle` already
+ * floor the drawn width at one device pixel, which is what keeps a 1px border
+ * visible rather than vanishing.
+ */
+const PRESET_BORDER_WIDTH = 1;
+/*
+ * T-045: presets saved before PRESET_BORDER_WIDTH existed carry the old 2px.
+ *
+ * A stored preset overrides the built-in style, so a user who had ever saved one
+ * kept getting 2px no matter what the built-in default said — which is exactly
+ * how "new groups are still not 1px" was reported after the default was changed.
+ * `migrateLegacyPresetBorderWidth()` rewrites only that field, and only from the
+ * one legacy value, so a width the user deliberately chose is left alone.
+ */
+const LEGACY_PRESET_BORDER_WIDTH = 2;
+const PRESET_BORDER_MIGRATION_KEY = 'workspace2.canvasGroups.borderWidthMigrated';
 const DEFAULT_CONTENT_PADDING = 12;
 // T-210a (2026-07-29): default header opacity matches ComfyUI/LiteGraph's group
 // fill coefficient (ctx.globalAlpha = 0.25 * editor_alpha). The body fill is now
@@ -47,11 +104,9 @@ const MIN_HEADER_OPACITY = 0.05;
 const DEFAULT_BACKGROUND_OPACITY = DEFAULT_HEADER_OPACITY * BODY_TO_HEADER_OPACITY_RATIO;
 const DEFAULT_HEADER_BG_COLOR = `rgba(0,0,0,${DEFAULT_HEADER_OPACITY})`;
 const DEFAULT_SHADOW_COLOR = '#000000';
-// T-210b/T-212a (2026-07-29): the background row shows 10 fixed color presets
-// evenly spaced on the hue wheel. Each is a COMPLETE color preset driven by a
-// single hue: it sets the title-bar color, the (derived) body fill, and the
-// font+border color together. The swatch button itself keeps showing the
-// title-bar color (hsl(H,25%,75%)); clicking it applies the whole preset.
+// These are only a stable fallback when a frontend exposes fewer than ten
+// native LiteGraph group colours. Normal rendering reads the current runtime
+// `LGraphCanvas.node_colors[*].groupcolor` palette instead.
 const GROUP_BACKGROUND_SWATCH_HUES = Object.freeze(
     Array.from({ length: 10 }, (_, index) => index * 36)
 );
@@ -108,6 +163,28 @@ const parseRgbaAlpha = (value, fallback = DEFAULT_HEADER_OPACITY) => {
     return m ? finiteNumber(m[1], fallback) : fallback;
 };
 
+/*
+ * T-044: the display half of the store-native/paint-bright split.
+ *
+ * A group persists LiteGraph's exact `groupcolor` RGB inside `headerBgColor` so
+ * rgthree's colour filter and native conversion keep matching it. Painting runs
+ * that RGB through the palette's display table first, which brightens the five
+ * muddy shorthand entries and leaves every other colour — including any custom
+ * one the user picked — untouched. See canvas-groups/preset-color-display.js.
+ */
+const displayRgbFromStored = (rgba, fallback = { r: 0, g: 0, b: 0 }) => {
+    const stored = parseRgbaRgb(rgba, fallback);
+    const display = displayColorForNativeHex(
+        `#${[stored.r, stored.g, stored.b].map(c => Math.max(0, Math.min(255, Math.round(c))).toString(16).padStart(2, '0')).join('')}`
+    );
+    if (!display) return stored;
+    return {
+        r: parseInt(display.slice(1, 3), 16),
+        g: parseInt(display.slice(3, 5), 16),
+        b: parseInt(display.slice(5, 7), 16),
+    };
+};
+
 // Native LiteGraph groups expose a single solid `color` field (a hex string),
 // while a WorkspaceKit group carries a translucent `headerBgColor` (rgba) plus a
 // separate `titleColor`. When converting to native we cannot represent all three
@@ -117,23 +194,79 @@ const parseRgbaAlpha = (value, fallback = DEFAULT_HEADER_OPACITY) => {
 // native group falls back to ComfyUI's own default palette instead of rendering
 // an all-black box. (rgbToHex is defined below, alongside the color presets.)
 const nativeColorFromWorkspaceKitGroup = group => {
+    const explicit = normalizeHexColor(group?.nativeGroupColor);
+    if (explicit) return explicit;
     const rgb = parseRgbaRgb(group?.headerBgColor, null);
-    if (!rgb) return null;
-    const isNearBlack = rgb.r <= 8 && rgb.g <= 8 && rgb.b <= 8;
-    if (isNearBlack) return null;
-    return rgbToHex(rgb);
+    if (!rgb || (rgb.r <= 8 && rgb.g <= 8 && rgb.b <= 8)) return null;
+    return resolveWorkspaceKitGroupNativeColor(group);
 };
 
 // T-210b (2026-07-29): body fill RGB is always the title-bar RGB, and body alpha
 // is strictly half the title-bar alpha. No independent backgroundOpacity slider
 // value gates it anymore (the earlier min-of-header-and-background clamp is
 // gone), so the body cannot desync from the title bar.
-const groupBodyBackground = group => {
+const groupBodyBackground = (group, visuals = null) => {
     if (!group?.backgroundFillEnabled) return 'transparent';
-    const rgb = parseRgbaRgb(group.headerBgColor);
+    const rgb = displayRgbFromStored(group.headerBgColor);
     const headerAlpha = clamp01(parseRgbaAlpha(group.headerBgColor, DEFAULT_HEADER_OPACITY));
     const bodyAlpha = clamp01(headerAlpha * BODY_TO_HEADER_OPACITY_RATIO);
-    return `rgba(${rgb.r},${rgb.g},${rgb.b},${bodyAlpha})`;
+    // T-038: the fill is painted on the canvas, so the DOM `opacity` that dims a
+    // bypassed/muted frame cannot reach it. Fold the mode's alpha (and, for
+    // bypass, its magenta) in here or the body stays full strength under a
+    // 20%-opacity border, which reads as a rendering fault instead of a state.
+    const paint = resolveGroupFillPaint({ visuals, rgb, alpha: bodyAlpha });
+    return `rgba(${paint.r},${paint.g},${paint.b},${paint.alpha})`;
+};
+
+/*
+ * T-038: the colour that marks "ignored" must be whatever the NODES use, since
+ * the entire point is that a frame and its contents agree.
+ *
+ * Measured on the live page (2026-08-05) rather than assumed:
+ *
+ *   LiteGraph.NODE_BYPASS_BGCOLOR       = '#cba6f7'   (lavender)
+ *   LiteGraph.NODE_DEFAULT_BYPASS_COLOR = '#FF00FF'
+ *   a bypassed node's renderingBgColor  = hsla(300,100%,50%,0.9)  → #FF00FF
+ *
+ * So the node rendering path reads NODE_DEFAULT_BYPASS_COLOR and ignores
+ * NODE_BYPASS_BGCOLOR, even though the latter is the name that appears in the
+ * theme colour-palette schema. Reading the schema name first (as this originally
+ * did) painted the frame lavender while its nodes went magenta — precisely the
+ * split this change exists to remove. NODE_BYPASS_BGCOLOR is kept as a second
+ * choice for builds that lack the first, and resolveBypassColor() supplies
+ * ComfyUI's own default when neither is usable.
+ */
+const runtimeBypassColor = () => (
+    globalThis.LiteGraph?.NODE_DEFAULT_BYPASS_COLOR
+    ?? globalThis.LiteGraph?.NODE_BYPASS_BGCOLOR
+    ?? null
+);
+
+/* T-038: one frame's mode treatment, with the live magenta folded in. */
+const groupModeVisuals = group => resolveGroupModeVisuals({
+    bypassed: group?.bypassed,
+    executionMode: group?.executionMode,
+    bypassColor: runtimeBypassColor(),
+});
+
+/*
+ * T-038: the title bar's paint under the current mode.
+ *
+ * The title bar is the group's closest analogue to a node's background, and
+ * native replaces the background colour for bypass only. The user's own alpha is
+ * preserved so a frame keeps its configured translucency while ignored — only
+ * the hue changes. Mute and normal return the stored colour untouched.
+ *
+ * T-044: the stored RGB goes through the display table first, so a muddy native
+ * preset paints as its brightened form while the workflow keeps the native hex.
+ */
+const groupHeaderBackground = (group, visuals = null) => {
+    const stored = group?.headerBgColor || DEFAULT_HEADER_BG_COLOR;
+    const resolved = visuals || groupModeVisuals(group);
+    if (resolved.tintColor) {
+        return replaceRgbaRgbPreserveAlpha(stored, hexToRgbTriplet(resolved.tintColor));
+    }
+    return replaceRgbaRgbPreserveAlpha(stored, displayRgbFromStored(stored));
 };
 
 // HSL (H in [0,360), S/L in [0,100]) → {r,g,b} in [0,255]. Used for the fixed
@@ -152,15 +285,21 @@ const hslToRgb = (h, s, l) => {
 const rgbToHex = ({ r, g, b }) =>
     '#' + [r, g, b].map(x => Math.max(0, Math.min(255, Math.round(x))).toString(16).padStart(2, '0')).join('');
 
-// The 10 fixed color presets, precomputed once. Each entry keeps the hue so an
-// aria-label can report it, plus the swatch's own display rgb/hex (the title-bar
-// color, hsl(H,25%,75%)). Clicking a preset applies a full theme-aware recipe
-// (title + font + border) via computeGroupColorPreset(); the swatch shown stays
-// this title-bar color regardless of theme (per user: swatch display unchanged).
+// Stable fallback colours used only if LiteGraph supplies fewer than ten valid
+// `groupcolor` entries. They retain the old visual order for offline/legacy
+// frontends without becoming the source of truth on current ComfyUI.
 const GROUP_COLOR_PRESETS = Object.freeze(GROUP_BACKGROUND_SWATCH_HUES.map(hue => {
     const rgb = hslToRgb(hue, GROUP_BACKGROUND_SWATCH_SATURATION, GROUP_BACKGROUND_SWATCH_LIGHTNESS);
-    return Object.freeze({ hue, rgb, hex: rgbToHex(rgb) });
+    return Object.freeze({ key: `fallback-h${hue}`, hue, rgb, hex: rgbToHex(rgb) });
 }));
+
+const groupTitleColorForBackground = hex => {
+    const value = String(hex || '#000000');
+    const r = parseInt(value.slice(1, 3), 16) || 0;
+    const g = parseInt(value.slice(3, 5), 16) || 0;
+    const b = parseInt(value.slice(5, 7), 16) || 0;
+    return rgbLuma({ r, g, b }) > 0.56 ? '#17212b' : '#ffffff';
+};
 
 // Replace only the RGB channels of an rgba() string, preserving its alpha.
 const replaceRgbaRgbPreserveAlpha = (rgba, rgb, fallbackAlpha = DEFAULT_HEADER_OPACITY) => {
@@ -170,36 +309,6 @@ const replaceRgbaRgbPreserveAlpha = (rgba, rgb, fallbackAlpha = DEFAULT_HEADER_O
 
 // Relative luminance of an "r,g,b" or {r,g,b} value, 0..1 (sRGB-weighted).
 const rgbLuma = ({ r, g, b }) => (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-
-// T-212c: detect whether the current ComfyUI theme is light. Read the content
-// background color variable; if its luma is high, we are on a light theme. This
-// runs at preset-click time only (design decision "A"): the resolved color is
-// stored on the group, not recomputed per render. Defaults to dark on any error.
-const isLightGroupTheme = () => {
-    try {
-        const probe = document.createElement('div');
-        probe.style.cssText = 'position:absolute;left:-9999px;background:var(--p-content-background,var(--comfy-menu-bg,#1e1e1e));';
-        document.body.appendChild(probe);
-        const resolved = getComputedStyle(probe).backgroundColor;
-        probe.remove();
-        const rgb = parseRgbaRgb(resolved, null);
-        if (!rgb) return false;
-        return rgbLuma(rgb) > 0.5;
-    } catch {
-        return false;
-    }
-};
-
-// T-212a: derive a complete color preset from a single hue for the active theme.
-// Returns { titleRgb, fontHex } — title-bar RGB (alpha applied by caller) and the
-// font/border color. Dark: light title + bright same-hue font. Light: deeper
-// title + pure-white font.
-const computeGroupColorPreset = (hue, light) => {
-    const recipe = light ? GROUP_PRESET_THEME.light : GROUP_PRESET_THEME.dark;
-    const titleRgb = hslToRgb(hue, recipe.title.s, recipe.title.l);
-    const fontHex = recipe.font ? rgbToHex(hslToRgb(hue, recipe.font.s, recipe.font.l)) : '#ffffff';
-    return { titleRgb, fontHex };
-};
 
 // The "11th fixed color": hue 190° — a cyan that sits in the gap between the
 // 180° and 216° background swatches, so it duplicates none of the ten. It reuses
@@ -230,6 +339,13 @@ const Workspace2CanvasGroups = {
     _suspendMembershipSync: false,
     overlay: null,
     noticeHandler: null,
+    // T-041: last known pointer position, used once per frame to decide whether
+    // the group frame's drag/resize strips must yield to a node underneath.
+    _lastPointerClient: null,
+    _hitRegionsPassThrough: false,
+    // T-036: monotonic z-index counter for bringToFront. See `bringToFront` in
+    // buildGroupEl for why stacking can no longer be done by re-appending.
+    _frontZ: 5,
 
     setNoticeHandler(handler) {
         this.noticeHandler = typeof handler === 'function' ? handler : null;
@@ -346,7 +462,7 @@ const Workspace2CanvasGroups = {
             const radius = Math.min(Math.max(0, finiteNumber(group.cornerRadius, 8) - bw), w / 2, h / 2);
             const ix = x + bw, iy = y + bw, iw = Math.max(0, w - bw * 2), ih = Math.max(0, h - bw * 2);
             if (!iw || !ih) continue;
-            ctx.fillStyle = groupBodyBackground(group);
+            ctx.fillStyle = groupBodyBackground(group, groupModeVisuals(group));
             ctx.beginPath();
             ctx.moveTo(ix + radius, iy);
             ctx.lineTo(ix + iw - radius, iy);
@@ -411,6 +527,13 @@ const Workspace2CanvasGroups = {
         // transient canvas selection.
         window.addEventListener('pointerdown', e => {
             if (e.button === 2) this.recordCanvasContextPoint(e);
+            // Do not take over LiteGraph's node drag.  When an already selected
+            // node is the drag origin, expand that native selection with the
+            // selected WK groups' persisted members, then only move the WK
+            // borders here.  LiteGraph remains the sole owner of node motion.
+            if (e.button === 0 && this.prepareNativeNodeJointGroupDrag(e)) {
+                return;
+            }
             if (shouldStartGroupMarquee(e, app?.canvas?.canvas)) {
                 this.beginCanvasMarquee(e);
             } else if (shouldClearGroupSelectionFromPointerEvent(e, app?.canvas?.canvas)) {
@@ -444,6 +567,58 @@ const Workspace2CanvasGroups = {
         // pointer event. Keep only the latest canvas context position so an
         // empty group can be created exactly where the user opened the menu.
         window.addEventListener('contextmenu', e => this.recordCanvasContextPoint(e), true);
+
+        // T-041: track the pointer so the per-frame sync can decide whether the
+        // group frame's drag/resize strips must yield to a node underneath.
+        // pointermove alone is not enough — the pointer can stop over a node
+        // while the graph moves under it (canvas pan, node drag, zoom), so the
+        // decision is re-evaluated every frame from this stored position.
+        const trackPointer = e => {
+            this._lastPointerClient = { clientX: e.clientX, clientY: e.clientY, buttons: e.buttons };
+        };
+        window.addEventListener('pointermove', trackPointer, true);
+        window.addEventListener('pointerdown', trackPointer, true);
+        window.addEventListener('pointerup', trackPointer, true);
+        window.addEventListener('pointerleave', () => { this._lastPointerClient = null; }, true);
+    },
+
+    /*
+     * T-041: yield the group frame's drag/resize strips to a node underneath.
+     *
+     * The overlay sits above every node pixel, so a strip with
+     * `pointer-events: auto` steals clicks that native ComfyUI would have given
+     * to the node (native resolves `getNodeOnPos` before any group — see
+     * docs/NATIVE_BEHAVIOR_REFERENCE.md §3).  Toggling the strips off lets
+     * LiteGraph receive a genuine browser event, which matters because it calls
+     * `setPointerCapture(e.pointerId)` and a synthesised pointer cannot satisfy
+     * that.
+     *
+     * The title bar is never yielded: it carries the rename input and the action
+     * buttons.
+     */
+    _syncHitRegionPassThrough() {
+        const point = this._lastPointerClient;
+        const graph = app?.graph;
+        let nodeUnderPointer = false;
+        if (point && graph?._nodes?.length && !(Number(point.buttons) > 0)) {
+            const canvasPoint = this.getCanvasPointFromPointerEvent(point);
+            if (canvasPoint) {
+                nodeUnderPointer = Boolean(
+                    graph.getNodeOnPos?.(canvasPoint.x, canvasPoint.y, graph._nodes, 5)
+                );
+            }
+        }
+        const passThrough = shouldPassThroughGroupHitRegions({
+            hasPointer: Boolean(point),
+            nodeUnderPointer,
+            buttons: point?.buttons ?? 0,
+        });
+        if (passThrough === this._hitRegionsPassThrough) return;
+        this._hitRegionsPassThrough = passThrough;
+        const value = passThrough ? 'none' : 'auto';
+        this.overlay?.querySelectorAll?.(GROUP_HIT_REGION_SELECTOR)?.forEach(el => {
+            el.style.pointerEvents = value;
+        });
     },
 
     recordCanvasContextPoint(event) {
@@ -457,6 +632,51 @@ const Workspace2CanvasGroups = {
             x: (event.clientX - rect.left) / scale - (ds?.offset?.[0] || 0),
             y: (event.clientY - rect.top) / scale - (ds?.offset?.[1] || 0),
         };
+        return true;
+    },
+
+    getCanvasPointFromPointerEvent(event) {
+        const canvas = app?.canvas?.canvas;
+        const ds = app?.canvas?.ds;
+        if (!canvas || !ds || !Number.isFinite(event?.clientX) || !Number.isFinite(event?.clientY)) return null;
+        const rect = canvas.getBoundingClientRect();
+        const scale = ds.scale || 1;
+        return {
+            x: (event.clientX - rect.left) / scale - (ds.offset?.[0] || 0),
+            y: (event.clientY - rect.top) / scale - (ds.offset?.[1] || 0),
+        };
+    },
+
+    prepareNativeNodeJointGroupDrag(event) {
+        // Modifier gestures have explicit meanings for WK groups and native
+        // ComfyUI selection.  A normal left drag is the only safe path to join.
+        if (event.ctrlKey || event.altKey || event.shiftKey || !this.selectedGroupIds.size) return false;
+        const canvas = app?.canvas;
+        const graph = app?.graph;
+        const point = this.getCanvasPointFromPointerEvent(event);
+        if (!canvas?.selectItems || !canvas?.deselectAllNodes || !graph?._nodes || !point) return false;
+        const hitNode = graph.getNodeOnPos?.(point.x, point.y, graph._nodes, 5);
+        if (!hitNode?.id) return false;
+
+        const selectedNodes = Object.values(canvas.selected_nodes || {}).filter(Boolean);
+        if (!selectedNodes.some((node) => String(node?.id) === String(hitNode.id))) return false;
+        const plan = buildMultiGroupDragPlan({
+            groups: this.groups,
+            nodes: graph._nodes,
+            selectedGroupIds: [...this.selectedGroupIds],
+            selectedNodeIds: selectedNodes.map((node) => node.id),
+        });
+        if (!plan.groupIds.length || !plan.nodeIds.length) return false;
+
+        // `selectItems` is the existing ComfyUI canvas API already used by WK
+        // for Queue Selected Output Nodes.  Replacing the selection with the
+        // complete union before LiteGraph receives this event prevents a group
+        // member from being left behind, while the drag itself stays native.
+        const selectedIds = new Set(plan.nodeIds);
+        const unionNodes = graph._nodes.filter((node) => selectedIds.has(String(node?.id)));
+        canvas.deselectAllNodes();
+        canvas.selectItems(unionNodes);
+        this.startNativeNodeJointGroupDrag(plan, event);
         return true;
     },
 
@@ -502,6 +722,33 @@ const Workspace2CanvasGroups = {
         this.selectedGroupIds = new Set([gid]);
         this.activeGroupId = gid;
         this.refreshGroupSelection();
+    },
+
+    // Rename has an explicit left-header button. Double-click can therefore
+    // select a complete group hierarchy without competing for the same gesture.
+    selectGroupContents(gid) {
+        const canvas = app?.canvas;
+        const graph = app?.graph;
+        const plan = buildGroupContentsSelectionPlan({
+            groups: this.groups,
+            nodes: graph?._nodes || [],
+            groupId: gid,
+        });
+        if (!plan.groupIds.length) return false;
+
+        this.selectedGroupIds = new Set(plan.groupIds);
+        this.activeGroupId = String(gid);
+        const nodeIds = new Set(plan.nodeIds);
+        const nodes = (graph?._nodes || []).filter((node) => nodeIds.has(String(node?.id)));
+        canvas?.deselectAllNodes?.();
+        if (nodes.length) canvas?.selectItems?.(nodes);
+        this.refreshGroupSelection();
+        canvas?.setDirty?.(true, true);
+        graph?.setDirtyCanvas?.(true, true);
+        window.Workspace2CanvasGroupsLastContentsSelection = {
+            at: Date.now(), rootGroupId: String(gid), groupIds: [...plan.groupIds], nodeIds: [...plan.nodeIds],
+        };
+        return true;
     },
 
     prepareGroupDrag(gid) {
@@ -623,6 +870,10 @@ const Workspace2CanvasGroups = {
         const ox = c.ds.offset[0] || 0;
         const oy = c.ds.offset[1] || 0;
 
+        // T-041: re-check every frame, not only on pointermove — the graph can
+        // move under a stationary pointer (canvas pan, node drag, zoom).
+        this._syncHitRegionPassThrough();
+
         if (Object.keys(this.groups).length === 0) {
             const graph = app?.graph;
             if (graph?._nodes?.length) {
@@ -641,6 +892,15 @@ const Workspace2CanvasGroups = {
             }
         }
 
+        // T-038: the action icons' visibility is geometric (see the loop below),
+        // so resolve the pointer into canvas space once per frame rather than
+        // per group — the conversion is identical for every frame on screen.
+        const pointerClient = this._lastPointerClient;
+        const pointerCanvasPoint = pointerClient
+            ? this.getCanvasPointFromPointerEvent(pointerClient)
+            : null;
+        const pointerHeld = Number(pointerClient?.buttons) > 0;
+
         for (const [gid, g] of Object.entries(this.groups)) {
             const el = this.groupEls[gid];
             if (!el) continue;
@@ -656,6 +916,9 @@ const Workspace2CanvasGroups = {
             const fs = (g.fontSize || 14) * scale;
             const showTitle = (g.title || '').trim() !== '';
             const headerHeight = Math.max(21 * scale, fs * 1.8);
+            // T-038: the title bar is the group's closest analogue to a node's
+            // background, and native replaces that colour for ignore only.
+            const modeVisuals = groupModeVisuals(g);
             const header = el.querySelector('.xzg-group-header');
             if (header) {
                 const padV = 2 * scale;
@@ -665,7 +928,7 @@ const Workspace2CanvasGroups = {
                 header.style.paddingRight = (6 * scale) + 'px';
                 header.style.paddingTop = padV + 'px';
                 header.style.paddingBottom = padV + 'px';
-                header.style.background = showTitle ? (g.headerBgColor || DEFAULT_HEADER_BG_COLOR) : 'transparent';
+                header.style.background = showTitle ? groupHeaderBackground(g, modeVisuals) : 'transparent';
             }
             const body = el.querySelector('.xzg-group-body');
             if (body) {
@@ -684,6 +947,18 @@ const Workspace2CanvasGroups = {
                 span.style.color = g.titleColor || '#FFD700';
                 span.style.display = showTitle ? '' : 'none';
             }
+            // T-036: an open rename box must follow zoom like the title it
+            // replaced. It is created in startRename, outside this loop, so
+            // without this it froze at whatever scale was active when it opened.
+            const titleInput = el.querySelector('.xzg-group-title-input');
+            if (titleInput) {
+                const m = resolveRenameInputMetrics({ scale, fontSize: g.fontSize });
+                titleInput.style.fontSize = `${m.fontSize}px`;
+                titleInput.style.padding = `${m.paddingV}px ${m.paddingH}px`;
+                titleInput.style.borderWidth = `${m.borderWidth}px`;
+                titleInput.style.borderRadius = `${m.borderRadius}px`;
+                titleInput.style.color = g.titleColor || '#FFD700';
+            }
             const delBtn = el.querySelector('.xzg-delete-btn');
             if (delBtn) {
                 // Header controls are intentionally proportional to the
@@ -699,6 +974,30 @@ const Workspace2CanvasGroups = {
                 actions.style.marginLeft = `${headerHeight * 0.12}px`;
             }
             const modeButtons = el.querySelectorAll('.xzg-group-mode-btn');
+            // T-038: the five action icons appear while the pointer is anywhere
+            // inside this frame, not just on its title bar. That cannot be a CSS
+            // :hover — the frame's middle is `pointer-events:none` so nodes stay
+            // clickable, so it never receives a mouse event. Hence the geometric
+            // test, re-run every frame because the graph can move under a
+            // stationary pointer. `visibility` (not `display`) preserves the
+            // layout box so the title never jumps when the icons come and go.
+            const iconsVisible = resolveActionIconVisibility({
+                pointerInside: isPointInsideBounds(b, pointerCanvasPoint),
+                // A drag or resize routinely outruns the pointer past the frame
+                // edge; hiding the icons mid-gesture would make the bar flicker.
+                isGesturing: pointerHeld && (gid === this.activeGroupId || this.selectedGroupIds.has(gid)),
+                isRenaming: Boolean(el.querySelector('.xzg-group-title-input')),
+            }) === ACTION_ICON_VISIBILITY.VISIBLE;
+            const iconVisibility = iconsVisible ? 'visible' : 'hidden';
+            if (delBtn) delBtn.style.visibility = iconVisibility;
+            // T-039: the execute icon dims when the group holds nothing that can
+            // produce an image, reusing the very count the click path already
+            // checks so a dim icon and its "no output nodes" notice cannot disagree.
+            // Only computed while the icons are actually visible: the probe scans
+            // every graph node per group, and this loop runs every frame.
+            const queueOpacity = iconsVisible
+                ? resolveQueueIconOpacity(this._getGroupOutputNodes(g).length)
+                : null;
             modeButtons.forEach(btn => {
                 // Use headerHeight rather than raw font size: controls stay
                 // inside the title bar for large custom fonts while still
@@ -717,6 +1016,10 @@ const Workspace2CanvasGroups = {
                 btn.style.alignItems = 'center';
                 btn.style.justifyContent = 'center';
                 btn.style.lineHeight = '0';
+                btn.style.visibility = iconVisibility;
+                if (queueOpacity !== null && btn.dataset.groupAction === 'queue') {
+                    btn.style.opacity = String(queueOpacity);
+                }
                 // SVG has explicit dimensions so it tracks the same title
                 // metric as the DOM text at every canvas zoom level.
                 const icon = btn.querySelector('svg');
@@ -725,7 +1028,7 @@ const Workspace2CanvasGroups = {
                     icon.style.height = `${iconSize}px`;
                     icon.style.display = 'block';
                 }
-                // 图标色与标题色同步；激活状态仅通过背景区分，避免破坏编组配色。
+                // 图标色与标题色同步。T-038 起状态由整框表达，图标不再有激活底色。
                 btn.style.color = g.titleColor || '#FFD700';
             });
             ['xzg-border-left', 'xzg-border-right'].forEach(cls => {
@@ -910,7 +1213,11 @@ const Workspace2CanvasGroups = {
             useUnifiedColor: true,
             effect: 'none',
             effectSpeed: 3,
-            borderWidth: 2,
+            // T-044/T-045: a new group starts at PRESET_BORDER_WIDTH. Only new
+            // groups are affected — an existing group keeps whatever width was
+            // configured for it, since overwriting a user's own setting is not
+            // recoverable.
+            borderWidth: PRESET_BORDER_WIDTH,
             borderOpacity: 0.65,
             cornerRadius: 8,
             shadowSize: 0,
@@ -919,7 +1226,8 @@ const Workspace2CanvasGroups = {
             headerBgColor: DEFAULT_GROUP_HEADER_BG,
             backgroundFillEnabled: false,
             backgroundOpacity: DEFAULT_BACKGROUND_OPACITY,
-            titleColor: DEFAULT_GROUP_FONT_HEX
+            titleColor: DEFAULT_GROUP_FONT_HEX,
+            nativeGroupColor: rgbToHex(DEFAULT_GROUP_TITLE_RGB),
         };
     },
 
@@ -946,7 +1254,8 @@ const Workspace2CanvasGroups = {
         try {
             const raw = JSON.parse(localStorage.getItem(PRESET_STYLE_KEY) || 'null');
             if (Array.isArray(raw) && raw.length) {
-                return Array.from({ length: PRESET_COUNT }, (_, i) => ({ ...builtIn, ...(raw[i] && typeof raw[i] === 'object' ? raw[i] : {}) }));
+                const merged = Array.from({ length: PRESET_COUNT }, (_, i) => ({ ...builtIn, ...(raw[i] && typeof raw[i] === 'object' ? raw[i] : {}) }));
+                return this._migratePresetBorderWidth(merged);
             }
         } catch {
             // Fall through to legacy migration.
@@ -957,9 +1266,37 @@ const Workspace2CanvasGroups = {
                 fallback[0] = { ...builtIn, ...legacy };
                 localStorage.setItem(PRESET_STYLE_KEY, JSON.stringify(fallback));
                 localStorage.setItem(ACTIVE_PRESET_KEY, '0');
+                return this._migratePresetBorderWidth(fallback);
             }
         } catch {}
         return fallback;
+    },
+
+    /*
+     * T-045: one-time forward migration of the legacy 2px border width.
+     *
+     * A stored preset overrides the built-in style, so before this ran a user who
+     * had ever saved a preset kept getting 2px however the built-in default was
+     * changed. Gated on a persisted flag so it cannot fight a user who
+     * deliberately sets 2px afterwards.
+     */
+    _migratePresetBorderWidth(presets) {
+        let alreadyDone = false;
+        try {
+            alreadyDone = localStorage.getItem(PRESET_BORDER_MIGRATION_KEY) === '1';
+        } catch {
+            return presets;
+        }
+        if (alreadyDone) return presets;
+        const { presets: migrated, changed } = migrateLegacyPresetBorderWidth(presets, {
+            from: LEGACY_PRESET_BORDER_WIDTH,
+            to: PRESET_BORDER_WIDTH,
+        });
+        try {
+            if (changed) localStorage.setItem(PRESET_STYLE_KEY, JSON.stringify(migrated));
+            localStorage.setItem(PRESET_BORDER_MIGRATION_KEY, '1');
+        } catch {}
+        return migrated;
     },
 
     saveStylePreset(index, style) {
@@ -970,6 +1307,23 @@ const Workspace2CanvasGroups = {
         this.setActivePreset(normalized);
         window.Workspace2CanvasGroupsDefaultStyle = presets[normalized];
         return presets[normalized];
+    },
+
+    /*
+     * T-044: the ten swatches shown in the settings dialog.
+     *
+     * The first nine come from LiteGraph's live palette so a converted group
+     * keeps native colour identity. LiteGraph only ships nine, so the tenth is
+     * WorkspaceKit's own rose — placed in the widest hue gap (purple 303° to
+     * red 0°) rather than the old #cfafaf, which sat one step from red and made
+     * the row look shuffled. GROUP_COLOR_PRESETS remains the fallback for
+     * frontends exposing fewer than nine usable entries.
+     */
+    readColorPresets() {
+        const native = readNativeGroupColorPresets(globalThis.LGraphCanvas?.node_colors, GROUP_COLOR_PRESETS, 9);
+        const used = new Set(native.map(sw => normalizeHexColor(sw.hex)));
+        const custom = { key: CUSTOM_PRESET_COLOR.key, hex: CUSTOM_PRESET_COLOR.hex, source: 'workspacekit' };
+        return used.has(normalizeHexColor(custom.hex)) ? native : [...native, custom];
     },
 
     groupStyleSnapshot(group) {
@@ -990,7 +1344,8 @@ const Workspace2CanvasGroups = {
             headerBgColor: group.headerBgColor || DEFAULT_HEADER_BG_COLOR,
             backgroundFillEnabled: Boolean(group.backgroundFillEnabled),
             backgroundOpacity: Math.max(0.05, Math.min(0.95, finiteNumber(group.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY))),
-            titleColor: group.titleColor || '#FFD700'
+            titleColor: group.titleColor || '#FFD700',
+            nativeGroupColor: resolveWorkspaceKitGroupNativeColor(group)
         };
     },
 
@@ -1023,13 +1378,11 @@ const Workspace2CanvasGroups = {
         if (!graph?._nodes) return;
         if (!bounds) return;
 
-        const persistedIds = Array.isArray(group.nodeIds) ? [...group.nodeIds] : [];
         if (!Array.isArray(group.nodeIds)) group.nodeIds = [];
-        // 新节点仍要求完全进入编组才自动收纳；已经保存为成员的节点，
-        // 允许少量越界时继续保留，避免边缘像素变化造成成员抖动。
-        const retainedOverlapThreshold = 0.2;
+        // T-037: 与原生一致——节点中心点落入编组即为成员（`containsCentre`），
+        // 不再要求四边完全包含，也不再需要 20% 重叠防抖：中心点不会像面积比例
+        // 那样在边缘抖动，保留防抖只会造成"拖出框仍黏着"。
         const inBounds = new Set();
-        const inBoundsNodes = [];
 
         let changed = false;
         graph._nodes.forEach(n => {
@@ -1037,13 +1390,8 @@ const Workspace2CanvasGroups = {
             const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
             if (typeof nw !== 'number' || typeof nh !== 'number') return;
             const nodeBounds = { x: n.pos[0], y: n.pos[1], w: nw, h: nh };
-            const fullyContained = this._isFullyContained(bounds, nodeBounds);
-            const wasPersisted = this._idInArray(persistedIds, n.id);
-            const stillOverlaps = wasPersisted &&
-                this._getOverlapRatio(bounds, nodeBounds) >= retainedOverlapThreshold;
-            if (fullyContained || stillOverlaps) {
+            if (isNodeInsideGroup(bounds, nodeBounds)) {
                 inBounds.add(n.id);
-                inBoundsNodes.push(n);
                 if (!this._idInArray(group.nodeIds, n.id)) {
                     group.nodeIds.push(n.id);
                     changed = true;
@@ -1051,19 +1399,9 @@ const Workspace2CanvasGroups = {
             }
         });
 
-        const prevCount = group.nodeIds.length;
-        const newCount = inBounds.size;
-
-        if (prevCount > 0 && newCount === 0) {
-            group.nodeIds = [];
-            this.syncGroupsToExtra();
-            return;
-        }
-
-        if (prevCount > 0 && newCount < prevCount * 0.3) {
-            return;
-        }
-
+        // T-037: 中心点判定是确定性的，因此移除了原先两道保护——"成员归零就
+        // 清空"和"成员数骤降就跳过本轮"。它们本是为掩盖面积判定的抖动而加，
+        // 保留下来会让节点在真正离开编组后仍留在成员名单里。
         const filtered = group.nodeIds.filter(nid => this._idInSet(inBounds, nid));
         if (filtered.length !== group.nodeIds.length) {
             group.nodeIds = filtered;
@@ -1313,6 +1651,10 @@ const Workspace2CanvasGroups = {
             el = this.buildGroupEl(g);
             this.groupEls[gid] = el;
             this.overlay.appendChild(el);
+            // T-041: a freshly built frame carries the markup's default
+            // `pointer-events`. Force the next frame to re-apply the current
+            // pass-through state instead of early-returning as unchanged.
+            this._hitRegionsPassThrough = null;
         }
         this.updateGroupStyle(gid);
     },
@@ -1335,8 +1677,9 @@ const Workspace2CanvasGroups = {
         const headerHeight = Math.max(21, Math.round(fs * 1.8));
         el.innerHTML = `
             <div class="xzg-group-body" style="position:absolute;left:0;right:0;top:${headerHeight}px;bottom:0;background:transparent;border-radius:0;pointer-events:none;z-index:1;"></div>
-            <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? (group.headerBgColor || DEFAULT_HEADER_BG_COLOR) : 'transparent'};border-radius:0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
-                <div style="flex:1 1 auto;min-width:0;overflow:hidden;display:flex;align-items:center;height:100%;">
+            <div class="xzg-group-header" style="position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;background:${showTitle ? groupHeaderBackground(group) : 'transparent'};border-radius:0;cursor:pointer;user-select:none;pointer-events:auto;height:${headerHeight}px;box-sizing:border-box;overflow:hidden;z-index:4;">
+                <div style="flex:1 1 auto;min-width:0;overflow:hidden;display:flex;align-items:center;gap:3px;height:100%;">
+                    <button class="xzg-group-mode-btn xzg-group-rename-btn" data-group-action="rename" title="${t('groups.actionRename')}" aria-label="${t('groups.actionRename')}" style="width:19px;height:19px;border:none;border-radius:4px;background:transparent;color:${group.titleColor || '#FFD700'};cursor:pointer;padding:0;line-height:1;flex:0 0 auto;"><svg class="xzg-group-action-icon" viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 16 3.2-.7L15.8 6.7a1.8 1.8 0 0 0-2.5-2.5l-8.6 8.6L4 16Z"/><path d="m11.8 5.7 2.5 2.5"/></svg></button>
                     <span class="xzg-group-title-text" style="color:${group.titleColor || '#FFD700'};font-size:${fs}px;font-weight:400;white-space:nowrap;line-height:1.4;overflow:hidden;text-overflow:ellipsis;${showTitle ? '' : 'display:none;'}">${showTitle ? group.title : ''}</span>
                 </div>
                 <div class="xzg-group-header-actions" style="display:flex;align-items:center;gap:3px;flex:0 0 auto;margin-left:4px;">
@@ -1364,6 +1707,19 @@ const Workspace2CanvasGroups = {
         el.querySelector('.xzg-delete-btn').addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
         el.querySelector('.xzg-delete-btn').addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); self.removeGroup(group.id); });
 
+        // Explicit left-header rename action. Do not let it start a drag or
+        // leak into the header's double-click content-selection path.
+        const renameBtn = el.querySelector('.xzg-group-rename-btn');
+        renameBtn.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); });
+        renameBtn.addEventListener('dblclick', e => { e.stopPropagation(); e.preventDefault(); });
+        renameBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            const latest = self.groups[group.id] || group;
+            const span = self.groupEls[latest.id]?.querySelector('.xzg-group-title-text');
+            if (span) self.startRename(latest.id, span);
+        });
+
         // 这两个按钮不复用旧的旁路逻辑：旧逻辑会在恢复时统一写入 MODE_ALWAYS，
         // 会丢失用户原先手动设置的节点模式。新逻辑保留逐节点快照后再恢复。
         el.querySelectorAll('.xzg-group-mode-btn[data-group-mode]').forEach(btn => {
@@ -1386,9 +1742,20 @@ const Workspace2CanvasGroups = {
         this.updateGroupModeButtons(group.id);
 
         // 将当前编组框提升到 overlay 最前面
+        //
+        // T-036: this must NOT re-append the element. Moving a node in the DOM
+        // between mousedown and mouseup makes the browser abandon the click
+        // sequence, so `click` and `dblclick` never fire at all — which silently
+        // killed the header's double-click "select all contents" gesture (the
+        // plan module was correct; its listener simply never ran).
+        //
+        // Raising z-index achieves the same stacking without touching the tree.
+        // The counter is monotonic so the most recently touched frame always
+        // wins; siblings keep the markup's base value of 5.
         const bringToFront = () => {
             self.activeGroupId = group.id;
-            el.parentElement?.appendChild(el);
+            self._frontZ = (self._frontZ || 5) + 1;
+            el.style.zIndex = String(self._frontZ);
         };
 
         // 边框点击：提升层级并启动拖动（便于选中重叠在下层的编组框）
@@ -1405,6 +1772,10 @@ const Workspace2CanvasGroups = {
                     self._dispatchMiddleDown(e.clientX, e.clientY);
                     const restore = () => {
                         el2.style.pointerEvents = 'auto';
+                        // T-041 owns this strip's pointer-events; re-assert the
+                        // current state on the next frame rather than assuming
+                        // 'auto' is still correct.
+                        self._hitRegionsPassThrough = null;
                         document.removeEventListener('mouseup', restore);
                     };
                     document.addEventListener('mouseup', restore);
@@ -1452,6 +1823,19 @@ const Workspace2CanvasGroups = {
             e.preventDefault();
             e.stopPropagation();
             bringToFront();
+            // T-036: a plain click on a frame that is not already selected
+            // replaces the whole selection — including ComfyUI's native node
+            // selection.  Without this the header inherited whatever nodes the
+            // user had clicked earlier elsewhere on the canvas, and `startDrag`
+            // took its multi-drag branch and carried them along.
+            const plan = resolveHeaderClickSelection({
+                hasModifier: hasSelectionModifier(e),
+                isAlreadySelected: self.selectedGroupIds.has(group.id),
+            });
+            if (plan === HEADER_CLICK_SELECTION.RESET) {
+                app?.canvas?.deselectAllNodes?.();
+                self.selectOnlyGroup(group.id);
+            }
             self.prepareGroupDrag(group.id);
             self.startDrag(group.id, e);
         });
@@ -1460,9 +1844,7 @@ const Workspace2CanvasGroups = {
             if (e.target.closest('button')) return;
             e.preventDefault();
             e.stopPropagation();
-            const latest = self.groups[group.id] || group;
-            const span = self.groupEls[latest.id]?.querySelector('.xzg-group-title-text');
-            if (span) self.startRename(latest.id, span);
+            self.selectGroupContents(group.id);
         });
 
         // 右键标题栏任意位置 → 设置（排除删除按钮）
@@ -1496,6 +1878,9 @@ const Workspace2CanvasGroups = {
                 self._dispatchMiddleDown(e.clientX, e.clientY);
                 const restore = () => {
                     el2.style.pointerEvents = 'auto';
+                    // T-041 owns this handle's pointer-events; re-assert on the
+                    // next frame rather than assuming 'auto' is still correct.
+                    self._hitRegionsPassThrough = null;
                     document.removeEventListener('mouseup', restore);
                 };
                 document.addEventListener('mouseup', restore);
@@ -1554,6 +1939,7 @@ const Workspace2CanvasGroups = {
             title: target.title,
             fontSize: target.fontSize,
             titleColor: target.titleColor,
+            nativeGroupColor: target.nativeGroupColor,
             headerBgColor: target.headerBgColor,
             backgroundFillEnabled: Boolean(target.backgroundFillEnabled),
             backgroundOpacity: target.backgroundOpacity,
@@ -1574,6 +1960,7 @@ const Workspace2CanvasGroups = {
                 title: _snapshot.title,
                 fontSize: _snapshot.fontSize,
                 titleColor: _snapshot.titleColor,
+                nativeGroupColor: _snapshot.nativeGroupColor,
                 headerBgColor: _snapshot.headerBgColor,
                 backgroundFillEnabled: _snapshot.backgroundFillEnabled,
                 backgroundOpacity: _snapshot.backgroundOpacity,
@@ -1653,7 +2040,13 @@ const Workspace2CanvasGroups = {
                 <div style="display:flex;align-items:center;gap:6px;min-height:28px;margin-top:8px;">
                     <label style="color:#fff;font-size:12px;flex:0 0 96px;white-space:nowrap;display:flex;align-items:center;gap:5px;cursor:pointer;"><input class="xzg-set-background-fill" type="checkbox" ${group.backgroundFillEnabled ? 'checked' : ''} style="margin:0;flex:0 0 auto;"><span>${t('groups.backgroundFill')}</span></label>
                     <div class="xzg-background-swatches" style="flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
-                        ${GROUP_COLOR_PRESETS.map(sw => `<button type="button" class="xzg-bg-swatch" data-hue="${sw.hue}" data-hex="${sw.hex}" title="${t('groups.colorPreset')} H ${sw.hue}°" aria-label="${t('groups.colorPreset')} H ${sw.hue}°" style="width:18px;height:18px;padding:0;border-radius:4px;cursor:pointer;background:${sw.hex};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></button>`).join('')}
+                        ${this.readColorPresets().map(sw => {
+                            const copyValue = clipboardValueForPreset(sw);
+                            const hint = presetCopiesNativeName(sw)
+                                ? t('groups.colorPresetCopyName', { value: copyValue })
+                                : t('groups.colorPresetCopyHex', { value: copyValue });
+                            return `<button type="button" class="xzg-bg-swatch" data-color="${sw.hex}" data-copy="${copyValue}" title="${hint}" aria-label="${t('groups.colorPreset')} ${sw.key} — ${hint}" style="width:18px;height:18px;padding:0;border-radius:4px;cursor:pointer;background:${displayColorForNativeHex(sw.hex) || sw.hex};border:1px solid rgba(255,255,255,0.2);flex-shrink:0;"></button>`;
+                        }).join('')}
                     </div>
                 </div>
             </div>
@@ -1988,16 +2381,13 @@ const Workspace2CanvasGroups = {
         const groupEl = this.groupEls[group.id];
         const headerEl = groupEl ? groupEl.querySelector('.xzg-group-header') : null;
 
-        // T-212a: highlight the preset whose title-bar color matches the current
-        // one. A preset can produce a dark-theme OR light-theme title color, so
-        // match against both recipes; a custom color highlights nothing.
+        // The swatches use the current LiteGraph `groupcolor` palette.  Compare
+        // the persisted compatibility hex directly; a custom colour highlights
+        // nothing unless it is exactly one of the current native colours.
         const refreshBgSwatchSelection = () => {
-            const hex = (headerColorPicker.value || '').toLowerCase();
+            const hex = normalizeHexColor(headerColorPicker.value);
             for (const btn of bgSwatchButtons) {
-                const hue = parseInt(btn.dataset.hue, 10) || 0;
-                const darkHex = rgbToHex(computeGroupColorPreset(hue, false).titleRgb).toLowerCase();
-                const lightHex = rgbToHex(computeGroupColorPreset(hue, true).titleRgb).toLowerCase();
-                const match = hex === darkHex || hex === lightHex;
+                const match = hex === normalizeHexColor(btn.dataset.color);
                 btn.style.outline = match ? '2px solid var(--p-primary-color, #0a84ff)' : 'none';
                 btn.style.outlineOffset = match ? '1px' : '0';
             }
@@ -2014,10 +2404,14 @@ const Workspace2CanvasGroups = {
             const r = parseInt(hex.slice(1,3),16);
             const g = parseInt(hex.slice(3,5),16);
             const b = parseInt(hex.slice(5,7),16);
+            // Stored: the untouched native RGB, so rgthree's colour filter and
+            // native conversion keep matching. Painted: the display form.
             const rgba = `rgba(${r},${g},${b},${headerAlpha})`;
             group.headerBgColor = rgba;
-            if (headerColorSwatch) headerColorSwatch.style.background = hex;
-            if (headerEl) headerEl.style.background = rgba;
+            group.nativeGroupColor = normalizeHexColor(hex);
+            const displayHex = displayColorForNativeHex(hex) || hex;
+            if (headerColorSwatch) headerColorSwatch.style.background = displayHex;
+            if (headerEl) headerEl.style.background = groupHeaderBackground(group);
             refreshBgSwatchSelection();
             refreshBodyFillPreview();
             self.updatePositions();
@@ -2036,16 +2430,25 @@ const Workspace2CanvasGroups = {
             updateHeaderBg();
         });
 
-        // T-212a: each swatch is a COMPLETE color preset. Clicking one applies a
-        // theme-aware recipe (title bar + font + border) derived from its hue,
-        // keeping the current header opacity, and turns on unified font/border
-        // color. Theme is detected once here (design decision A).
-        const applyColorPreset = hue => {
-            const light = isLightGroupTheme();
-            const { titleRgb, fontHex } = computeGroupColorPreset(hue, light);
-            // Title bar: set RGB, preserve current alpha.
-            headerColorPicker.value = rgbToHex(titleRgb);
-            // Font + border: unify to the preset font color.
+        // Native presets preserve LiteGraph's exact `groupcolor`, which gives
+        // rgthree colour filters and WK → native conversion the same identity.
+        const applyColorPreset = hex => {
+            const nativeHex = normalizeHexColor(hex);
+            if (!nativeHex) return;
+            headerColorPicker.value = nativeHex;
+            // T-044: a preset may pin its own font colour and header opacity.
+            // Only `black` does — it stays dark instead of being brightened, so
+            // the readable-font rule would pick white on near-black and lose the
+            // muted look the dark swatch exists for; and at the default 25% a
+            // near-black bar is barely distinguishable from the canvas.
+            const pinnedFont = titleColorForNativeHex(nativeHex);
+            const pinnedAlpha = headerOpacityForNativeHex(nativeHex, MAX_HEADER_OPACITY);
+            if (pinnedAlpha !== null) {
+                headerAlpha = pinnedAlpha;
+                headerOpacitySlider.value = String(Math.round(pinnedAlpha * 100));
+                headerOpacityVal.textContent = headerOpacitySlider.value + '%';
+            }
+            const fontHex = pinnedFont || groupTitleColorForBackground(displayColorForNativeHex(nativeHex) || nativeHex);
             titleColorPicker.value = fontHex;
             if (titleColorSwatch) titleColorSwatch.style.background = fontHex;
             group.titleColor = fontHex;
@@ -2054,13 +2457,72 @@ const Workspace2CanvasGroups = {
             unifiedToggle.checked = true;
             group.useUnifiedColor = true;
             setUnifiedUiState(true);
+            // T-045: a preset is a COMPLETE look, and that includes the border
+            // width. Leaving the old width behind meant applying a preset to a
+            // group configured at 4px gave a result that matched no preset.
+            group.borderWidth = PRESET_BORDER_WIDTH;
+            if (bwR) bwR.value = String(PRESET_BORDER_WIDTH);
+            if (bwV) bwV.textContent = `${PRESET_BORDER_WIDTH}px`;
             const hsl = self.hexToHsl(fontHex);
             syncColorFromHSL(hsl.h, hsl.s, hsl.l);
             updateHeaderBg();
         };
+        /*
+         * T-044: double-click copies the value rgthree's `matchColors` accepts.
+         *
+         * Native swatches copy their colour NAME (`red`, `pale_blue`) — the word
+         * a user would type, and one that survives a palette retune. WK's own
+         * tenth swatch has no native name, so it copies its hex; rgthree accepts
+         * that too, whereas an invented word like "other" would be read as the
+         * colour `#other`, match nothing, and fail silently.
+         *
+         * The single click still applies the colour, so a double-click both
+         * applies and copies. That is deliberate: a user who double-clicks a
+         * swatch almost certainly wants that colour as well as its name.
+         */
+        const copyPresetValue = async (value, btn = null) => {
+            if (!value) return;
+            try {
+                if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+                else throw new Error('clipboard unavailable');
+            } catch {
+                // Non-secure contexts and older frontends have no async
+                // clipboard. Fall back to the selection-based copy rather than
+                // failing silently.
+                const scratch = document.createElement('textarea');
+                scratch.value = value;
+                scratch.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+                document.body.appendChild(scratch);
+                scratch.select();
+                try { document.execCommand('copy'); } catch {}
+                scratch.remove();
+            }
+            /*
+             * Confirmation is a brief flash on the swatch itself, not a notice
+             * dialog: the user is copying a colour name mid-configuration, and a
+             * modal would interrupt that for something they can see happened.
+             * The transient aria-label carries the same message for screen
+             * readers, which a purely visual cue would not.
+             */
+            if (!btn) return;
+            const previousLabel = btn.getAttribute('aria-label');
+            btn.setAttribute('aria-label', t('groups.colorPresetCopied', { value }));
+            btn.style.transition = 'box-shadow 120ms ease-out';
+            btn.style.boxShadow = '0 0 0 3px rgba(255,255,255,0.9)';
+            clearTimeout(btn._xzgCopyFlash);
+            btn._xzgCopyFlash = setTimeout(() => {
+                btn.style.boxShadow = '';
+                if (previousLabel === null) btn.removeAttribute('aria-label');
+                else btn.setAttribute('aria-label', previousLabel);
+            }, 450);
+        };
         for (const btn of bgSwatchButtons) {
             btn.addEventListener('click', () => {
-                applyColorPreset(parseInt(btn.dataset.hue, 10) || 0);
+                applyColorPreset(btn.dataset.color);
+            });
+            btn.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                copyPresetValue(btn.dataset.copy, btn);
             });
         }
 
@@ -2098,6 +2560,7 @@ const Workspace2CanvasGroups = {
             // header alpha; we still write headerAlpha*0.5 so older readers stay close.
             backgroundOpacity: clamp01(headerAlpha * BODY_TO_HEADER_OPACITY_RATIO),
             titleColor: titleColorPicker.value || '#FFD700',
+            nativeGroupColor: normalizeHexColor(headerColorPicker.value),
         });
 
         const applyStyleToGroupPreview = (style) => {
@@ -2114,7 +2577,7 @@ const Workspace2CanvasGroups = {
             const header = self.groupEls[group.id]?.querySelector('.xzg-group-header');
             if (header) {
                 header.style.height = Math.max(21, Math.round((group.fontSize || 14) * 1.8)) + 'px';
-                header.style.background = group.headerBgColor || DEFAULT_HEADER_BG_COLOR;
+                header.style.background = groupHeaderBackground(group);
             }
             self.updatePositions();
             self.updateGroupStyle(group.id);
@@ -2204,7 +2667,7 @@ const Workspace2CanvasGroups = {
                     const header = el.querySelector('.xzg-group-header');
                     if (header) {
                         header.style.height = Math.max(21, Math.round((targetGroup.fontSize || 14) * 1.8)) + 'px';
-                        header.style.background = targetGroup.headerBgColor || DEFAULT_HEADER_BG_COLOR;
+                        header.style.background = groupHeaderBackground(targetGroup);
                     }
                     this.updateGroupStyle(targetGroup.id);
                 }
@@ -2377,8 +2840,30 @@ const Workspace2CanvasGroups = {
         if (span.dataset.editing === '1') return;
         span.dataset.editing = '1';
         const input = document.createElement('input');
+        input.className = 'xzg-group-title-input';
         input.value = group.title;
-        input.style.cssText = `color:${group.titleColor || '#FFD700'};font-size:${group.fontSize||14}px;font-weight:400;background:rgba(0,0,0,0.8);border:1px solid rgba(255,215,0,0.5);border-radius:3px;padding:1px 4px;outline:none;width:120px;`;
+        // T-036: the input replaces the title span inside the header's flex
+        // title wrapper, so `flex:1 1 auto; min-width:0` makes the browser fit
+        // it to the space left of the action-icon group at any zoom. The old
+        // fixed 120px overflowed when zoomed out and looked tiny when zoomed in.
+        // Pixel metrics come from the same canvas scale updatePositions() uses.
+        const metrics = resolveRenameInputMetrics({
+            scale: app?.canvas?.ds?.scale ?? 1,
+            fontSize: group.fontSize,
+        });
+        input.style.cssText = [
+            `color:${group.titleColor || '#FFD700'}`,
+            `font-size:${metrics.fontSize}px`,
+            'font-weight:400',
+            'background:rgba(0,0,0,0.8)',
+            `border:${metrics.borderWidth}px solid rgba(255,215,0,0.5)`,
+            `border-radius:${metrics.borderRadius}px`,
+            `padding:${metrics.paddingV}px ${metrics.paddingH}px`,
+            'outline:none',
+            'flex:1 1 auto',
+            'min-width:0',
+            'box-sizing:border-box',
+        ].join(';') + ';';
         span.replaceWith(input);
         input.focus(); input.select();
         let finished = false;
@@ -2394,9 +2879,25 @@ const Workspace2CanvasGroups = {
             app.graph?.change?.();
             const ns = document.createElement('span');
             ns.className = 'xzg-group-title-text';
-            ns.style.cssText = `color:${group.titleColor || '#FFD700'};font-size:${group.fontSize||14}px;font-weight:400;`;
+            // Rebuild the span with the same style contract buildGroupEl uses.
+            // updatePositions() re-applies font size, line height and colour
+            // every frame, but not the ellipsis rules — omitting them here let a
+            // long title escape the header after every rename.
+            ns.style.cssText = [
+                `color:${group.titleColor || '#FFD700'}`,
+                `font-size:${group.fontSize || 14}px`,
+                'font-weight:400',
+                'white-space:nowrap',
+                'line-height:1.4',
+                'overflow:hidden',
+                'text-overflow:ellipsis',
+            ].join(';') + ';';
             ns.textContent = group.title;
             input.replaceWith(ns);
+            // The per-frame element cache holds the old span, which is now
+            // detached. Drop it so the next frame re-queries the live one.
+            const box = this.groupEls[group.id];
+            if (box) box._xzgRefs = null;
         };
         input.addEventListener('mousedown', e => e.stopPropagation());
         input.addEventListener('click', e => e.stopPropagation());
@@ -2417,15 +2918,18 @@ const Workspace2CanvasGroups = {
     /* ── 拖动框体（节点跟随，自动收纳框内节点） ── */
     startDrag(gid, downEv) {
         const selectedGroupIds = [...this.selectedGroupIds].filter(id => this.groups[id]?.bounds);
-        if (selectedGroupIds.length > 1 && selectedGroupIds.includes(gid)) {
-            this.startMultiGroupDrag(selectedGroupIds, downEv);
+        const canvas = app?.canvas;
+        const graph = app?.graph;
+        if (!canvas?.ds || !graph?._nodes) return;
+        const selectedNodeIds = Object.values(canvas.selected_nodes || {})
+            .filter(Boolean)
+            .map((node) => node.id);
+        if (selectedGroupIds.includes(gid) && (selectedGroupIds.length > 1 || selectedNodeIds.length)) {
+            this.startMultiGroupDrag(selectedGroupIds, downEv, selectedNodeIds);
             return;
         }
         const group = this.groups[gid];
         if (!group?.bounds) return;
-        const canvas = app?.canvas;
-        const graph = app?.graph;
-        if (!canvas?.ds || !graph?._nodes) return;
 
         const scale = canvas.ds.scale || 1;
         const startX = downEv.clientX;
@@ -2473,8 +2977,9 @@ const Workspace2CanvasGroups = {
             graph._nodes.forEach(n => {
                 if (!n?.pos || childMemberIds.has(String(n.id))) return;
                 const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
-                if (n.pos[0] >= b.x && n.pos[0] + nw <= b.x + b.w &&
-                    n.pos[1] >= b.y && n.pos[1] + nh <= b.y + b.h) {
+                // T-037: 与 syncNodeMembership 用同一条中心点规则，否则旧数据
+                // 回退路径会把刚刚判为成员的节点漏掉。
+                if (isNodeInsideGroup(b, { x: n.pos[0], y: n.pos[1], w: nw, h: nh })) {
                     addNodeStart(n);
                 }
             });
@@ -2489,9 +2994,8 @@ const Workspace2CanvasGroups = {
                 const n = graph._nodes.find(x => x.id === nid || x.id == nid);
                 if (!n?.pos) return null;
                 const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
-                // 只移动完全落在大框体内的节点
-                if (n.pos[0] >= b.x && n.pos[0] + nw <= b.x + b.w &&
-                    n.pos[1] >= b.y && n.pos[1] + nh <= b.y + b.h) {
+                // T-037: 只移动中心点落在大框体内的节点，与成员判定同规则。
+                if (isNodeInsideGroup(b, { x: n.pos[0], y: n.pos[1], w: nw, h: nh })) {
                     return { node: n, x: n.pos[0], y: n.pos[1] };
                 }
                 return null;
@@ -2513,9 +3017,8 @@ const Workspace2CanvasGroups = {
                     const n = graph._nodes.find(x => x.id === nid || x.id == nid);
                     if (!n?.pos) return;
                     const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
-                    // 节点完全落在当前编组内
-                    if (n.pos[0] >= b.x && n.pos[0] + nw <= b.x + b.w &&
-                        n.pos[1] >= b.y && n.pos[1] + nh <= b.y + b.h) {
+                    // T-037: 中心点落在当前编组内即受其控制，与成员判定同规则。
+                    if (isNodeInsideGroup(b, { x: n.pos[0], y: n.pos[1], w: nw, h: nh })) {
                         partialOverlapNodes.push({ node: n, x: n.pos[0], y: n.pos[1] });
                     }
                 });
@@ -2553,7 +3056,7 @@ const Workspace2CanvasGroups = {
     },
 
     /* ── 多选拖动：选中编组和节点均按唯一 ID 仅移动一次 ── */
-    startMultiGroupDrag(selectedGroupIds, downEv) {
+    startMultiGroupDrag(selectedGroupIds, downEv, selectedNodeIds = []) {
         const canvas = app?.canvas;
         const graph = app?.graph;
         if (!canvas?.ds || !graph?._nodes) return;
@@ -2562,8 +3065,9 @@ const Workspace2CanvasGroups = {
             groups: this.groups,
             nodes: graph._nodes,
             selectedGroupIds,
+            selectedNodeIds,
         });
-        if (plan.groupIds.length < 2) return;
+        if (!plan.groupIds.length) return;
 
         const groupStarts = plan.groupIds
             .map(id => {
@@ -2621,6 +3125,87 @@ const Workspace2CanvasGroups = {
         document.addEventListener('mouseup', onUp);
     },
 
+    // Native node drag companion: LiteGraph owns selected node positions.  WK
+    // only translates the already selected group borders from the same pointer
+    // delta, so a shared member cannot receive the delta twice.
+    startNativeNodeJointGroupDrag(plan, downEv) {
+        const canvas = app?.canvas;
+        const graph = app?.graph;
+        if (!canvas?.ds || !graph?._nodes || !plan?.groupIds?.length) return false;
+        const groupStarts = plan.groupIds
+            .map((id) => {
+                const group = this.groups[id];
+                return group?.bounds ? { group, x: group.bounds.x, y: group.bounds.y } : null;
+            })
+            .filter(Boolean);
+        if (!groupStarts.length) return false;
+
+        const scale = canvas.ds.scale || 1;
+        const startX = downEv.clientX;
+        const startY = downEv.clientY;
+        const self = this;
+        this._suspendMembershipSync = true;
+        window.Workspace2CanvasGroupsLastNativeJointDrag = {
+            at: Date.now(),
+            plan: { groupIds: [...plan.groupIds], nodeIds: [...plan.nodeIds] },
+            groupStartIds: groupStarts.map(({ group }) => group.id),
+            lastDelta: { x: 0, y: 0 },
+        };
+
+        // LiteGraph holds pointer capture for this gesture and calls
+        // preventDefault, which suppresses `mousemove` for its whole duration
+        // and makes the release arrive as `pointerup` only.  Both the move and
+        // the teardown must therefore be listened for on the pointer family.
+        // See canvas-groups/drag-teardown.js.
+        const onMove = (e) => {
+            // Safety net: if every teardown signal was missed, the next
+            // buttonless motion ends the drag instead of moving the frame with
+            // a bare cursor.
+            if (shouldAbortDragFromMove(e)) {
+                finish();
+                return;
+            }
+            // Absolute delta from the gesture start, never accumulated, so a
+            // pointermove and its compatibility mousemove cannot double the
+            // motion.
+            const dx = (e.clientX - startX) / scale;
+            const dy = (e.clientY - startY) / scale;
+            groupStarts.forEach(({ group, x, y }) => {
+                group.bounds.x = x + dx;
+                group.bounds.y = y + dy;
+            });
+            window.Workspace2CanvasGroupsLastNativeJointDrag.lastDelta = { x: dx, y: dy };
+            graph.setDirtyCanvas?.(true, true);
+        };
+        const finish = createOnceGuard(() => {
+            DRAG_MOVE_EVENT_NAMES.forEach((name) => {
+                document.removeEventListener(name, onMove, true);
+            });
+            DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => {
+                document.removeEventListener(name, finish, true);
+            });
+            // LiteGraph applies its final native node position in the same
+            // release turn.  Delay membership reconciliation one frame so it
+            // observes that final state rather than a stale intermediate one.
+            requestAnimationFrame(() => {
+                self._suspendMembershipSync = false;
+                groupStarts.forEach(({ group }) => {
+                    const el = self.groupEls[group.id];
+                    if (el) el._xzgSyncFrame = 10;
+                });
+                self.syncGroupsToExtra();
+                graph.change?.();
+            });
+        });
+        DRAG_MOVE_EVENT_NAMES.forEach((name) => {
+            document.addEventListener(name, onMove, true);
+        });
+        DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => {
+            document.addEventListener(name, finish, true);
+        });
+        return true;
+    },
+
     /* ── 调整大小 ── */
     startResize(gid, downEv) {
         const group = this.groups[gid];
@@ -2675,14 +3260,30 @@ const Workspace2CanvasGroups = {
         el.style.borderRadius = `${cr}px`;
         el.style.overflow = 'hidden';
 
-        if (g.bypassed) {
-            el.style.border = `${bw}px solid hsla(280,60%,55%,${bo})`;
-            this.applyUserShadow(el, g, scale);
-            el.style.borderImage = 'none';
+        // T-038: ignore/disable now speak ComfyUI's own node language instead of
+        // an invented purple — magenta means ignored, faded means deactivated,
+        // and ignored is fainter than disabled (see canvas-groups/group-mode-visuals.js).
+        // Dimming the whole box in one place is what keeps the border, title bar
+        // and icons from drifting apart the way the old per-part colouring did.
+        const modeVisuals = groupModeVisuals(g);
+        el.style.opacity = modeVisuals.alpha === 1 ? '' : String(modeVisuals.alpha);
+
+        if (modeVisuals.state !== GROUP_MODE_STATE.NORMAL) {
+            const tint = modeVisuals.tintColor;
+            // Nodes have no border, so native says nothing about one. Tinting it
+            // with the same magenta keeps the frame internally consistent;
+            // disable leaves the user's own border colour and only fades.
+            const h = g.colorHue ?? 48;
+            const s = g.colorSat ?? 100;
+            const l = g.colorLit ?? 55;
+            const borderColor = tint || `hsla(${h},${s}%,${l}%,${bo})`;
+            if (!hasEffect) el.style.border = `${bw}px solid ${borderColor}`;
+            if (!hasEffect) this.applyUserShadow(el, g, scale);
+            if (!hasEffect) el.style.borderImage = 'none';
             el.style.background = 'transparent';
-            if (refs.title) refs.title.style.color = 'hsla(280,60%,65%,0.85)';
-            if (refs.delBtn) refs.delBtn.style.color = `hsla(280,60%,65%,${bo * 0.8})`;
-            if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(280,60%,55%,${bo})`);
+            if (refs.title && !hasEffect) refs.title.style.color = g.titleColor || '#FFD700';
+            if (refs.delBtn) refs.delBtn.style.color = borderColor;
+            if (refs.rpath) refs.rpath.setAttribute('stroke', borderColor);
         } else {
             const h = g.colorHue ?? 48;
             const s = g.colorSat ?? 100;
@@ -2756,13 +3357,14 @@ const Workspace2CanvasGroups = {
         if (!group || !el) return;
         el.querySelectorAll('.xzg-group-mode-btn[data-group-mode]').forEach(btn => {
             const active = group.executionMode === btn.dataset.groupMode;
-            const muted = btn.dataset.groupMode === 'mute';
-            btn.style.background = active
-                ? (muted ? 'rgba(220,82,94,.55)' : 'rgba(130,82,200,.48)')
-                : 'transparent';
-            btn.style.borderColor = active
-                ? (muted ? 'rgba(255,156,166,.95)' : 'rgba(214,180,255,.95)')
-                : 'rgba(255,215,0,.38)';
+            // T-038: the activation background and border are gone. The whole
+            // frame now carries the state (magenta for ignore, faded for
+            // disable), so a coloured tile behind the icon is duplicate
+            // information — and the icons are hidden most of the time now, so it
+            // was the less visible of the two signals anyway. The tooltip and
+            // aria-pressed remain the state's accessible form.
+            btn.style.background = 'transparent';
+            btn.style.borderColor = 'transparent';
             btn.style.color = group.titleColor || '#FFD700';
             btn.title = active ? t('groups.actionRestore') : t(btn.dataset.groupMode === 'mute' ? 'groups.actionMute' : 'groups.actionBypass');
             btn.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -2885,9 +3487,8 @@ const Workspace2CanvasGroups = {
                 const n = graph._nodes.find(x => x.id === nid || x.id == nid);
                 if (!n?.pos) return;
                 const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
-                // 只切换完全落在大框体内的节点（大框体外部的节点不受大框体控制）
-                if (n.pos[0] >= b.x && n.pos[0] + nw <= b.x + b.w &&
-                    n.pos[1] >= b.y && n.pos[1] + nh <= b.y + b.h) {
+                // T-037: 只切换中心点落在大框体内的节点，与成员判定同规则。
+                if (isNodeInsideGroup(b, { x: n.pos[0], y: n.pos[1], w: nw, h: nh })) {
                     n.mode = mode;
                 }
             });
@@ -2910,9 +3511,8 @@ const Workspace2CanvasGroups = {
                     const n = graph._nodes.find(x => x.id === nid || x.id == nid);
                     if (!n?.pos) return;
                     const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
-                    // 节点完全落在当前编组内
-                    if (n.pos[0] >= b.x && n.pos[0] + nw <= b.x + b.w &&
-                        n.pos[1] >= b.y && n.pos[1] + nh <= b.y + b.h) {
+                    // T-037: 中心点落在当前编组内即受其控制，与成员判定同规则。
+                    if (isNodeInsideGroup(b, { x: n.pos[0], y: n.pos[1], w: nw, h: nh })) {
                         n.mode = mode;
                     }
                 });
@@ -3126,6 +3726,11 @@ const Workspace2CanvasGroups = {
             backgroundFillEnabled: Boolean(g.backgroundFillEnabled),
             backgroundOpacity: Math.max(0.05, Math.min(0.95, finiteNumber(g.backgroundOpacity, DEFAULT_BACKGROUND_OPACITY))),
             titleColor: g.titleColor,
+            // Keep the stable LiteGraph / rgthree colour identity in every
+            // workflow-level and node-level backup.  Without this field a
+            // harmless workflow save downgraded the group to its rendered
+            // rgba colour and broke native-name colour matching after reload.
+            nativeGroupColor: resolveWorkspaceKitGroupNativeColor(g),
         };
     },
 

@@ -25,10 +25,14 @@ const nodeWithin = (node, bounds) => {
   return x >= bounds.x && y >= bounds.y && x + w <= bounds.x + bounds.w && y + h <= bounds.y + bounds.h;
 };
 
-export function buildMultiGroupDragPlan({ groups = {}, nodes = [], selectedGroupIds = [] } = {}) {
+export function buildMultiGroupDragPlan({
+  groups = {},
+  nodes = [],
+  selectedGroupIds = [],
+  selectedNodeIds = [],
+} = {}) {
   const selectedIds = [...new Set(selectedGroupIds.map(String))]
     .filter((id) => groups[id]?.bounds);
-  if (selectedIds.length < 2) return { groupIds: selectedIds, nodeIds: [] };
 
   const groupIds = new Set(selectedIds);
   for (const selectedId of selectedIds) {
@@ -45,7 +49,13 @@ export function buildMultiGroupDragPlan({ groups = {}, nodes = [], selectedGroup
   const availableNodeIds = new Set(
     nodes.filter((node) => node?.id != null).map((node) => String(node.id)),
   );
-  const nodeIds = new Set();
+  // Native selection is an equally valid source for a joint drag.  Keep it in
+  // the plan before adding group membership so a node selected in both places
+  // is still moved once.  Unknown IDs are ignored because LiteGraph can retain
+  // stale selection entries after a node is removed.
+  const nodeIds = new Set(
+    selectedNodeIds.map(String).filter((id) => availableNodeIds.has(id)),
+  );
 
   // `nodeIds` is the persisted membership source used by execution modes and
   // restore.  Multi-drag must use the same source: bounds can be temporarily

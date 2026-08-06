@@ -47,10 +47,11 @@ export function createSettingsDialogSections({
     // During a live frontend upgrade entry.js can briefly be newer than this
     // child module or controls.js. Keep the base Settings dialog available if
     // the optional group-gesture control has not loaded yet.
-    const groupPointerShortcuts = typeof settingsSelect === "function" && typeof groupPointerShortcutOptions === "function"
+    const groupPointerOptions = typeof groupPointerShortcutOptions === "function" ? groupPointerShortcutOptions() : null;
+    const groupPointerShortcuts = typeof settingsSelect === "function" && Array.isArray(groupPointerOptions)
       ? settingsSection(t("settings.groupPointerShortcuts"), [
         settingsHelp(t("settings.groupPointerShortcutsHelp")),
-        ...groupPointerShortcutOptions().map((shortcut) => {
+        ...groupPointerOptions.map((shortcut) => {
           const row = settingsSelect(shortcut.label, shortcut.value, shortcut.options, shortcut.onChange);
           const select = row?.querySelector?.("select");
           if (select && shortcut.modifier) {
@@ -58,6 +59,7 @@ export function createSettingsDialogSections({
           }
           return row;
         }),
+        settingsActionButton("restore", t("settings.groupPointerRestore"), () => groupPointerOptions.restoreDefaults?.()),
       ])
       : null;
 

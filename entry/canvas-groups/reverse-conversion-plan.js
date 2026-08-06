@@ -2,6 +2,17 @@ import { validateWorkspaceKitGroupConversionArchive } from "./conversion-archive
 
 const clone = value => JSON.parse(JSON.stringify(value));
 
+/*
+ * T-044: a native group converted to WorkspaceKit gets its title bar at the
+ * opacity cap (0.5).
+ *
+ * A native group paints one solid colour across its whole body, so at WK's
+ * default 0.25 the converted frame reads as a washed-out version of what the
+ * user just had. The cap is the closest WK can come to native's solidity while
+ * keeping the frame translucent enough to see nodes through.
+ */
+const CONVERTED_HEADER_OPACITY = 0.5;
+
 const DEFAULT_STYLE = Object.freeze({
     fontSize: 14,
     colorHue: 48,
@@ -21,6 +32,49 @@ const DEFAULT_STYLE = Object.freeze({
     backgroundOpacity: 0.125,
     titleColor: "#FFD700",
 });
+
+/*
+ * T-045: the look a native-origin group lands on.
+ *
+ * A native group carries only a colour, a title and geometry — it has no font
+ * colour, border or effect to preserve. So rather than inheriting WK's generic
+ * DEFAULT_STYLE (gold text on a 2px gold border, tuned for a WK group the user
+ * built themselves), a converted group gets a neutral white-on-white treatment
+ * that reads as "this came from a native group".
+ *
+ * White is expressed as HSL saturation 0 / lightness 100 because the border
+ * colour is stored as hue/sat/lit, not a hex. `useUnifiedColor: true` is what
+ * makes the border follow the title colour, so both end up white together —
+ * setting the font white without it would leave a gold border.
+ *
+ * This applies ONLY to groups with no archive entry. A group that was WK before,
+ * converted to native and is now coming back has its own saved style in the
+ * archive, and restoring that is the whole point of the round trip.
+ */
+const CONVERTED_STYLE = Object.freeze({
+    ...DEFAULT_STYLE,
+    useUnifiedColor: true,
+    titleColor: "#FFFFFF",
+    colorSat: 0,
+    colorLit: 100,
+    borderWidth: 1,
+});
+
+// Native groups carry a solid hex `color`. Convert it to the rgba title bar WK
+// renders, pinned to the conversion opacity. An unparseable or missing colour
+// falls through to the caller's own fallback.
+const convertedHeaderBgColor = (nativeColor) => {
+    const raw = String(nativeColor || "").trim().toLowerCase();
+    const match = raw.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (!match) return null;
+    const body = match[1].length === 3
+        ? [...match[1]].map(channel => channel + channel).join("")
+        : match[1];
+    const r = parseInt(body.slice(0, 2), 16);
+    const g = parseInt(body.slice(2, 4), 16);
+    const b = parseInt(body.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${CONVERTED_HEADER_OPACITY})`;
+};
 
 const nativeBounds = group => {
     const bounds = group?.bounds || group?.bounding;
@@ -93,13 +147,16 @@ export function createNativeToWorkspaceKitConversionPlan({ archive, nativeGroupI
         const nodeIds = Array.isArray(native.nodeIds) ? native.nodeIds.map(String) : [];
         groups[id] = {
             ...(archived ? clone(archived) : {}),
-            ...(!archived ? DEFAULT_STYLE : {}),
+            ...(!archived ? CONVERTED_STYLE : {}),
             id,
             title: String(native.title || archived?.title || "Group"),
             nodeIds,
             allowEmpty: nodeIds.length === 0,
             bounds,
-            headerBgColor: native.color || archived?.headerBgColor || DEFAULT_STYLE.headerBgColor,
+            headerBgColor: convertedHeaderBgColor(native.color)
+                || archived?.headerBgColor
+                || DEFAULT_STYLE.headerBgColor,
+            nativeGroupColor: native.color || archived?.nativeGroupColor || null,
         };
         if (archived) restoredGroupIds.push(id);
         else newGroupIds.push(id);

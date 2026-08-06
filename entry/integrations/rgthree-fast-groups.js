@@ -1,4 +1,5 @@
 import { app } from "../../../scripts/app.js";
+import { resolveWorkspaceKitGroupNativeColor } from "../canvas-groups/native-color-compat.js?v=20260804_native_group_color_r1";
 
 // P0 compatibility bridge for rgthree-comfy Fast Groups Muter/Bypasser.
 //
@@ -95,7 +96,12 @@ function createAdapter(groupId) {
 function updateAdapter(adapter, group, graph) {
   const [x, y, width, height] = readGroupBounds(group);
   adapter.title = String(group?.title || "WorkspaceKit Group");
-  adapter.color = hslToHex(group?.colorHue, group?.colorSat, group?.colorLit);
+  // rgthree filters groups by this solid value.  Prefer the persisted native
+  // compatibility colour; old workflows derive it lazily without rewrites.
+  adapter.color = resolveWorkspaceKitGroupNativeColor(
+    group,
+    hslToHex(group?.colorHue, group?.colorSat, group?.colorLit),
+  );
   adapter.graph = graph;
   adapter.__workspaceKitNodeIds = Array.isArray(group?.nodeIds) ? group.nodeIds : [];
   adapter._pos = [x, y];

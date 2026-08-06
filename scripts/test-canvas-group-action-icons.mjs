@@ -15,7 +15,16 @@ assert.match(scaling, /btn\.style\.alignItems = 'center';/, "action glyphs must 
 assert.match(scaling, /btn\.style\.justifyContent = 'center';/, "action glyphs must center horizontally");
 assert.doesNotMatch(scaling, /Math\.max\(14|Math\.max\(12/, "icons must not stop shrinking before the title");
 
-assert.equal((source.match(/class="xzg-group-action-icon"/g) || []).length, 3, "three header action icons must share one scalable class");
+// T-036 groundwork (2026-08-05): a fourth header action icon (rename) joined
+// the original three (execute / ignore / disable). The contract is that *every*
+// action glyph shares the one scalable class, not that there are exactly three.
+assert.equal((source.match(/class="xzg-group-action-icon"/g) || []).length, 4, "all four header action icons must share one scalable class");
+assert.equal(
+  (source.match(/class="xzg-group-mode-btn/g) || []).length,
+  (source.match(/class="xzg-group-action-icon"/g) || []).length,
+  "every header action button must carry exactly one scalable glyph"
+);
+assert.match(source, /data-group-action="rename"/, "rename must be a header action button");
 assert.match(source, /M2\.4 10s2\.7-4\.5 7\.6-4\.5 7\.6 4\.5 7\.6 4\.5-2\.7 4\.5-7\.6 4\.5S2\.4 10 2\.4 10Z/, "bypass icon must use the eye-off path");
 assert.match(source, /stroke-width="1\.9"/, "eye-off stroke must remain visually light");
 assert.match(source, /stroke-width="2\.1"/, "disable stroke must remain balanced");

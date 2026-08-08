@@ -1,5 +1,117 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-08 - README rebuild, product renamed to WK 面板, old screenshots archived
+
+Four user decisions in one batch. One of them reversed mid-batch, which is the
+most useful thing recorded here.
+
+### The rename is not documentation-only
+
+`WK 工作区` → `WK 面板`. The retired name was also three **runtime UI strings**
+(`app.title`, `workspace.title`, `workspace.tooltip`) in both locale files, plus
+the same keys in `entry/core/fallback-strings.js` (the values shown before the
+locale loads). Changing only the READMEs would have left the sidebar showing the
+retired name while the docs contradicted it. Six surfaces changed together:
+
+| Surface | Change |
+| --- | --- |
+| `entry/locales/zh-CN.json` | `app.title` / `workspace.title` → `WK 面板`, tooltip → `ComfyUI WorkspaceKit（WK 面板）` |
+| `entry/locales/en-US.json` | `WK Workspace` → `WK Panel` |
+| `entry/core/fallback-strings.js` | same keys, both languages |
+| `docs/BRANDING_AND_NAMING.zh-CN.md` | the authoritative name table |
+| `docs/WK_ICON_SYSTEM_PLAN.zh-CN.md` | host row |
+| `README.md` / `README.zh-CN.md` | product name |
+
+Key counts stayed at 481 per locale, so the rewrite dropped nothing. Verified on
+the running server: it serves `workspace.title` = `WK 面板`.
+
+### Default-language swap, and why it was reversed
+
+The user first asked for **Chinese as the default README**, then reversed it the
+same day once the consequence was clear: `pyproject.toml` has
+`readme = "README.md"`, so whatever lands in `README.md` becomes the **Comfy
+Registry description**. Chinese default meant a Chinese Registry listing for a
+mostly international audience.
+
+Final layout is the original one: `README.md` English, `README.zh-CN.md` Chinese.
+
+**The reusable lesson:** `scripts/release_version.py` reads both READMEs **by
+filename** and rewrites the release-status line in each. Swapping languages
+between filenames without updating that script breaks `python
+scripts/release_version.py --check` immediately. Reproduced in **both**
+directions this session:
+
+- Chinese → `README.md`: `ERROR: README.md status does not match pyproject`
+- reverted: passes again after `README_EN` / `README_ZH` were pointed back
+
+`scripts/test-readme-surface.mjs` now pins the mapping so a future swap fails
+loudly in the test suite instead of at release time.
+
+### README content
+
+Rebuilt from the user's GPT draft, corrected against the repository. The draft
+was accurate on features — every claim was checked against the code, including
+Dissolve / Flatten All, auto-numbering, and the group gestures — but wrong on
+three points:
+
+- It **dropped** credits (four referenced open-source projects), third-party
+  license pointers, the developer-doc index, CHANGELOG/ROADMAP links, the
+  settings section, and the user's own maintenance note. Credits and license
+  pointers are an attribution obligation, so all of it was restored.
+- It listed **WK Groups as a fourth sidebar tab** beside the three real tabs.
+  Groups are a canvas feature, and `.dev-docs/README_CONTENT_AUDIT.md` forbids
+  presenting an optional or compatible tab as a fixed fourth built-in.
+- It used **WK 面板** before that rename had been communicated. That turned out
+  to match the user's intent, so the branding doc was updated to the draft rather
+  than the reverse.
+
+### A stale name found while placing the new cover
+
+The user described `006.jpg` as the cover for the "transparent node". Neither
+README had such a section — both called that node **Title2**. Checking
+`__init__.py` settled it: the node's `NODE_DISPLAY_NAME_MAPPINGS` value is
+**`Transparent Title（透明标题）`** under the `🧩 WorkspaceKit` category. So the
+READMEs had been documenting a menu entry that does not exist, and a reader
+following them would fail to find the node. Both sections were renamed and
+`006.jpg` placed there. The audit now names `__init__.py` as the single source of
+truth for node display names, with an assertion.
+
+### Screenshots archived, not deleted
+
+`a1.png`, `a1.1.png`, `a2.png`, `a3.png`, `a3.1.jpg` moved to
+`Preview/archive/` with a README explaining why: the UI changed and the images no
+longer match the product. Archived rather than deleted so an older interface can
+still be traced. Both READMEs dropped those five references, and the contract
+test forbids referencing `Preview/a*` or the archive directory again.
+
+Current assets, 9 per edition: covers `001` (overview), `002` (groups), `003`
+(workflows), `004` (nodes), `005` (templates), `006` (Transparent Title), plus the
+three demo GIFs `FileRecovery`, `GroupConversion`, `GroupedMemory`. Because real
+GIFs now ship, the "GIF tutorials are still being prepared" limitation was
+removed from both editions.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| `npm test` | JS **89** / Python 6 / version 0.2.5 - all pass |
+| `release_version.py --check` | fails on swap, passes after the mapping is fixed (both directions) |
+| Local image/link targets | scripted, 9 images per edition, **0 broken** |
+| In-page anchors | 5 per edition, **0 missing** |
+| Locale key counts | 481 each, unchanged |
+| Live server (`:8190`) | serves `workspace.title` = `WK 面板` |
+| Live page console errors | **0** |
+| Python syntax | `py_compile` clean |
+
+New contract: `scripts/test-readme-surface.mjs`. It pins each file's language,
+the release script's filename mapping, that every local target resolves, the
+assigned covers and GIFs, the audit's fact boundaries, the archive rule, the node
+display name, and the absence of the retired `WK 工作区` / `WK Workspace` strings
+across all six surfaces including the locales.
+
+**Note:** the sidebar tab's `aria-label` stays `WorkspaceKit`. That is by design —
+registration runs before the locale loads and uses a stable fallback.
+
 ## 2026-08-07 - Canvas context-menu ordering (T-050) and sidebar glyph (T-051)
 
 Two user-reported issues. The menu one is a **regression with an unusual shape**:

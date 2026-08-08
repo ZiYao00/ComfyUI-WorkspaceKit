@@ -16,6 +16,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
+# English is the default README: it is what GitHub shows first and what
+# pyproject's `readme` field ships as the Registry description. The Chinese
+# edition lives beside it. Both carry the release-status line rewritten below,
+# so renaming either file means updating these two constants.
 README_EN = ROOT / "README.md"
 README_ZH = ROOT / "README.zh-CN.md"
 CHANGELOG = ROOT / "CHANGELOG.md"

@@ -29,7 +29,7 @@
 
 | 目的 | 文档 |
 | --- | --- |
-| 安装、功能概览与使用说明 | [README.zh-CN.md](../README.zh-CN.md) / [README.md](../README.md) |
+| 安装、功能概览与使用说明 | [README.md](../README.md)（中文，默认）/ [README.en.md](../README.en.md)（English）|
 | 未来产品方向 | [ROADMAP.zh-CN.md](../ROADMAP.zh-CN.md) / [ROADMAP.md](ROADMAP.md) |
 | 版本历史 | [CHANGELOG.md](../CHANGELOG.md) |
 | 贡献、安全与版本规则 | [CONTRIBUTING.md](../CONTRIBUTING.md) / [SECURITY.md](../SECURITY.md) / [RELEASE_VERSIONING.md](RELEASE_VERSIONING.md) |

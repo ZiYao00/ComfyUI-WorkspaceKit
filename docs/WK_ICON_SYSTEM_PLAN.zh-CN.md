@@ -24,7 +24,7 @@ WK、WK 版式与 WK 主题目前混用 emoji、PrimeIcons、手写 SVG 和不�
 
 | 身份 | 中文完整名 | English full name | 顶部短标签 | 侧边栏图标键 |
 | --- | --- | --- | --- | --- |
-| 宿主 | WK 工作区 | WK Workspace | — | `workspacekit` |
+| 宿主 | WK 面板 | WK Panel | — | `workspacekit` |
 | 主题 | WK 主题 | WK Theme | 主题 / Theme | `theme` |
 | 版式 | WK 版式 | WK Layout | 版式 / Layout | `layout` |
 

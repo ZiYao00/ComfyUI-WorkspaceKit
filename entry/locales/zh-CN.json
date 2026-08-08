@@ -1,7 +1,7 @@
 {
-  "app.title": "WK 工作区",
-  "workspace.title": "WK 工作区",
-  "workspace.tooltip": "ComfyUI WorkspaceKit（WK 工作区）",
+  "app.title": "WK 面板",
+  "workspace.title": "WK 面板",
+  "workspace.tooltip": "ComfyUI WorkspaceKit（WK 面板）",
   "workspace.tab.workflows": "工作流",
   "workspace.tab.nodes": "节点",
   "workspace.tab.templates": "模板",

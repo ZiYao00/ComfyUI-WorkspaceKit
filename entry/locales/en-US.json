@@ -1,6 +1,6 @@
 {
-  "app.title": "WK Workspace",
-  "workspace.title": "WK Workspace",
+  "app.title": "WK Panel",
+  "workspace.title": "WK Panel",
   "workspace.tooltip": "ComfyUI WorkspaceKit (WK)",
   "workspace.tab.workflows": "Workflows",
   "workspace.tab.nodes": "Nodes",

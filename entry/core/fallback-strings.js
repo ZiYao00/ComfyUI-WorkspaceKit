@@ -5,8 +5,8 @@
 
 export const FALLBACK_STRINGS = {
   "zh-CN": {
-    "workspace.title": "WK 工作区",
-    "workspace.tooltip": "ComfyUI WorkspaceKit（WK 工作区）",
+    "workspace.title": "WK 面板",
+    "workspace.tooltip": "ComfyUI WorkspaceKit（WK 面板）",
     "workspace.tab.workflows": "工作流",
     "workspace.tab.nodes": "节点",
     "workspace.tab.templates": "模板",
@@ -259,7 +259,7 @@ export const FALLBACK_STRINGS = {
     "templates.sortTitle": "模板排序：{sort}。点击打开菜单。",
   },
   "en-US": {
-    "workspace.title": "WK Workspace",
+    "workspace.title": "WK Panel",
     "workspace.tooltip": "ComfyUI WorkspaceKit (WK)",
     "workspace.tab.workflows": "Workflows",
     "workspace.tab.nodes": "Nodes",

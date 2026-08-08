@@ -4,7 +4,11 @@ import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260805
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260804_native_group_color_r1";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { publishWorkspaceKitPanelUiTemplate } from "./integrations/panel-ui-template-api.js";
-import { createWorkspaceKitIcon, workspaceKitIconMaskDataUri } from "./ui-kit/icons.js";
+import { createWorkspaceKitIcon } from "./ui-kit/icons.js";
+import {
+  WORKSPACEKIT_MENU_MARK,
+  planCanvasMenuOrder,
+} from "./ui/canvas-menu-ordering.js?v=20260807_canvas_menu_ordering_r1";
 import { fetchJson, postJson } from "./core/api.js";
 import { createWorkspaceStartupStageRunner } from "./core/startup-stage.js?v=20260724_startup_stage_isolation_r1";
 import {
@@ -202,7 +206,9 @@ const {
   defaultGroupId: NODE_DEFAULT_GROUP_ID,
   t,
 });
-const WORKSPACE2_MENU_MARK = "🧩 ";
+// The trailing space is presentational; `canvas-menu-ordering.js` owns the
+// marker itself so the rows we register and the rows we reorder cannot drift.
+const WORKSPACE2_MENU_MARK = `${WORKSPACEKIT_MENU_MARK} `;
 
 const CORE_NODE_MODULES = new Set(["nodes", "comfy_extras", "comfy_api_nodes"]);
 const NODE_SOURCE = {
@@ -8209,20 +8215,40 @@ function installWorkspace2SidebarIcon() {
     const style = document.createElement("style");
     style.id = styleId;
     // SidebarTabExtension.icon accepts an icon-class string, not an SVG node.
-    // Keep the public registration compatible, but replace its visual glyph
-    // with the local Icon Kit's monochrome mask.
+    // Keep the public registration compatible, but replace its visual glyph.
+    //
+    // This deliberately uses the 🧩 emoji rather than the Icon Kit's mask. The
+    // mask is recoloured to `currentColor` so it matches the native icons
+    // exactly, and that is the problem: in a column of identically coloured
+    // glyphs, ours was hard to pick out. The emoji carries its own colours, and
+    // it is the same marker used on our context-menu rows.
+    //
+    // `font-size` sizes the glyph (emoji are text, so `width`/`height` alone
+    // would not); the box is still 18px so the row's metrics do not shift.
+    //
+    // The rule below deliberately sets no `color`. A colour-emoji font supplies
+    // its own colours and ignores `color`, but a platform without one falls back
+    // to a monochrome glyph, which must inherit the theme's text colour to stay
+    // visible. Pinning any colour (including `initial`, which means black) would
+    // make that fallback invisible on a dark theme.
+    //
+    // Keep prose like this in JS comments, never inside the CSS below: a
+    // backtick in that template literal ends the string, and `node --check`
+    // does NOT catch the result — only the browser does.
     style.textContent = `
       .workspace2-tab-button .sidebar-icon-wrapper > .side-bar-button-icon {
         display: none !important;
       }
       .workspace2-tab-button .sidebar-icon-wrapper::before {
-        content: "";
-        display: block;
+        content: "${WORKSPACEKIT_MENU_MARK}";
+        display: flex;
+        align-items: center;
+        justify-content: center;
         width: 18px;
         height: 18px;
-        background-color: currentColor;
-        -webkit-mask: url("${workspaceKitIconMaskDataUri("workspacekit")}") center / contain no-repeat;
-        mask: url("${workspaceKitIconMaskDataUri("workspacekit")}") center / contain no-repeat;
+        font-size: 16px;
+        line-height: 1;
+        opacity: 1;
       }
     `;
     document.head.append(style);
@@ -8302,26 +8328,27 @@ function setupWorkspace2ContextMenuOrdering() {
 
   const moveWorkspace2ItemsToTop = () => {
     for (const menu of document.querySelectorAll(".litecontextmenu")) {
-      const entries = [...menu.querySelectorAll(":scope > .litemenu-entry")];
-      // Always derive the order from the registered menu labels.  Repeated
-      // insertBefore(entry, sameAnchor) reverses siblings and was responsible
-      // for the visible "Save as template" one-row jump after the menu opened.
-      const workspace2Entries = [...WORKSPACE2_MENU_LABELS]
-        .map((label) => entries.find((entry) => entry.textContent?.trim() === label))
-        .filter(Boolean);
-      if (!workspace2Entries.length) {
+      // A menu title is not a row: it must stay pinned at the top, so exclude
+      // it from the reorderable set rather than let it be treated as one.
+      const rows = [...menu.children].filter((row) => (
+        row instanceof HTMLElement && !row.classList.contains("litemenu-title")
+      ));
+      // Identify our rows by the 🧩 marker, never by a list of labels.  The
+      // former label set was hardcoded Chinese, so it stopped matching the
+      // moment the labels became translatable, and the whole pass was dropped.
+      const plan = planCanvasMenuOrder(rows.map((row) => ({
+        label: row.textContent || "",
+        separator: row.classList.contains("separator") || !(row.textContent || "").trim(),
+      })));
+      if (!plan.moved) {
         continue;
       }
-      const isAlreadyFirst = workspace2Entries.every((entry, index) => entries[index] === entry);
-      if (isAlreadyFirst) {
-        continue;
-      }
-      // The official API appends extension items. Move only Workspace2's two
-      // entries, preserving their internal order and leaving other extensions
-      // untouched.
+      // Re-append in the planned order.  A DocumentFragment moves the whole run
+      // in one step: repeated insertBefore(row, sameAnchor) reverses siblings,
+      // which is what produced the visible one-row jump after the menu opened.
       const fragment = document.createDocumentFragment();
-      workspace2Entries.forEach((entry) => fragment.append(entry));
-      menu.insertBefore(fragment, entries.find((entry) => !workspace2Entries.includes(entry)) || null);
+      plan.order.forEach((index) => fragment.append(rows[index]));
+      menu.append(fragment);
     }
   };
 
@@ -8469,6 +8496,7 @@ app.registerExtension({
       registerPendingWorkspaceKitPanelProviders(panelApi.api);
     });
     await runWorkspaceStartupStage("shortcuts", () => setupWorkspaceShortcuts());
+    await runWorkspaceStartupStage("context-menu-ordering", () => setupWorkspace2ContextMenuOrdering());
     await runWorkspaceStartupStage("workflow-dirty-tracking", () => setupWorkflowDirtyTracking());
     await runWorkspaceStartupStage("official-workflow-sync", () => setupOfficialWorkflowStateSync());
     await runWorkspaceStartupStage("canvas-groups", () => {

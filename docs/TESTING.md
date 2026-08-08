@@ -1,5 +1,139 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-07 - Canvas context-menu ordering (T-050) and sidebar glyph (T-051)
+
+Two user-reported issues. The menu one is a **regression with an unusual shape**:
+the code that fixes it has been present the whole time but never ran.
+
+### T-050 - the three canvas menu rows jumped position and split apart
+
+The three rows are registered as one block, in a fixed order, with a divider.
+ComfyUI appends every extension's items to the end of the menu in extension load
+order, which is not stable across page loads - hence the moving position, and
+hence a foreign extension's row appearing between ours.
+
+A correction pass exists to repair that. Commit `18971da` (2026-07-24) deleted
+**its call site and the `WORKSPACE2_MENU_LABELS` set it depended on, but left the
+function body behind**. Two consequences worth remembering:
+
+- It has not run since that commit. The behaviour the user reported is simply its
+  absence.
+- **Calling it in that state throws `ReferenceError`** - the set it reads is gone.
+  So "add the call back" alone would have traded no-ordering for a crash on every
+  menu open. Verified: `node -e` on the same shape reproduces the ReferenceError.
+
+Why it was half-deleted is the useful part: the label set was **hardcoded
+Chinese** (`🧩 编组`), so it could never match again once labels became
+translatable. Deleting the call leaves a quiet symptom (no ordering); deleting
+only the set crashes loudly. The quiet half is the one that survived review.
+
+The fix identifies our rows by the **🧩 marker instead of a label list**, which is
+language-independent and cannot rot the same way. `WORKSPACE2_MENU_MARK` now
+derives from the module's exported marker, so the rows we register and the rows
+we reorder cannot drift apart.
+
+Placement follows the user's two constraints: keep the first 2 native rows where
+they are (do not claim row one), put our block directly below them, and **never
+at the bottom**.
+
+**Rejected, with reason:** anchoring below another plugin's row (the user
+suggested two). Both belong to other extensions, so anchoring means matching
+their text at menu-open time - which fails silently when they rename, translate,
+or are not installed, dropping us back to the menu's end.
+
+### T-051 - the sidebar icon was monochrome and hard to find
+
+By design: the glyph was a CSS mask recoloured to `currentColor` so it matched the
+native icons. That is exactly why it was hard to spot in a column of same-coloured
+icons. Now it renders the 🧩 character, matching our menu prefix.
+
+**Do not pin a colour on that glyph.** A colour-emoji font supplies its own colours
+and ignores `color`, but a platform without one falls back to monochrome text,
+which must inherit the theme's text colour to stay visible. My first version used
+`color: initial` (= black), which would have been **invisible on a dark theme**.
+Fixed, and a contract assertion now forbids any `color` in that rule.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| `npm test` | JS 88 / Python 6 / version 0.2.5 - all pass |
+| Real page, extension loads | `comfyui.workspace2` present in `app.extensions` |
+| Real page, console errors | **0** (was 8, including the fatal one) |
+| Emoji stored as UTF-8 | verified by codepoint, `U+1F9E9`, not mojibake |
+
+### The syntax error I shipped, and the check that missed it
+
+The first version of T-051 **took the whole extension down**: the sidebar entry
+disappeared entirely. Cause, in my own code: I wrote an explanatory CSS comment
+*inside* the styled template literal, and it contained backticks around `` `color` ``.
+A backtick ends a template literal, so the string closed early and the file became
+invalid JavaScript.
+
+**`node --check entry/entry.js` passed on that file.** That is not a fluke, it is
+the parse goal: `node --check <file.js>` parses with the **script** goal, and the
+broken shape happens to re-pair into something the script goal accepts. The browser
+loads these files as **ES modules**, and the module goal rejects it:
+
+```
+SyntaxError: Unexpected identifier 'color'
+```
+
+Reproduced both ways on the actual file: `node --check broken.js` passes, the same
+bytes as `broken.mjs` fail at the exact line. This is the same blind spot that the
+tech-debt register records as T-601 ("contract tests cannot cover an entry.js
+browser load"), now with a concrete instance and a fix.
+
+**New guard: `scripts/test-frontend-module-syntax.mjs`** parses all 114 shipped
+frontend files with `--input-type=module --check`, which is how the browser loads
+them. It needs no browser and no server. Verified it actually catches the bug by
+reintroducing it: the old check passed, the new contract failed. It also forbids
+`/* ... */` inside that specific template literal, since that is the exact shape
+that broke.
+
+**Lesson worth keeping:** prose explaining a CSS rule belongs in a JS comment
+*above* the template literal, never inside it. Backticks are common in prose about
+code, and the failure is invisible to `node --check`.
+
+### Real-page acceptance (test package `http://127.0.0.1:8190/`)
+
+The test package is on **port 8190**. I had probed 8188/8189/8000/3000 and wrongly
+concluded no server was running; the port is recorded throughout this file. Check
+here first next time.
+
+T-050, canvas menu ordering - **4 consecutive page loads, identical every time**:
+
+| Pass | Total rows | Our rows | Contiguous | First row native | Ever last |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 39 | 3, 4, 5 | yes | yes | no |
+| 2 | 39 | 3, 4, 5 | yes | yes | no |
+| 3 | 39 | 3, 4, 5 | yes | yes | no |
+| 4 | 39 | 3, 4, 5 | yes | yes | no |
+
+Stability across reloads is the whole point of the fix, so four loads returning the
+same three indices is the acceptance. This was a genuinely crowded menu (39 rows,
+rgthree / KJ / UE / group-executor all present), which is a stronger test than a
+clean install.
+
+Canvas menu, measured separately, 33 rows: our divider at row 2, our three rows at
+3/4/5 in registration order (`编组` / `新建空白编组` / `保存为模板`), our closing
+divider at 6, and `⚡ 打开组执行器` left untouched at its own row 11.
+
+T-051, sidebar glyph:
+
+- `.workspace2-tab-button` present, `aria-label` `WorkspaceKit`, style tag installed.
+- `::before` computed: content `"🧩"`, `font-size 16px`, box `18x18px`, colour
+  inherited (`rgb(138,138,138)`) - **not pinned**, which is the requirement.
+- The native icon element is `display: none`, so there is no double glyph.
+- **Rendered in colour, measured not eyeballed:** drawing the glyph to a canvas and
+  counting pixels yields 126 distinct colours, 68 of them saturated. A monochrome
+  fallback would yield ~1. (A screenshot cannot prove this; pixel sampling can.)
+- Clicking the entry opens the panel with all four tabs (工作流 / 节点 / 模板 / 主题).
+
+**Still needs the user's eyes:** the glyph's legibility in a **light** theme. The
+test package runs a dark theme, and no colour is pinned, so the monochrome-fallback
+path is the only theoretical risk - but that is a visual judgement, not an assertion.
+
 ## 2026-08-06 - Dissolve fixes shipped: T-046, T-047, T-048 (T-049 deferred)
 
 Follow-up to the investigation logged below. All three approved items are

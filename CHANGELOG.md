@@ -1,13 +1,35 @@
 # Changelog
 
-## Unreleased
+## 0.2.6 - 2026-08-08
+
+### Added
+
+- Added a streamlined selector for merged family-plugin tabs. It lists every
+  registered plugin, identifies the active plugin with a theme-coloured
+  triangle, and opens the selected plugin directly.
+- Added reversible WorkspaceKit/native canvas-group conversion safeguards,
+  together with follow-up group interaction improvements.
 
 ### Changed
 
-- The merged-plugin tab selector now shows every merged plugin, including the
-  current one. Selecting another plugin directly pins and opens it; the current
-  plugin is marked with a theme-colored triangle instead of a separate Pin
-  button. Enlarged the selector caret and its click target.
+- Refined workflow history pinning, Browse scrolling, active-trail contrast,
+  folder dissolve/flatten handling, and create-feedback behaviour.
+- Improved node and template management, including atomic node-library writes
+  under concurrent updates.
+- Updated the WK Chinese product name, bilingual README editions, preview
+  covers, screenshots, and demonstration GIFs.
+
+### Fixed
+
+- Restored predictable canvas context-menu ordering and protected module-goal
+  parsing.
+- Repaired top-level folder dissolve metadata handling and automatic naming.
+
+### Notes
+
+- This remains a public beta release. Back up important workflows, settings,
+  node favourites, and templates before using it in a production ComfyUI
+  installation.
 
 ## 0.2.5 - 2026-08-01
 

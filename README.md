@@ -14,7 +14,7 @@ ComfyUI WorkspaceKit (WK) brings workflow management, node favorites, template r
 
 `ComfyUI-WorkspaceKit` remains the repository name, installation directory, Provider API, storage-key prefix, and Registry identifier; WK is a user-facing brand and module convention only.
 
-Current status: **public beta, 0.2.5**. Back up important workflows, user settings, node favorites, and template data before first using it in a production ComfyUI environment.
+Current status: **public beta, 0.2.6**. Back up important workflows, user settings, node favorites, and template data before first using it in a production ComfyUI environment.
 
 ![WorkspaceKit overview](Preview/001.jpg)
 

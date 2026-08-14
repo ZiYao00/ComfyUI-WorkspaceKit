@@ -16,6 +16,19 @@ All rollback archives live under the repository-local `.codex-backups/` director
 
 The sibling `ComfyUI-WorkspaceKit-Layout` repository shares this classification and additionally documents the same seven categories in its own `.codex-backups/README.md`. The `create-project-backup.ps1` script accepts all seven names in `-Category`; empty categories do not create their target directory until first use.
 
+## Local root and legacy imports
+
+`.codex-backups/` is the single local backup root for this repository. The
+former root `.backup/` was consolidated into
+`.codex-backups/legacy-file-snapshots/` on 2026-08-14; those entries are
+partial file-level references, not complete rollback archives. The former root
+`node.zip` was retained at
+`.codex-backups/legacy-source-snapshots/node-20260720.zip` as an older
+standalone source snapshot.
+
+The root-local `.codex-backups/README.md` is the short operational guide for
+this machine. This tracked document remains the contributor-facing convention.
+
 `30-entry-splits/oversized-legacy/` preserves two valid but oversized July 18 archives. They contain nested older ZIPs and flattened Git objects due to an earlier backup command; retain them for rollback history, but do not use their creation method again.
 
 ## Creating a backup

@@ -1,5 +1,141 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-13 - T-054 node preview: one switch, bounded structural card
+
+The previous mode selector was intentionally removed. Node previews now have
+one toolbar switch: disable it to suppress hover previews; enable it to restore
+them. No node screenshots, hidden-node instantiation, DOM scraping, or preview
+cache were introduced.
+
+The card uses the node definition already available to WorkspaceKit: input
+ports and controls align on the left, output ports align on the right. A shared
+preview model caps the visible layout at ten rows; if there is more content, the
+last row is one summary such as `… 6 more controls · 3 more outputs`.
+
+### Evidence
+
+| Check | Result |
+| --- | --- |
+| `node scripts/test-node-preview-model.mjs` | Pass; verifies the ten-row cap and separate hidden input/control/output counts |
+| `node scripts/test-frontend-module-syntax.mjs` | Pass; 115 frontend modules |
+| `npm test` | Pass; JavaScript 90, Python 6, release version 0.2.6 |
+| Locale JSON parse | `zh-CN` and `en-US` pass |
+| Test package `:8190`, Nodes tab | The preview control changed from `关闭节点预览` to `打开节点预览` and back |
+| Test package hover, disabled | No preview popover appeared for `Checkpoint加载器（简易）` |
+| Test package hover, enabled | One popover appeared with three aligned structural rows: checkpoint control → `MODEL`, then `CLIP` and `VAE` outputs |
+
+### Runtime boundary
+
+The GPU test entry could not initialize in this session because the shared
+PyTorch CUDA runtime reported `cudaErrorNotSupported` and then exited with an
+access violation. The CPU test entry successfully served `:8190`, so the
+frontend acceptance above was performed there. This is an environment startup
+condition, not attributed to WorkspaceKit.
+
+### Follow-up: official media-family adapter foundation
+
+The second batch adds a small, exact-type adapter registry. It recognizes only
+confirmed official image, audio, video, and 3D I/O node type names, then adds a
+localized type badge to the existing structural card. It does **not** claim to
+have the image, video, or canvas content itself. Title/category heuristics were
+intentionally rejected because translated or third-party names are not reliable
+evidence of a renderable media surface.
+
+| Check | Result |
+| --- | --- |
+| `node scripts/test-node-preview-adapters.mjs` | Pass; verified exact official matches and third-party-name fallback |
+| `node scripts/test-frontend-module-syntax.mjs` | Pass; 116 frontend modules |
+| `npm test` | Pass; JavaScript 91, Python 6, release version 0.2.6 |
+| Locale JSON parse | `zh-CN` and `en-US` pass |
+
+The badge's live visual check is intentionally still pending the next test
+package session; no claim of a real media thumbnail is made before then.
+
+### Follow-up: narrow-card ports and preview controls
+
+User acceptance on the main package found two concrete visual defects: output
+ports were clipped at the right edge of a narrow card, and preview controls
+looked like raised buttons because they included an outer shadow. The preview
+grid now allows both labels to shrink and ellipsize before either port leaves
+the card; output ports explicitly anchor to the right. Controls now use only
+top and bottom inset shading.
+
+| Check | Result |
+| --- | --- |
+| `node scripts/test-node-preview-visual-contract.mjs` | Pass; pins the shrinkable grid, right output anchor, and absence of the old outer shadow |
+| `npm test` | Pass; JavaScript 92, Python 6, release version 0.2.6 |
+| Main package `:8188` served stylesheet | Confirms responsive grid, output-anchor rule, inset lower shading, and absence of the old outer shadow |
+
+The browser automation page was reclaimed by the client before it completed a
+fresh screenshot, so the final visual acceptance remains the user's normal
+main-package hover check after page refresh.
+
+### Follow-up: static visual adapters for node prototypes
+
+The node panel previews node **types**, not a selected canvas-node instance.
+It therefore cannot know the real image, audio, video, or prompt content of a
+specific workflow without inventing state. This batch adds only static visual
+surfaces to the existing structural card: image frame/checkerboard, audio
+waveform, video frame/timeline, and multiline-text area. The surfaces make the
+kind of node recognizable while remaining explicitly non-runtime content.
+
+| Check | Result |
+| --- | --- |
+| Adapter contract | Pass; image/audio/video/text exact-type adapters carry their declared surface |
+| Visual contract | Pass; all four surface classes are required alongside narrow-card protections |
+| `npm test` | Pass; JavaScript 92, Python 6, release version 0.2.6 |
+| Locale JSON parse | `zh-CN` and `en-US` pass |
+
+First visual acceptance remains pending a live page refresh: verify `Load
+Image`, `Load Audio`, `Load Video`, and `CLIP Text Encode` show their respective
+static surface, while an unregistered third-party node still shows only the
+structural fallback.
+
+### Follow-up: structural archetype resolver and richer media prototypes
+
+The preview renderer is no longer limited to a growing list of node names.
+It now resolves a presentation in two stages: exact, confirmed adapters retain
+their media/text surface; every other node is classified only from public node
+definition structure. A multiline widget becomes the text archetype; a long
+definition becomes complex; otherwise widget and port density select form or
+port-oriented structural presentation. It deliberately does not infer a media
+preview from translated names, categories, or a port type alone.
+
+Audio and video surfaces were also made more literal without pretending to be
+the current graph instance: audio has a neutral file strip and player/waveform
+geometry; image/video have a neutral file strip and media frame. No filename,
+duration, thumbnail, output result, DOM scrape, hidden-node execution, or
+third-party registration is involved.
+
+| Check | Result |
+| --- | --- |
+| `node scripts/test-node-preview-archetypes.mjs` | Pass; exact adapter, multiline, form, complex, port, and fallback paths |
+| `node scripts/test-node-preview-adapters.mjs` | Pass; exact adapter metadata remains explicit |
+| `node scripts/test-node-preview-visual-contract.mjs` | Pass; narrow-card and media surface structure remain pinned |
+| `npm test` | Pass; frontend module syntax 117 files, all JavaScript/Python/version checks pass |
+| `git diff --check` | Pass |
+
+Live visual acceptance remains pending: hover a generic multiline node, a
+large/port-heavy third-party node, `Load Audio`, and `Load Video` at normal and
+narrow sidebar width in both dark and light themes.
+
+### Runtime follow-up: main package hover acceptance
+
+The main package was opened at `:8188` with a 6,680-node catalog. The Nodes
+panel completed its load and the enabled preview switch was present. Real mouse
+hover (not synthetic DOM events) confirmed the following normal-width dark
+theme cases:
+
+| Node | Observed result |
+| --- | --- |
+| Official `Load Audio` | Localized audio badge, neutral file strip, playback symbol/waveform, and visible left/right structural ports |
+| Official `Load Video` | Localized video badge, neutral media frame/timeline, and visible structural ports |
+| Generic `StringFormat` | Classified from its public multiline widget; localized text badge, multiline surface, and normal structural row |
+
+No clipped output port, raised control shadow, invented media metadata, or
+popover overflow was observed in these three cases. Light-theme and an
+intentionally port-heavy/over-ten-row case remain separate acceptance items.
+
 ## 2026-08-08 - README rebuild, product renamed to WK 面板, old screenshots archived
 
 Four user decisions in one batch. One of them reversed mid-batch, which is the

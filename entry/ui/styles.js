@@ -1682,6 +1682,158 @@ export function styles() {
       font-weight: 650;
       line-height: 1.2;
     }
+    .workspace2-node-preview-kind {
+      flex: 0 0 auto;
+      max-width: 76px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      border: 1px solid rgba(174, 176, 181, 0.32);
+      border-radius: 999px;
+      padding: 2px 6px;
+      color: #cfd1d6;
+      background: rgba(255, 255, 255, 0.055);
+      font-size: 9.5px;
+      font-weight: 650;
+      line-height: 1.2;
+    }
+    .workspace2-node-preview-kind.is-image { border-color: rgba(100, 181, 246, 0.55); }
+    .workspace2-node-preview-kind.is-audio { border-color: rgba(244, 143, 177, 0.55); }
+    .workspace2-node-preview-kind.is-video { border-color: rgba(179, 157, 219, 0.55); }
+    .workspace2-node-preview-kind.is-threeD { border-color: rgba(129, 199, 132, 0.55); }
+    .workspace2-node-preview-kind.is-text { border-color: rgba(255, 193, 7, 0.55); }
+    .workspace2-node-preview-surface {
+      position: relative;
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      margin: 1px 12px 6px;
+      overflow: hidden;
+      border: 1px solid rgba(174, 176, 181, 0.18);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.16);
+    }
+    .workspace2-node-preview-surface.is-image,
+    .workspace2-node-preview-surface.is-video {
+      flex-direction: column;
+      gap: 5px;
+      background-color: #252930;
+      background-image:
+        linear-gradient(45deg, rgba(255,255,255,.055) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(255,255,255,.055) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(255,255,255,.055) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.055) 75%);
+      background-size: 14px 14px;
+      background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+    }
+    .workspace2-node-preview-surface-frame {
+      width: min(112px, 52%);
+      aspect-ratio: 16 / 9;
+      border: 1px solid rgba(100, 181, 246, 0.48);
+      border-radius: 4px;
+      background: linear-gradient(135deg, rgba(100,181,246,.28), rgba(129,199,132,.12));
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.035);
+    }
+    .workspace2-node-preview-surface.is-video .workspace2-node-preview-surface-frame {
+      border-color: rgba(179, 157, 219, 0.58);
+      background: linear-gradient(135deg, rgba(179,157,219,.32), rgba(100,181,246,.14));
+    }
+    .workspace2-node-preview-surface-timeline {
+      position: absolute;
+      right: 10px;
+      bottom: 6px;
+      left: 10px;
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(179,157,219,.75) 38%, rgba(255,255,255,.14) 38%);
+    }
+    .workspace2-node-preview-surface.is-audio {
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 12px;
+      background: linear-gradient(180deg, rgba(244,143,177,.09), rgba(0,0,0,.14));
+    }
+    .workspace2-node-preview-surface-file {
+      height: 13px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 0 6px;
+      border: 1px solid rgba(174, 176, 181, 0.2);
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .workspace2-node-preview-surface-file-mark {
+      width: 5px;
+      height: 6px;
+      border: 1px solid rgba(230, 232, 236, 0.58);
+      border-radius: 1px;
+    }
+    .workspace2-node-preview-surface-file-line {
+      width: 48%;
+      height: 2px;
+      border-radius: 999px;
+      background: rgba(230, 232, 236, 0.35);
+    }
+    .workspace2-node-preview-audio-player {
+      min-height: 27px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 7px;
+      border-radius: 5px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .workspace2-node-preview-audio-play {
+      width: 0;
+      height: 0;
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      border-left: 6px solid rgba(244, 143, 177, 0.9);
+    }
+    .workspace2-node-preview-audio-waveform {
+      min-width: 0;
+      flex: 1;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 2px;
+    }
+    .workspace2-node-preview-surface-wave {
+      width: 2px;
+      height: var(--workspace2-wave-height);
+      border-radius: 999px;
+      background: rgba(244, 143, 177, 0.78);
+    }
+    .workspace2-node-preview-audio-volume {
+      width: 7px;
+      height: 7px;
+      border: 1px solid rgba(244, 143, 177, 0.65);
+      border-radius: 50%;
+    }
+    .workspace2-node-preview-surface.is-text {
+      align-items: flex-start;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+      padding: 0 13px;
+      background: linear-gradient(180deg, rgba(255,193,7,.07), rgba(0,0,0,.14));
+    }
+    .workspace2-node-preview-surface-line {
+      display: block;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(255, 224, 130, 0.56);
+    }
+    .workspace2-node-preview-surface-line.is-1 { width: 78%; }
+    .workspace2-node-preview-surface-line.is-2 { width: 92%; }
+    .workspace2-node-preview-surface-line.is-3 { width: 58%; }
+    .workspace2-node-preview-surface-line.is-4 { width: 72%; }
     .workspace2-node-preview-card-output {
       min-width: 0;
       flex: 0 1 64px;
@@ -1703,6 +1855,50 @@ export function styles() {
     .workspace2-node-preview-card-body {
       padding: 3px 12px 10px;
     }
+    .workspace2-node-preview-layout-row {
+      min-height: 23px;
+      display: grid;
+      /* Labels may shrink and ellipsize, but ports must always remain inside
+       * the clipped card. The old 222px minimum pushed the output column past
+       * the right edge in the narrow WorkspaceKit sidebar. */
+      grid-template-columns: 7px minmax(0, 0.85fr) minmax(72px, 1.25fr) minmax(0, 0.85fr) 7px;
+      align-items: center;
+      gap: 4px;
+    }
+    .workspace2-node-preview-layout-row + .workspace2-node-preview-layout-row {
+      margin-top: 1px;
+    }
+    .workspace2-node-preview-layout-label {
+      min-width: 0;
+      color: #bebfc4;
+      font-size: 11.5px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-node-preview-layout-label.is-output {
+      color: #d2d3d7;
+      text-align: right;
+    }
+    .workspace2-node-preview-layout-label.is-empty,
+    .workspace2-node-preview-layout-control.is-empty,
+    .workspace2-node-preview-mini-port.is-hidden {
+      visibility: hidden;
+    }
+    .workspace2-node-preview-layout-control {
+      min-width: 0;
+    }
+    .workspace2-node-preview-overflow {
+      min-height: 23px;
+      display: flex;
+      align-items: center;
+      padding: 0 2px;
+      color: var(--workspace2-muted);
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
     .workspace2-node-preview-mini-row {
       min-height: 23px;
       display: grid;
@@ -1719,6 +1915,9 @@ export function styles() {
       border-radius: 50%;
       background: var(--workspace2-preview-port, #8b8b8b);
       box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.42);
+    }
+    .workspace2-node-preview-mini-port.is-output {
+      justify-self: end;
     }
     .workspace2-node-preview-mini-row.is-widget .workspace2-node-preview-mini-port {
       visibility: hidden;
@@ -1747,7 +1946,7 @@ export function styles() {
       white-space: nowrap;
       box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.04),
-        0 1px 0 rgba(0, 0, 0, 0.25);
+        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
     }
     .workspace2-node-preview-mini-widget.is-empty {
       visibility: hidden;

@@ -40,6 +40,8 @@ import { createNodeTopSectionRenderer } from "./nodes/top-section-renderer.js";
 import { createNodeCategoryProjection } from "./nodes/category-projection.js";
 import { mergeNodeDefinitionSources } from "./nodes/definition-merge.js";
 import { createNodeDragDrop } from "./nodes/drag-drop.js";
+import { buildNodePreviewRows } from "./nodes/preview-model.js";
+import { resolveNodePreviewPresentation } from "./nodes/preview-archetypes.js";
 import { createTemplateLibraryStore } from "./templates/library.js";
 import { createTemplateSearch } from "./templates/search.js";
 import { createTemplateResultsProjection } from "./templates/results-projection.js";
@@ -158,8 +160,7 @@ import {
   NODE_OBJECT_INFO_CACHE_KEY,
   NODE_OBJECT_INFO_CACHE_STORE,
   NODE_OBJECT_INFO_FETCH_TIMEOUT,
-  NODE_PREVIEW_MODE_KEY,
-  NODE_PREVIEW_MODES,
+  NODE_PREVIEW_ENABLED_KEY,
   NODE_ROW_SPACING_KEY,
   NODE_SEARCH_RENDER_DELAY,
   NODE_SEARCH_RESULT_LIMIT,
@@ -729,7 +730,7 @@ const nodesState = {
   sort: NODE_SORTS.includes(localStorage.getItem(NODE_SORT_KEY)) ? localStorage.getItem(NODE_SORT_KEY) : "original",
   customOrderEnabled: localStorage.getItem(NODE_CUSTOM_ORDER_ENABLED_KEY) === "1",
   customOrder: nodePanelState.readCustomOrder(),
-  previewMode: NODE_PREVIEW_MODES.includes(localStorage.getItem(NODE_PREVIEW_MODE_KEY)) ? localStorage.getItem(NODE_PREVIEW_MODE_KEY) : "detailed",
+  previewEnabled: localStorage.getItem(NODE_PREVIEW_ENABLED_KEY) !== "0",
   uiScale: Number(localStorage.getItem(NODE_UI_SCALE_KEY) ?? localStorage.getItem(NODE_FONT_SCALE_KEY) ?? "50"),
   fontScale: Number(localStorage.getItem(NODE_FONT_SCALE_KEY) || "0"),
   rowSpacing: Number(localStorage.getItem(NODE_ROW_SPACING_KEY) || "0"),
@@ -4139,6 +4140,7 @@ function collectPreviewWidgets(definition) {
         name,
         type: firstSpecType(spec) || t("nodes.uncategorized"),
         value: inputSpecDefault(spec),
+        multiline: Boolean(inputSpecOptions(spec).multiline),
         optional: section === "optional",
       });
     }
@@ -7213,7 +7215,7 @@ function renderNodesPanel(el) {
     focusKey: "nodes-search",
     placeholder: t("nodes.searchPlaceholder"),
     value: nodesState.query,
-    buttons: [newGroup, nodesPreviewModeButton(el), nodesSortButton(el), syncOfficial],
+    buttons: [newGroup, nodesPreviewToggleButton(el), nodesSortButton(el), syncOfficial],
     onInput: (value) => {
       nodesState.query = value;
       scheduleNodesResultsRefresh(el);
@@ -7245,7 +7247,7 @@ function ensureNodePreviewPopover() {
 }
 
 function showNodePreview(node, event, options = {}) {
-  if (!node || !event) {
+  if (!nodesState.previewEnabled || !node || !event) {
     hideNodePreview();
     return;
   }
@@ -7261,31 +7263,8 @@ function showNodePreview(node, event, options = {}) {
   const inputs = collectPreviewInputs(definition);
   const widgets = collectPreviewWidgets(definition);
   const outputs = collectPreviewOutputs(definition);
-  appendNodePreviewCard(body, node, inputs, widgets, outputs);
+  appendNodePreviewCard(body, node, inputs, widgets, outputs, resolveNodePreviewPresentation({ node, inputs, widgets, outputs }));
 
-  if (nodesState.previewMode !== "compact") {
-    const details = document.createElement("div");
-    details.className = "workspace2-node-preview-details";
-    const title = document.createElement("div");
-    title.className = "workspace2-node-preview-details-title";
-    title.textContent = node.title || node.type;
-    const meta = document.createElement("div");
-    meta.className = "workspace2-node-preview-meta";
-    meta.textContent = `${node.type} | ${node.category || t("nodes.uncategorized")}`;
-    details.append(title, meta);
-
-    if (node.description) {
-      const desc = document.createElement("div");
-      desc.className = "workspace2-node-preview-desc";
-      desc.textContent = node.description;
-      details.append(desc);
-    }
-
-    appendNodePreviewSection(details, t("nodes.previewInputs"), inputs, "input");
-    appendNodePreviewSection(details, t("nodes.previewWidgets"), widgets, "widget");
-    appendNodePreviewSection(details, t("nodes.previewOutputs"), outputs, "output");
-    body.append(details);
-  }
   preview.append(body);
   positionNodePreviewPopover(preview, event, options);
 }
@@ -7401,16 +7380,16 @@ function closeNodeContextMenuFromEvent(event) {
   closeNodeContextMenu();
 }
 
-function nodesPreviewModeButton(el) {
-  const detailed = nodesState.previewMode !== "compact";
-  const title = t(detailed ? "nodes.previewModeDetailed" : "nodes.previewModeCompact");
-  const button = toolbarButton(detailed ? "previewDetailed" : "previewCompact", title, () => {
-    nodesState.previewMode = detailed ? "compact" : "detailed";
-    localStorage.setItem(NODE_PREVIEW_MODE_KEY, nodesState.previewMode);
+function nodesPreviewToggleButton(el) {
+  const title = t(nodesState.previewEnabled ? "nodes.previewDisable" : "nodes.previewEnable");
+  const button = toolbarButton(nodesState.previewEnabled ? "previewDetailed" : "previewCompact", title, () => {
+    nodesState.previewEnabled = !nodesState.previewEnabled;
+    localStorage.setItem(NODE_PREVIEW_ENABLED_KEY, nodesState.previewEnabled ? "1" : "0");
     hideNodePreview();
     renderNodesPanel(el);
   });
-  button.classList.add("workspace2-node-preview-mode-button");
+  button.classList.add("workspace2-node-preview-toggle-button");
+  button.classList.toggle("is-active", nodesState.previewEnabled);
   return button;
 }
 
@@ -7506,7 +7485,7 @@ function openNodeContextMenu(el, event, node, options = {}) {
   }, 0);
 }
 
-function appendNodePreviewCard(preview, node, inputs, widgets, outputs) {
+function appendNodePreviewCard(preview, node, inputs, widgets, outputs, presentation = null) {
   const card = document.createElement("div");
   card.className = "workspace2-node-preview-card";
 
@@ -7522,80 +7501,149 @@ function appendNodePreviewCard(preview, node, inputs, widgets, outputs) {
   titleText.textContent = node.title || node.type;
   heading.append(chevron, titleText);
   header.append(heading);
+  if (presentation?.labelKey) {
+    const badge = document.createElement("div");
+    badge.className = `workspace2-node-preview-kind is-${presentation.kind}`;
+    badge.textContent = t(presentation.labelKey);
+    header.append(badge);
+  }
 
-  const primaryOutput = outputs[0];
-  if (primaryOutput) {
-    const output = document.createElement("div");
-    output.className = "workspace2-node-preview-card-output";
-    const outputName = document.createElement("div");
-    outputName.className = "workspace2-node-preview-card-output-name";
-    outputName.textContent = primaryOutput.name || primaryOutput.type;
-    const outputPort = document.createElement("div");
-    outputPort.className = "workspace2-node-preview-port is-output";
-    outputPort.style.setProperty("--workspace2-preview-port", previewPortColor(primaryOutput.type));
-    output.append(outputName, outputPort);
-    header.append(output);
+  if (presentation?.surface) {
+    card.append(header, createNodePreviewSurface(presentation));
+  } else {
+    card.append(header);
   }
 
   const body = document.createElement("div");
   body.className = "workspace2-node-preview-card-body";
-  const miniRows = buildNodePreviewMiniRows(inputs, widgets);
-  for (const item of miniRows) {
+  const previewRows = buildNodePreviewRows({ inputs, widgets, outputs });
+  for (const previewRow of previewRows) {
+    if (previewRow.overflow) {
+      const overflow = document.createElement("div");
+      overflow.className = "workspace2-node-preview-overflow";
+      overflow.textContent = previewOverflowText(previewRow.overflow);
+      body.append(overflow);
+      continue;
+    }
     const row = document.createElement("div");
-    row.className = `workspace2-node-preview-mini-row is-${item.kind}`;
-    const port = document.createElement("div");
-    port.className = "workspace2-node-preview-mini-port";
-    port.style.setProperty("--workspace2-preview-port", previewPortColor(item.type));
-    const name = document.createElement("div");
-    name.className = "workspace2-node-preview-mini-label";
-    name.textContent = item.optional ? `${item.name}?` : item.name;
+    row.className = "workspace2-node-preview-layout-row";
+    const inputPort = document.createElement("div");
+    inputPort.className = "workspace2-node-preview-mini-port";
+    const inputName = document.createElement("div");
+    inputName.className = "workspace2-node-preview-layout-label";
     const control = document.createElement("div");
-    control.className = previewMiniControlClass(item);
-    control.textContent = previewMiniControlText(item);
-    control.title = previewValue(item.value) || item.type || "";
-    row.append(port, name, control);
+    control.className = "workspace2-node-preview-layout-control";
+    const outputName = document.createElement("div");
+    outputName.className = "workspace2-node-preview-layout-label is-output";
+    const outputPort = document.createElement("div");
+    outputPort.className = "workspace2-node-preview-mini-port is-output";
+
+    if (previewRow.input) {
+      const input = previewRow.input;
+      inputName.textContent = input.optional ? `${input.name}?` : input.name;
+      inputName.title = input.name || "";
+      if (input.kind === "input") {
+        inputPort.style.setProperty("--workspace2-preview-port", previewPortColor(input.type));
+        control.classList.add("is-empty");
+      } else {
+        inputPort.classList.add("is-hidden");
+        control.classList.add(...previewMiniControlClass(input).split(" "));
+        control.textContent = previewMiniControlText(input);
+        control.title = previewValue(input.value) || input.type || "";
+      }
+    } else {
+      inputPort.classList.add("is-hidden");
+      inputName.classList.add("is-empty");
+      control.classList.add("is-empty");
+    }
+
+    if (previewRow.output) {
+      const output = previewRow.output;
+      outputName.textContent = output.name || output.type;
+      outputName.title = output.name || output.type || "";
+      outputPort.style.setProperty("--workspace2-preview-port", previewPortColor(output.type));
+    } else {
+      outputName.classList.add("is-empty");
+      outputPort.classList.add("is-hidden");
+    }
+    row.append(inputPort, inputName, control, outputName, outputPort);
     body.append(row);
   }
-  if (!miniRows.length) {
+  if (!previewRows.length) {
     const empty = document.createElement("div");
     empty.className = "workspace2-node-preview-mini-empty";
     empty.textContent = node.category || node.type || "";
     body.append(empty);
   }
 
-  card.append(header, body);
+  card.append(body);
   preview.append(card);
 }
 
-function buildNodePreviewMiniRows(inputs, widgets) {
-  const rows = [];
-  const seen = new Set();
-  for (const value of inputs) {
-    const name = String(value?.name || "").trim();
-    if (!name || seen.has(name)) {
-      continue;
+function createNodePreviewSurface(presentation) {
+  const surface = document.createElement("div");
+  surface.className = `workspace2-node-preview-surface is-${presentation.surface}`;
+  surface.setAttribute("aria-hidden", "true");
+
+  if (presentation.surface === "text") {
+    for (let index = 0; index < 4; index += 1) {
+      const line = document.createElement("span");
+      line.className = `workspace2-node-preview-surface-line is-${index + 1}`;
+      surface.append(line);
     }
-    seen.add(name);
-    rows.push({ ...value, kind: "port" });
+    return surface;
   }
-  for (const value of widgets) {
-    const name = String(value?.name || "").trim();
-    if (!name || seen.has(name)) {
-      continue;
+
+  if (presentation.surface === "audio") {
+    appendNodePreviewSurfaceFileStrip(surface);
+    const player = document.createElement("div");
+    player.className = "workspace2-node-preview-audio-player";
+    const play = document.createElement("span");
+    play.className = "workspace2-node-preview-audio-play";
+    const waveform = document.createElement("div");
+    waveform.className = "workspace2-node-preview-audio-waveform";
+    for (let index = 0; index < 16; index += 1) {
+      const bar = document.createElement("span");
+      bar.className = "workspace2-node-preview-surface-wave";
+      bar.style.setProperty("--workspace2-wave-height", `${28 + ((index * 17) % 55)}%`);
+      waveform.append(bar);
     }
-    seen.add(name);
-    rows.push({ ...value, kind: "widget" });
-    if (rows.length >= 12) {
-      break;
-    }
+    const volume = document.createElement("span");
+    volume.className = "workspace2-node-preview-audio-volume";
+    player.append(play, waveform, volume);
+    surface.append(player);
+    return surface;
   }
-  return rows.slice(0, 12);
+
+  if (presentation.surface === "image" || presentation.surface === "video") {
+    appendNodePreviewSurfaceFileStrip(surface);
+  }
+  const frame = document.createElement("span");
+  frame.className = "workspace2-node-preview-surface-frame";
+  surface.append(frame);
+  if (presentation.surface === "video") {
+    const timeline = document.createElement("span");
+    timeline.className = "workspace2-node-preview-surface-timeline";
+    surface.append(timeline);
+  }
+  return surface;
+}
+
+function appendNodePreviewSurfaceFileStrip(surface) {
+  const fileStrip = document.createElement("div");
+  fileStrip.className = "workspace2-node-preview-surface-file";
+  const fileMark = document.createElement("span");
+  fileMark.className = "workspace2-node-preview-surface-file-mark";
+  const fileLine = document.createElement("span");
+  fileLine.className = "workspace2-node-preview-surface-file-line";
+  fileStrip.append(fileMark, fileLine);
+  surface.append(fileStrip);
 }
 
 function previewMiniControlClass(item) {
   const type = String(item?.type || "").toUpperCase();
   const classes = ["workspace2-node-preview-mini-widget"];
-  if (item?.kind === "port") {
+  if (item?.kind === "input") {
     classes.push("is-empty");
   } else if (type === "COMBO") {
     classes.push("is-combo");
@@ -7608,7 +7656,7 @@ function previewMiniControlClass(item) {
 }
 
 function previewMiniControlText(item) {
-  if (item?.kind === "port") {
+  if (item?.kind === "input") {
     return "";
   }
   const value = previewValue(item?.value);
@@ -7616,6 +7664,15 @@ function previewMiniControlText(item) {
     return value;
   }
   return String(item?.type || "");
+}
+
+function previewOverflowText(overflow) {
+  const values = [
+    overflow.inputs ? t("nodes.previewOverflowInputs", { count: overflow.inputs }) : "",
+    overflow.widgets ? t("nodes.previewOverflowWidgets", { count: overflow.widgets }) : "",
+    overflow.outputs ? t("nodes.previewOverflowOutputs", { count: overflow.outputs }) : "",
+  ].filter(Boolean);
+  return values.length ? `… ${values.join(" · ")}` : "…";
 }
 
 function previewPortColor(type) {
@@ -7646,31 +7703,6 @@ function previewValue(value) {
   return text.length > 34 ? `${text.slice(0, 31)}...` : text;
 }
 
-function appendNodePreviewSection(preview, label, values, kind) {
-  if (!values.length) {
-    return;
-  }
-  const section = document.createElement("div");
-  section.className = "workspace2-node-preview-section";
-  const title = document.createElement("div");
-  title.className = "workspace2-node-preview-section-title";
-  title.textContent = label;
-  section.append(title);
-  for (const value of values.slice(0, 24)) {
-    const row = document.createElement("div");
-    row.className = "workspace2-node-preview-row";
-    const name = document.createElement("div");
-    name.className = "workspace2-node-preview-name";
-    name.textContent = value.optional ? `${value.name}?` : value.name;
-    const type = document.createElement("div");
-    type.className = "workspace2-node-preview-type";
-    const defaultText = kind === "widget" ? previewValue(value.value) : "";
-    type.textContent = defaultText ? `${value.type} = ${defaultText}` : value.type;
-    row.append(name, type);
-    section.append(row);
-  }
-  preview.append(section);
-}
 
 function renderNSidebarMigration(el, body) {
   if (!nodesState.nSidebarPreview && !nodesState.nSidebarLoading) {

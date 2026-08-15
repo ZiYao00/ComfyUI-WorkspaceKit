@@ -83,9 +83,9 @@ export function createTemplateGroupHeaderRenderer({
     const actions = document.createElement("div");
     actions.className = "workspace2-actions";
     actions.append(
-      iconButton("folderPlus", translate("menu.newSubfolder"), onNewSubfolder),
-      iconButton("edit", translate("templates.renameGroup"), onStartRename),
-      dangerIconButton("trash", translate("templates.deleteGroupTitle"), onDelete),
+      iconButton("templates.group.newSubfolder", translate("menu.newSubfolder"), onNewSubfolder),
+      iconButton("templates.group.rename", translate("templates.renameGroup"), onStartRename),
+      dangerIconButton("templates.group.delete", translate("templates.deleteGroupTitle"), onDelete),
     );
     header.append(disclosure, icon, name, actions);
     section.append(header);

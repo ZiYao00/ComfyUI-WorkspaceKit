@@ -11,6 +11,21 @@ License: ISC
 
 Copyright (c) 2020, Lucide Contributors
 
+### Creation-icon refresh (2026-08-15)
+
+`folderPlusModern`, `layersPlus`, and `libraryPlus` in
+`entry/ui-kit/icons.js` use the following SVG paths from the Lucide repository
+at commit `a7c781bd43dbf295a4c2ab07d25d544dd7879bf9`:
+
+- `icons/folder-plus.svg`
+- `icons/layers.svg`
+- `icons/library-big.svg`
+
+Scope: local inline SVG path data only. WorkspaceKit combines the latter two
+with a small local plus mark so folders, canvas groups, and template groups
+have distinct action silhouettes. No Lucide package, font, CDN, or runtime
+network request is included.
+
 Permission to use, copy, modify, and/or distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
 copyright notice and this permission notice appear in all copies.

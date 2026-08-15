@@ -1,6 +1,6 @@
 // Local, offline icon subset for the WorkspaceKit family UI.
 // Source: lucide-static v1.28.0 (ISC). The original SVG definitions are
-// intentionally reduced to the six icons WK currently needs; no CDN, icon
+// intentionally reduced to the icons WK currently needs; no CDN, icon
 // font, or full Lucide package is loaded at runtime. See docs/THIRD_PARTY_NOTICES.md.
 
 export const WORKSPACEKIT_ICON_SOURCE = Object.freeze({
@@ -73,6 +73,25 @@ const iconDefinitions = Object.freeze({
   folderPlus: Object.freeze([
     ["path", { d: "M3 7h5l2 2h11v9a2 2 0 0 1-2 2H3z" }],
     ["path", { d: "M12 14h6" }], ["path", { d: "M15 11v6" }],
+  ]),
+  // High-frequency creation actions deliberately use different silhouettes:
+  // folders are filesystem containers, groups are layers, and template groups
+  // are reusable libraries. See icon-semantics.js for their action mapping.
+  folderPlusModern: Object.freeze([
+    ["path", { d: "M12 10v6" }], ["path", { d: "M9 13h6" }],
+    ["path", { d: "M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" }],
+  ]),
+  layersPlus: Object.freeze([
+    ["path", { d: "M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" }],
+    ["path", { d: "M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l3.17-1.44" }],
+    ["path", { d: "M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l3.17-1.44" }],
+    ["path", { d: "M19 15v6" }], ["path", { d: "M16 18h6" }],
+  ]),
+  libraryPlus: Object.freeze([
+    ["rect", { width: "8", height: "18", x: "2.5", y: "3", rx: "1" }],
+    ["path", { d: "M6.5 3v18" }],
+    ["path", { d: "M14.4 16.9c.2.5-.1 1.1-.6 1.3l-1.9.7c-.5.2-1.1-.1-1.3-.6L5.1 5.1c-.2-.5.1-1.1.6-1.3l1.9-.7c.5-.2 1.1.1 1.3.6Z" }],
+    ["path", { d: "M19 15v6" }], ["path", { d: "M16 18h6" }],
   ]),
   copy: Object.freeze([
     ["rect", { width: "12", height: "12", x: "8", y: "8", rx: "1" }],

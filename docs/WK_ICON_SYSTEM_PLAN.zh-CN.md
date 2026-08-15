@@ -1,7 +1,8 @@
 # WK 图标系统计划
 
-> 状态：**进行中：Batch 0、1、2、2.1、3.1、3.2 与 3.3 已完成；剩余公开指南与跨主题视觉验收。**  
-> 更新：2026-08-03  
+> 状态：**Batch 0–4 已完成；2026-08-15 P-05 审计已完成，剩余跨主题/缩放的真实视觉验收。**
+>
+> 更新：2026-08-15
 > 范围：`ComfyUI-WorkspaceKit`（真源）、`ComfyUI-WorkspaceKit-Layout`、`ComfyUI-WorkspaceKit-Theme`
 
 ## 1. 目标
@@ -64,7 +65,7 @@ WK、WK 版式与 WK 主题目前混用 emoji、PrimeIcons、手写 SVG 和不�
 ### Batch 1 真源与 Vendor（完成，2026-08-03）
 
 - 三仓修改前备份已创建：WK、Layout、Theme 各一份 `50-integrations/...before-wk-icon-kit-batch1-20260803-*` 源码压缩包；
-- WK 真源新增 `entry/ui-kit/icons.js`：本地固定的 36 枚功能 SVG，包含三个入口键 `workspacekit` / `theme` / `layout`、首批功能键 `settings` / `trash` / `restore`，以及回收站返回、高频工具栏与行操作键；
+- WK 真源新增 `entry/ui-kit/icons.js`：本地固定的功能 SVG 子集；截至 2026-08-15 审计共有 40 个键，包含三个入口键 `workspacekit` / `theme` / `layout`、`settings` / `trash` / `restore`，以及回收站返回、高频工具栏与行操作键；
 - UI Template 升至 `1.5.0`，新增只增不破的 `icon-kit` capability 和 `createIcon(iconKey, options)`；
 - 现有多目标导出已把 `icons.js` 与 `1.5.0` manifest 写入 Layout、Theme Vendor，并通过双端哈希校验；
 - 已通过 `node --check`、Panel UI Template primitive / compatibility / export contracts。尚未在真实页面替换图标，因此本批不声称视觉验收完成。
@@ -123,6 +124,65 @@ WK、WK 版式与 WK 主题目前混用 emoji、PrimeIcons、手写 SVG 和不�
 - `installWorkspace2SidebarEmojiIcon` → `installWorkspace2SidebarIcon` 的改名此前只更新了 `entry.js` 的三处引用，`scripts/test-sidebar-startup-resilience.mjs` 仍按旧名做源码字面量断言，导致整套测试长期有一项失败。断言已更新；`npm test` 现为 67 项 JS 合同、3 项 Python 合同与版本检查全绿。
 - `--all --verify` 曾对 Layout 与 Theme 各报 5 个哈希不匹配。经 `diff --strip-trailing-cr` 证实内容完全一致，差异仅为行尾符：Windows 上 Git 的 `autocrlf` 把 WK 真源改为 CRLF，而导出的 Vendor 副本保持 LF。浏览器不关心行尾符，运行时未受影响；但**长期为红的校验比没有校验更危险**——它会掩盖自己本该发现的真实内容分歧（见 Batch 2 记录：Vendor 缺少 helper 曾导致 Theme 完全无法加载）。已让哈希在比较前归一化行尾符；磁盘上的 manifest 在归一化后本就匹配，因此**无需重新导出**。并已实测：向 Theme Vendor 注入一行注释立即报 `hash mismatch: version.js`，还原后转绿——对行尾符宽容，对内容依然严格。
 - `docs/ENTRY_MAP.md` 的侧边栏区段仍是旧函数名与抽取前的行号（L11865–12178，实际已前移约 4000 行），文件头还写着 ~12,200 行（实际 8,047 行）。已更新该区段锚点与总行数，并说明入口现为本地 SVG mask、`icon: "pi pi-sitemap"` 仅作注册回退；`docs/TESTING.md` 基线中的旧 CSS id 与过时合同数也已更正。
+
+### P-05 当前审计（2026-08-15）
+
+- 已建立源码回退包：`.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-p05-icon-system-audit-20260815-081519.zip`（349 个源文件）。
+- 静态盘点覆盖 `iconSvg()`、工具栏、图标按钮与菜单项：24 个实际功能引用全部存在于本地 Icon Kit 的 40 个定义中。
+- 唯一不在 Icon Kit 的字面量是 `pi pi-sitemap`。它只作为当前 ComfyUI `SidebarTabExtension` 的注册 class-string 兼容回退；可见侧边栏入口仍由 `workspacekit` SVG mask 绘制，不能将其误报为未迁移图标。
+- 已通过 Panel UI Template compatibility / export 与 sidebar-startup-resilience 合同。没有为凑“图标任务”而改动按钮语义、尺寸、颜色或回调。
+
+**下一步验收而非重写：** 在 WK 合并模式下检查深色、浅色、透明、磨砂四态，以及 100% / 125% / 150% 缩放下的侧边栏入口、三面板工具栏、回收站和设置图标。发现真实不一致时，再按一个区域一批修复。
+
+### P-05a 图标语义层与高频新建动作（完成静态验证，2026-08-15）
+
+- `entry/ui-kit/icon-semantics.js` 建立了唯一的“功能语义 → 本地 Icon Kit 键”映射；UI 调用可使用如 `nodes.groups.create`，不再把业务含义直接绑定到 `folderPlus` 的具体图形。
+- 第一轮已迁移工作流文件菜单的打开/新建工作流/新建文件夹，以及节点、模板、画布编组页的“新建分组”入口。未知旧键仍可原样解析，因此本批不影响尚未迁移的区域。
+- 高频新建动作不再共用一个文件夹加号：工作流文件夹使用 `folderPlusModern`，节点与画布编组使用 `layersPlus`，模板组使用 `libraryPlus`。这三项只改变可见图形，不改按钮文字、快捷键、菜单顺序或回调。
+- 新图形路径来源、固定提交、许可与本地改动范围已登记到 `docs/THIRD_PARTY_NOTICES.md`。`test-icon-semantics.mjs` 断言所有语义解析到现有本地图标，且三种新建语义不能退化为相同图形；95 项 JavaScript 合同测试通过。
+
+**仍待真实页面验收：** 测试包的插件目录已确认链接到 WK 真源，且 8190 服务正常；刷新页面后应检查这三个新建按钮的辨识度、暗/浅主题可读性与 100% / 125% / 150% 缩放表现。若视觉方向不合适，只改本节的映射或少数 SVG 定义，不回头改各面板业务代码。
+
+### P-05b 工作流工具栏与文件菜单语义迁移（完成静态验证，2026-08-15）
+
+- 已建立单独源码回退包：`.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-workflow-icon-semantics-20260815-083613.zip`（351 个源文件）。
+- 范围严格限于工作流顶部的打开、进入/离开回收站，以及“文件”菜单内的打开、新建、保存、另存为、重命名、复制、两种导出和移入回收站。它们均改为 `workflows.*` 语义键。
+- 菜单顺序、文字、禁用条件、官方命令调用、文件系统操作与回收站行为均未改动；行操作、Browse 右键菜单和回收站列表明确不在本批，留给下一工作流区域批次。
+- `test-icon-semantics.mjs` 追加了工作流保存与回收站双状态的映射断言；95 项 JavaScript 合同测试及文件菜单合同测试通过。
+
+### P-05c 工作流 Browse、右键菜单与回收站语义迁移（完成静态验证，2026-08-15）
+
+- 已建立源码回退包：`.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-workflow-row-icon-semantics-20260815-091511.zip`（351 个源文件）。
+- Browse 行、文件/文件夹右键菜单与工作流回收站列表均改为 `workflows.row.*`、`workflows.folder.*`、`workflows.trash.*` 语义键；包括新建子文件夹、打开位置、复制、改名、移到根目录、解散层级、移入回收站、恢复与转系统回收站。
+- 此批没有改动操作回调、删除确认、文件读写、拖拽、重命名或官方工作流同步。行渲染与右键菜单合同由“固定 SVG 键”升级为“固定语义、固定菜单顺序”；相关专项测试和完整 95 项 JavaScript 合同测试均通过。
+
+### P-05 收尾与视觉偏好记录（2026-08-15）
+
+- 本阶段已完成图标语义基础、工作流区域迁移与静态回归；本轮到此收尾，不再扩大图标替换范围。
+- 用户明确偏好：高频对象图标，尤其“新建文件夹”和“打开”，外轮廓应有圆润转角；视觉上明显直角、硬朗的文件夹轮廓不作为 WK 的候选方向。
+- 这是视觉选择规则，不通过 CSS 强行把直角 SVG “圆角化”，也不在本轮为两枚图标单独重绘。
+- `.dev-docs/icon-candidate-gallery.html` 仅为本地研究页，不属于插件运行时或发行内容。未来若正式换整套图标库，应先按上述偏好选择主库，再通过语义映射和资产注册层一次迁移，避免在各面板逐处改 SVG。
+
+### P-05d WK 其余功能图标语义迁移（完成静态验证，2026-08-15）
+
+- 已建立源码回退包：`.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-icon-semantics-wk-remaining-panels-20260815-182759.zip`（351 个源文件）。
+- 节点、模板、画布编组和设置页的功能图标已迁到语义键：覆盖设置分类和数据导入/导出、节点的排序/同步/预览/收藏管理、模板的排序/保存/回收站/行操作、画布编组行操作与搜索框清空。
+- 仅改 `iconSvg()`、工具栏和行渲染的输入键；不改变实际 SVG 图形、入口图标、按钮顺序、设置存储、删除流程或回调行为。
+- `test-icon-semantics.mjs` 追加设置、节点、模板与画布编组断言；完整 95 项 JavaScript 合同测试与 `git diff --check` 通过。
+
+### P-05e 家族功能图标适配层（完成静态验证，2026-08-15）
+
+- 三枚侧边栏入口图标维持现状，未改 WK 的 🧩、Layout 的 `layout` 或 Theme 的 `theme` 入口资产与注册回退。
+- Layout 新增 `layout.toolbar.*` 语义到其既有展示 SVG 的适配层；Theme 新增 `theme.*` 语义到其既有 Theme SVG 的适配层。两者的内部按钮不再在调用位置绑定资产键。
+- 已建立独立源码回退包：`ComfyUI-WorkspaceKit-Layout/.codex-backups/50-integrations/ComfyUI-WorkspaceKit-Layout-before-icon-semantics-adapter-20260815-183121.zip` 与 `ComfyUI-WorkspaceKit-Theme/.codex-backups/50-integrations/ComfyUI-WorkspaceKit-Theme-before-icon-semantics-adapter-20260815-183121.zip`。
+- 这一层先统一“调用方式”，保持现有图形不变；将来正式筛选新图标库时，可逐个替换映射目标，不必重新改 Layout/Theme 的功能逻辑。
+
+### P-05f 暂停与命名交接（2026-08-15）
+
+- 当前图标语义迁移已停在“调用层统一、入口图标不动”的边界；本轮未提交、未推送，保留现有未提交改动。
+- 已确认的家族中文全名为 `WK 面板`、`WK 布局`、`WK 主题`，并预留 `WK 图库`、`WK 模型`；英文完整名为 `WK Panel`、`WK Layout`、`WK Theme`、`WK Gallery`、`WK Models`。
+- WK 面板核心标签的未来顺序为 `工作流 / 节点 / 模板 / 图库 / 模型`；Layout、Theme 保持可选 Provider，合并后使用短标签 `布局 / 主题`，不占用图库或模型的位置。
+- 技术身份、仓库名、Provider ID、`iconKey`、存储键与侧边栏入口图标均未改动。待新的 UI 面板改革计划完成评审后，再决定命名合同、Vendor 真源和图标资产的下一批实施顺序。
 
 ## 6. 验收矩阵
 

@@ -5,6 +5,7 @@ import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-grou
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { publishWorkspaceKitPanelUiTemplate } from "./integrations/panel-ui-template-api.js";
 import { createWorkspaceKitIcon } from "./ui-kit/icons.js";
+import { resolveWorkspaceKitIcon } from "./ui-kit/icon-semantics.js";
 import {
   WORKSPACEKIT_MENU_MARK,
   planCanvasMenuOrder,
@@ -138,6 +139,10 @@ import {
   closeWorkflowSortMenu as closeWorkflowSortMenuRenderer,
   openWorkflowSortMenu as openWorkflowSortMenuRenderer,
 } from "./workflows/sort-menu-renderer.js";
+import {
+  closeWorkflowFileMenu as closeWorkflowFileMenuRenderer,
+  openWorkflowFileMenu as openWorkflowFileMenuRenderer,
+} from "./workflows/file-menu-renderer.js";
 import {
   CANVAS_GROUP_CTRL_G_KEY,
   CANVAS_GROUPS_TAB_ID,
@@ -321,6 +326,8 @@ const state = {
   contextMenuElement: null,
   sortMenuElement: null,
   sortMenuCloseHandler: null,
+  fileMenuElement: null,
+  fileMenuCloseHandler: null,
   showTrash: false,
   trashItems: [],
   draggingItem: null,
@@ -1614,8 +1621,8 @@ function createWorkspaceDataManagementSection() {
   const help = settingsHelp(t("settings.dataManagementHelp"));
   const buttons = document.createElement("div");
   buttons.className = "workspace2-settings-action-buttons";
-  const exportButton = settingsActionButton("download", t("settings.dataExport"), exportWorkspaceDataBundle);
-  const importButton = settingsActionButton("upload", t("settings.dataImport"), importWorkspaceDataBundle, { variant: "warning" });
+  const exportButton = settingsActionButton("settings.data.export", t("settings.dataExport"), exportWorkspaceDataBundle);
+  const importButton = settingsActionButton("settings.data.import", t("settings.dataImport"), importWorkspaceDataBundle, { variant: "warning" });
   buttons.append(exportButton, importButton);
   actions.append(help, buttons);
   return settingsSection(t("settings.dataManagement"), [actions]);
@@ -1739,12 +1746,12 @@ function openWorkspaceSettings() {
   // the feature group (Groups/Workflows/Templates), then Shortcuts/Advanced.
   // `dividerBefore` renders a separator line above that entry.
   const settingPages = [
-    { id: "appearance", label: t("settings.nav.appearance"), icon: "palette", sections: [backgroundEffect] },
-    { id: "groups", label: t("settings.nav.groups"), icon: "badge", dividerBefore: true, sections: [groupSettings] },
-    { id: "workflows", label: t("settings.nav.workflows"), icon: "files", sections: [workflowSettings] },
-    { id: "templates", label: t("settings.nav.templates"), icon: "template", sections: [templateSettings] },
-    { id: "shortcuts", label: t("settings.nav.shortcuts"), icon: "keyboard", dividerBefore: true, sections: [shortcuts].filter(Boolean) },
-    { id: "advanced", label: t("settings.nav.advanced"), icon: "settings", sections: [integrations, providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
+    { id: "appearance", label: t("settings.nav.appearance"), icon: "settings.nav.appearance", sections: [backgroundEffect] },
+    { id: "groups", label: t("settings.nav.groups"), icon: "settings.nav.groups", dividerBefore: true, sections: [groupSettings] },
+    { id: "workflows", label: t("settings.nav.workflows"), icon: "settings.nav.workflows", sections: [workflowSettings] },
+    { id: "templates", label: t("settings.nav.templates"), icon: "settings.nav.templates", sections: [templateSettings] },
+    { id: "shortcuts", label: t("settings.nav.shortcuts"), icon: "settings.nav.shortcuts", dividerBefore: true, sections: [shortcuts].filter(Boolean) },
+    { id: "advanced", label: t("settings.nav.advanced"), icon: "settings.nav.advanced", sections: [integrations, providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
   ];
   const settingsLayout = document.createElement("div");
   settingsLayout.className = "workspace2-settings-layout";
@@ -2916,8 +2923,9 @@ function iconSvg(name) {
   // legacy map below is intentionally fallback-only for unknown third-party
   // keys; no Workflows, Nodes, Templates, search-toolbar, or Settings key
   // should take that path.
+  const iconKey = resolveWorkspaceKitIcon(name);
   try {
-    return createWorkspaceKitIcon(document, name);
+    return createWorkspaceKitIcon(document, iconKey);
   } catch (error) {
     if (!(error instanceof RangeError)) throw error;
   }
@@ -2970,6 +2978,28 @@ function toolbarButton(iconName, title, onClick) {
   element.setAttribute("aria-label", title);
   element.append(iconSvg(iconName));
   element.addEventListener("click", onClick);
+  return element;
+}
+
+function toolbarTextButton(label, title, onClick) {
+  const element = document.createElement("button");
+  element.className = "workspace2-toolbar-text-button";
+  element.type = "button";
+  element.title = title;
+  element.setAttribute("aria-label", title);
+  const text = document.createElement("span");
+  text.textContent = label;
+  const caret = iconSvg("chevronDown");
+  caret.classList.add("workspace2-toolbar-text-caret");
+  element.append(text, caret);
+  element.addEventListener("click", onClick);
+  return element;
+}
+
+function toolbarDivider() {
+  const element = document.createElement("span");
+  element.className = "workspace2-toolbar-divider";
+  element.setAttribute("aria-hidden", "true");
   return element;
 }
 
@@ -3836,7 +3866,7 @@ function renderTemplateTrashBody(el, body) {
     info.className = "workspace2-trash-info";
     const icon = document.createElement("span");
     icon.className = "workspace2-icon";
-    icon.append(iconSvg("template"));
+    icon.append(iconSvg("templates.trash.item"));
     const text = document.createElement("div");
     text.className = "workspace2-trash-text";
     const name = document.createElement("div");
@@ -3846,8 +3876,8 @@ function renderTemplateTrashBody(el, body) {
     meta.className = "workspace2-trash-meta";
     meta.textContent = t("templates.trashDeleted", { date: new Date(entry.deletedAt).toLocaleString() });
     text.append(name, meta); info.append(icon, text);
-    row.append(info, iconButton("restore", t("templates.restore"), async () => restoreTemplateTrashEntry(el, entry)));
-    row.append(dangerIconButton("trash", t("templates.deletePermanently"), (event) => {
+    row.append(info, iconButton("templates.trash.restore", t("templates.restore"), async () => restoreTemplateTrashEntry(el, entry)));
+    row.append(dangerIconButton("templates.trash.deletePermanently", t("templates.deletePermanently"), (event) => {
       workspace2InlineConfirm(event.currentTarget, { confirmText: t("confirm.delete"), onConfirm: async () => permanentlyDeleteTemplateTrashEntry(el, entry) });
     }));
     list.append(row);
@@ -5600,7 +5630,7 @@ function nodesSortButton(el) {
     nodesState.sort = "original";
   }
   const label = t(`nodes.sort.${nodesState.sort}`);
-  const button = toolbarButton("sort", t("nodes.sortTitle", { sort: label }), (event) => {
+  const button = toolbarButton("nodes.toolbar.sort", t("nodes.sortTitle", { sort: label }), (event) => {
     event.preventDefault();
     event.stopPropagation();
     if (nodesState.sortMenuElement) {
@@ -5699,13 +5729,14 @@ function workflowSortButton(el) {
     state.sort = "nameAsc";
   }
   const label = t(`workflows.sort.${state.sort}`);
-  const button = toolbarButton("sort", t("workflows.sortTitle", { sort: label }), (event) => {
+  const button = toolbarTextButton(t("workflows.sortMenu"), t("workflows.sortTitle", { sort: label }), (event) => {
     event.preventDefault();
     event.stopPropagation();
     if (state.sortMenuElement) {
       closeWorkflowSortMenu();
       return;
     }
+    closeWorkflowFileMenu();
     openWorkflowSortMenu(el, event.currentTarget);
   });
   button.classList.add("workspace2-workflow-sort-button");
@@ -5731,6 +5762,63 @@ function openWorkflowSortMenu(el, anchor) {
     handleError,
     closeMenu: closeWorkflowSortMenu,
   }, el, anchor);
+}
+
+function closeWorkflowFileMenu() {
+  closeWorkflowFileMenuRenderer({ state });
+  document.querySelector(".workspace2-workflow-file-button")?.classList.remove("is-menu-open");
+}
+
+function activeWorkflowBrowseItem() {
+  const activeWorkflow = getActiveOfficialWorkflow(app);
+  const activePath = relativeWorkflowPathFromOfficial(activeWorkflow?.path || "");
+  if (!activePath) return null;
+  return state.items.find((item) => item.type === "file" && item.path === activePath) || null;
+}
+
+async function executeOfficialWorkflowCommand(commandId) {
+  const execute = app?.extensionManager?.command?.execute;
+  if (typeof execute !== "function") {
+    throw new Error("Current ComfyUI frontend does not expose the workflow command service");
+  }
+  await execute(commandId);
+}
+
+function openWorkflowFileMenu(el, anchor) {
+  const activeWorkflow = getActiveOfficialWorkflow(app);
+  const activeItem = activeWorkflowBrowseItem();
+  const hasActiveWorkflow = Boolean(activeWorkflow);
+  const canCreate = !state.showTrash;
+  openWorkflowFileMenuRenderer({
+    state,
+    el,
+    anchor,
+    createIcon: iconSvg,
+    handleError,
+    closeMenu: closeWorkflowFileMenu,
+    items: [
+      { icon: "workflows.file.open", label: t("toolbar.openWorkflow"), onClick: () => openWorkflowFileFromPicker(el) },
+      { separator: true },
+      { icon: "workflows.file.create", label: t("workflows.fileNewWorkflow"), disabled: !canCreate, onClick: () => createWorkflow(el) },
+      { icon: "workflows.folder.create", label: t("workflows.fileNewFolder"), disabled: !canCreate, onClick: () => createFolder(el, selectedFolderPath()) },
+      { separator: true },
+      { icon: "workflows.file.save", label: t("workflows.fileSave"), disabled: !hasActiveWorkflow, onClick: () => executeOfficialWorkflowCommand("Comfy.SaveWorkflow") },
+      { icon: "workflows.file.saveAs", label: t("workflows.fileSaveAs"), disabled: !hasActiveWorkflow, onClick: () => executeOfficialWorkflowCommand("Comfy.SaveWorkflowAs") },
+      { icon: "workflows.file.rename", label: t("menu.rename"), disabled: !hasActiveWorkflow, onClick: () => executeOfficialWorkflowCommand("Comfy.RenameWorkflow") },
+      { icon: "workflows.file.copy", label: t("row.copy"), disabled: !activeItem, onClick: () => copyWorkflow(el, activeItem) },
+      { separator: true },
+      { icon: "workflows.file.export", label: t("workflows.fileExport"), disabled: !hasActiveWorkflow, onClick: () => executeOfficialWorkflowCommand("Comfy.ExportWorkflow") },
+      { icon: "workflows.file.exportApi", label: t("workflows.fileExportApi"), disabled: !hasActiveWorkflow, onClick: () => executeOfficialWorkflowCommand("Comfy.ExportWorkflowAPI") },
+      { separator: true },
+      {
+        icon: "workflows.file.moveToTrash",
+        label: t("menu.moveToTrash"),
+        disabled: !activeItem,
+        keepOpen: true,
+        onClick: (button) => requestMoveWorkflowToTrash(el, activeItem, button),
+      },
+    ],
+  });
 }
 
 function prepareWorkspaceSidebarHost(el) {
@@ -6503,25 +6591,23 @@ function renderPanel(el) {
   panel.addEventListener("click", () => {
     closeContextMenu();
     closeWorkflowSortMenu();
+    closeWorkflowFileMenu();
   });
 
-  const newFolder = toolbarButton("folderPlus", t("toolbar.newFolder"), async () => {
-    try {
-      await createFolder(el, selectedFolderPath());
-    } catch (error) {
-      handleError(el, error);
+  const file = toolbarTextButton(t("workflows.fileMenu"), t("workflows.fileMenuTitle"), (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (state.fileMenuElement) {
+      closeWorkflowFileMenu();
+      return;
     }
+    closeWorkflowSortMenu();
+    openWorkflowFileMenu(el, event.currentTarget);
+    file.classList.toggle("is-menu-open", Boolean(state.fileMenuElement));
   });
+  file.classList.add("workspace2-workflow-file-button");
 
-  const newWorkflow = toolbarButton("filePlus", t("toolbar.newWorkflow"), async () => {
-    try {
-      await createWorkflow(el);
-    } catch (error) {
-      handleError(el, error);
-    }
-  });
-
-  const open = toolbarButton("folderOpen", t("toolbar.openWorkflow"), async () => {
+  const open = toolbarButton("workflows.toolbar.open", t("toolbar.openWorkflow"), async () => {
     try {
       await openWorkflowFileFromPicker(el);
     } catch (error) {
@@ -6529,7 +6615,7 @@ function renderPanel(el) {
     }
   });
 
-  const trash = toolbarButton(state.showTrash ? "arrowLeft" : "trash", state.showTrash ? t("toolbar.showFiles") : t("toolbar.showTrash"), async () => {
+  const trash = toolbarButton(state.showTrash ? "workflows.toolbar.leaveTrash" : "workflows.toolbar.enterTrash", state.showTrash ? t("toolbar.showFiles") : t("toolbar.showTrash"), async () => {
     try {
       state.showTrash = !state.showTrash;
       if (state.showTrash) {
@@ -6552,7 +6638,7 @@ function renderPanel(el) {
     focusKey: "workflow-search",
     placeholder: t("search.placeholder"),
     value: state.query,
-    buttons: [newFolder, newWorkflow, open, workflowSortButton(el), trash],
+    buttons: [file, workflowSortButton(el), toolbarDivider(), open, trash],
     onInput: (value) => {
       state.query = value;
       scheduleWorkflowResultsRefresh(el);
@@ -6734,13 +6820,13 @@ function renderCanvasGroupRow(el, group) {
   const actions = document.createElement("div");
   actions.className = "workspace2-actions";
   actions.append(
-    iconButton("target", t("canvasGroups.locate"), () => focusCanvasGroup(group)),
-    iconButton("edit", t("canvasGroups.rename"), () => renameCanvasGroup(el, group)),
-    iconButton("restore", t("canvasGroups.toggleBypass"), () => {
+    iconButton("canvasGroups.locate", t("canvasGroups.locate"), () => focusCanvasGroup(group)),
+    iconButton("canvasGroups.rename", t("canvasGroups.rename"), () => renameCanvasGroup(el, group)),
+    iconButton("canvasGroups.toggleBypass", t("canvasGroups.toggleBypass"), () => {
       workspace2CanvasGroups.toggleBypass?.(group.id);
       renderCanvasGroupsPanel(el);
     }),
-    dangerIconButton("trash", t("canvasGroups.delete"), () => deleteCanvasGroup(el, group)),
+    dangerIconButton("canvasGroups.delete", t("canvasGroups.delete"), () => deleteCanvasGroup(el, group)),
   );
 
   row.append(swatch, info, actions);
@@ -6763,11 +6849,11 @@ function renderCanvasGroupsPanel(el) {
   const query = canvasGroupsState.query.trim().toLowerCase();
   const visibleGroups = groups.filter((group) => canvasGroupMatches(group, query));
   const header = createPanelHeader(t("canvasGroups.title"), t("canvasGroups.status", { count: groups.length }));
-  const create = toolbarButton("folderPlus", t("canvasGroups.create"), () => {
+  const create = toolbarButton("canvasGroups.create", t("canvasGroups.create"), () => {
     workspace2CanvasGroups.createGroupFromSelection?.();
     renderCanvasGroupsPanel(el);
   });
-  const refresh = toolbarButton("refresh", t("canvasGroups.refresh"), () => renderCanvasGroupsPanel(el));
+  const refresh = toolbarButton("canvasGroups.refresh", t("canvasGroups.refresh"), () => renderCanvasGroupsPanel(el));
   const toolbar = createSearchToolbar({
     focusKey: "canvas-groups-search",
     placeholder: t("canvasGroups.searchPlaceholder"),
@@ -6940,7 +7026,7 @@ function templatesSortButton(el) {
     templatesState.sort = "manual";
   }
   const label = t(`templates.sort.${templatesState.sort}`);
-  const button = toolbarButton("sort", t("templates.sortTitle", { sort: label }), (event) => {
+  const button = toolbarButton("templates.toolbar.sort", t("templates.sortTitle", { sort: label }), (event) => {
     event.preventDefault();
     event.stopPropagation();
     if (templatesState.sortMenuElement) {
@@ -7029,7 +7115,7 @@ function renderTemplatesPanel(el) {
     t("templates.status", { count: templates.length }),
     { statusDataset: "workspace2TemplatesStatus" },
   );
-  const newGroup = toolbarButton("folderPlus", t("templates.newGroup"), async () => {
+  const newGroup = toolbarButton("templates.groups.create", t("templates.newGroup"), async () => {
     try {
       await createTemplateGroup(el);
     } catch (error) {
@@ -7037,7 +7123,7 @@ function renderTemplatesPanel(el) {
       renderTemplatesPanel(el);
     }
   });
-  const save = toolbarButton("template", t("templates.saveSelected"), async () => {
+  const save = toolbarButton("templates.toolbar.saveSelected", t("templates.saveSelected"), async () => {
     try {
       await saveSelectedNodesAsTemplate(el);
     } catch (error) {
@@ -7046,7 +7132,7 @@ function renderTemplatesPanel(el) {
     }
   });
   const trash = toolbarButton(
-    templatesState.showTrash ? "arrowLeft" : "trash",
+    templatesState.showTrash ? "templates.toolbar.leaveTrash" : "templates.toolbar.enterTrash",
     t(templatesState.showTrash ? "templates.showLibrary" : "templates.showTrash"),
     () => {
       templatesState.showTrash = !templatesState.showTrash;
@@ -7186,7 +7272,7 @@ function renderNodesPanel(el) {
         ? `${t("nodes.status", { count: nodeTypes.length })} · ${t("nodes.updatingDefinitions")}`
         : t("nodes.status", { count: nodeTypes.length });
 
-  const newGroup = toolbarButton("folderPlus", t("nodes.newGroup"), async () => {
+  const newGroup = toolbarButton("nodes.groups.create", t("nodes.newGroup"), async () => {
     try {
       await createNodeGroup(el);
     } catch (error) {
@@ -7195,7 +7281,7 @@ function renderNodesPanel(el) {
     }
   });
 
-  const syncOfficial = toolbarButton("arrowsUpDown", t("nodes.officialFavoritesSyncMenu"), async (event) => {
+  const syncOfficial = toolbarButton("nodes.toolbar.syncOfficial", t("nodes.officialFavoritesSyncMenu"), async (event) => {
     if (nodesState.officialFavoritesLoading) {
       return;
     }
@@ -7382,7 +7468,7 @@ function closeNodeContextMenuFromEvent(event) {
 
 function nodesPreviewToggleButton(el) {
   const title = t(nodesState.previewEnabled ? "nodes.previewDisable" : "nodes.previewEnable");
-  const button = toolbarButton(nodesState.previewEnabled ? "previewDetailed" : "previewCompact", title, () => {
+  const button = toolbarButton(nodesState.previewEnabled ? "nodes.preview.disable" : "nodes.preview.enable", title, () => {
     nodesState.previewEnabled = !nodesState.previewEnabled;
     localStorage.setItem(NODE_PREVIEW_ENABLED_KEY, nodesState.previewEnabled ? "1" : "0");
     hideNodePreview();
@@ -7727,7 +7813,7 @@ function renderNSidebarMigration(el, body) {
 
   const info = document.createElement("div");
   info.className = "workspace2-root-target";
-  info.append(iconSvg("restore"));
+  info.append(iconSvg("nodes.import.restore"));
   const text = document.createElement("div");
   text.className = "workspace2-name";
   text.textContent = t("nodes.importNSidebarSummary", {
@@ -7736,7 +7822,7 @@ function renderNSidebarMigration(el, body) {
   });
   info.append(text);
 
-  const button = iconButton("restore", t("nodes.importNSidebar"), async () => {
+  const button = iconButton("nodes.import.restore", t("nodes.importNSidebar"), async () => {
     await importNSidebarPreview(el);
   });
 
@@ -7967,13 +8053,13 @@ function renderFavoriteGroupFolder(el, section, group, nodeMap, query, depth = 0
   const actions = document.createElement("div");
   actions.className = "workspace2-actions";
   actions.append(
-    iconButton("folderPlus", t("menu.newSubfolder"), async () => {
+    iconButton("nodes.group.newSubfolder", t("menu.newSubfolder"), async () => {
       await createNodeGroup(el, group.id);
     }),
-    iconButton("edit", t("nodes.renameGroup"), async () => {
+    iconButton("nodes.group.rename", t("nodes.renameGroup"), async () => {
       await renameNodeGroup(el, group);
     }),
-    dangerIconButton("trash", t("nodes.deleteGroupTitle"), (event) => {
+    dangerIconButton("nodes.group.delete", t("nodes.deleteGroupTitle"), (event) => {
       event.preventDefault();
       event.stopPropagation();
       requestDeleteNodeGroup(el, group, event.currentTarget);
@@ -8063,11 +8149,11 @@ function renderFavoriteNodeRow(el, favorite) {
   const actions = document.createElement("div");
   actions.className = "workspace2-actions";
   actions.append(
-    iconButton("edit", t("nodes.editAlias"), async () => {
+    iconButton("nodes.favorite.rename", t("nodes.editAlias"), async () => {
       beginFavoriteAliasEdit(el, favorite);
     }),
   );
-  const favoriteButton = iconButton("starFilled", t("nodes.removeFavorite"), async () => {
+  const favoriteButton = iconButton("nodes.favorite.remove", t("nodes.removeFavorite"), async () => {
     await removeFavoriteNode(el, favorite.type);
   });
   favoriteButton.classList.add("is-favorite-active");

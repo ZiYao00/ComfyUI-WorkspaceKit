@@ -144,7 +144,7 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
   const actions = document.createElement("div");
   actions.className = "workspace2-actions";
   if (node.type === "folder") {
-    actions.append(iconButton("folderPlus", t("menu.newSubfolder"), async () => {
+    actions.append(iconButton("workflows.row.newSubfolder", t("menu.newSubfolder"), async () => {
       try {
         await onNewSubfolder(el, node.path);
       } catch (error) {
@@ -152,14 +152,14 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
       }
     }));
   } else {
-    actions.append(iconButton("folderOpen", t("row.openLocation"), async () => {
+    actions.append(iconButton("workflows.row.openLocation", t("row.openLocation"), async () => {
       try {
         await onOpenWorkflowLocation(node.path);
       } catch (error) {
         onError(el, error);
       }
     }));
-    actions.append(iconButton("copy", t("row.copy"), async () => {
+    actions.append(iconButton("workflows.row.copy", t("row.copy"), async () => {
       try {
         await onCopyWorkflow(el, node);
       } catch (error) {
@@ -167,8 +167,8 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
       }
     }));
   }
-  actions.append(iconButton("edit", t("row.rename"), () => onRename(el, node.path)));
-  actions.append(dangerIconButton("trash", t("row.moveToTrash"), (event) => {
+  actions.append(iconButton("workflows.row.rename", t("row.rename"), () => onRename(el, node.path)));
+  actions.append(dangerIconButton("workflows.row.moveToTrash", t("row.moveToTrash"), (event) => {
     event.preventDefault();
     event.stopPropagation();
     onMoveToTrash(el, node, event.currentTarget);

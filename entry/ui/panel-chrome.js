@@ -32,7 +32,7 @@ export function createPanelChrome({ document, translate, iconSvg, prepareInput }
     clear.className = "workspace2-search-clear";
     clear.title = translate("search.clear");
     clear.setAttribute("aria-label", translate("search.clear"));
-    clear.append(iconSvg("x"));
+    clear.append(iconSvg("panel.close"));
     const updateClear = () => { clear.hidden = !search.value; };
     const emitInput = () => {
       updateClear();

@@ -770,6 +770,46 @@ export function styles() {
       gap: 6px;
       align-items: center;
     }
+    .workspace2-workflow-blueprint .workspace2-toolbar {
+      grid-template-columns: minmax(90px, 1fr) auto auto 1px 30px 30px;
+    }
+    .workspace2-toolbar-text-button {
+      min-height: 28px;
+      border: 1px solid var(--workspace2-control-border-glass, var(--workspace2-border));
+      border-radius: var(--workspace2-radius);
+      padding: 4px 7px 4px 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      color: inherit;
+      background: var(--workspace2-control-bg-glass, var(--workspace2-control-bg));
+      box-shadow: var(--workspace2-control-shadow-glass, none);
+      font: 600 12px/1 var(--font-family, Arial, sans-serif);
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .workspace2-toolbar-text-button:hover,
+    .workspace2-toolbar-text-button.is-menu-open {
+      background: var(--workspace2-hover-glass, var(--workspace2-hover));
+    }
+    .workspace2-toolbar-text-button.is-menu-open {
+      color: var(--workspace2-accent);
+      border-color: var(--workspace2-accent-border);
+    }
+    .workspace2-toolbar-text-caret {
+      width: 12px;
+      height: 12px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+    .workspace2-toolbar-divider {
+      align-self: center;
+      width: 1px;
+      height: 16px;
+      background: color-mix(in srgb, var(--workspace2-border) 82%, transparent);
+    }
     .workspace2-search-wrap {
       position: relative;
       min-width: 0;

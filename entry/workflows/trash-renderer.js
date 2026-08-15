@@ -51,7 +51,7 @@ export function createWorkflowTrashRenderer({
       text.append(name, meta);
       info.append(icon, text);
 
-      const restore = iconButton("restore", t("trash.restore"), async () => {
+      const restore = iconButton("workflows.trash.restore", t("trash.restore"), async () => {
         try {
           await onRestore(el, item);
         } catch (error) {
@@ -59,7 +59,7 @@ export function createWorkflowTrashRenderer({
         }
       });
 
-      const systemTrash = dangerIconButton("systemTrash", t("trash.systemDelete"), (event) => {
+      const systemTrash = dangerIconButton("workflows.trash.systemDelete", t("trash.systemDelete"), (event) => {
         event.preventDefault();
         event.stopPropagation();
         showInlineConfirm(event.currentTarget, {

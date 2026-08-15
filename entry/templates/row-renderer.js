@@ -46,7 +46,7 @@ export function createTemplateRowRenderer({
     row.dataset.workspace2TemplateId = template.id;
     makeDropTarget(el, row, template.groupId || "", template.id);
 
-    const icon = iconSvg("template");
+    const icon = iconSvg("templates.item");
     const info = document.createElement("div");
     info.className = "workspace2-template-info";
     const name = document.createElement("div");
@@ -101,12 +101,12 @@ export function createTemplateRowRenderer({
     actions.className = "workspace2-actions";
     actions.addEventListener("pointerenter", onActionsPointerEnter);
     actions.append(
-      iconButton("edit", translate("templates.rename"), (event) => {
+      iconButton("templates.item.rename", translate("templates.rename"), (event) => {
         event.preventDefault();
         event.stopPropagation();
         onStartRename();
       }),
-      dangerIconButton("trash", translate("templates.delete"), (event) => {
+      dangerIconButton("templates.item.delete", translate("templates.delete"), (event) => {
         event.preventDefault();
         event.stopPropagation();
         onDelete(event.currentTarget);

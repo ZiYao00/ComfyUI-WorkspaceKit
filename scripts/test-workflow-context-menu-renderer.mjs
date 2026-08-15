@@ -44,7 +44,12 @@ const renderer = createWorkflowContextMenuRenderer({
 const panel = new Element("div");
 renderer.render("panel", panel);
 const menu = panel.children[0];
-assert.deepEqual(menu.children.map((button) => button.children[0].icon), ["folderOpen", "edit", "rootArrow", "trash"]);
+assert.deepEqual(menu.children.map((button) => button.children[0].icon), [
+  "workflows.toolbar.open",
+  "workflows.row.rename",
+  "workflows.row.moveToRoot",
+  "workflows.row.moveToTrash",
+]);
 assert.deepEqual(menu.children.map((button) => button.children[1].textContent), ["menu.open", "menu.rename", "menu.moveToRoot", "menu.moveToTrash"]);
 
 await menu.children[0].listeners.get("click")({});
@@ -79,7 +84,7 @@ const filePanel = new Element("div");
 fileRenderer.render("panel", filePanel);
 assert.deepEqual(
   filePanel.children[0].children.map((button) => button.children[0].icon),
-  ["folderOpen", "edit", "rootArrow", "trash"],
+  ["workflows.toolbar.open", "workflows.row.rename", "workflows.row.moveToRoot", "workflows.row.moveToTrash"],
 );
 
 // T-048: a folder row gains Flatten, placed directly before Move to trash so

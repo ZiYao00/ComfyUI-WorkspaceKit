@@ -1,5 +1,86 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-15 - T-055 P-05a: Icon-system audit
+
+| Check | Result |
+| --- | --- |
+| Rollback point | `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-p05-icon-system-audit-20260815-081519.zip` (349 source files) |
+| Static icon coverage | 24 literal functional-icon references are covered by 40 local Icon Kit definitions |
+| Allowed exception | `pi pi-sitemap` is only the current ComfyUI SidebarTab registration class-string fallback; the visible WK entry is the local `workspacekit` SVG mask |
+| Template compatibility/export | Pass |
+| Sidebar startup resilience | Pass |
+| Test package `:8190`, dark theme | WorkspaceKit panel opened; Workflows, Nodes, and Templates each exposed local `data-workspacekit-icon` SVGs for their toolbar and row actions |
+
+**Observed non-icon warning:** the page emitted one startup warning for missing
+`workspace.title`. Both locale JSON files and the fallback map contain that
+key; the evidence points to a pre-locale lookup in the sidebar DOM finder, not
+to a missing translation asset. This audit does not alter startup/i18n timing.
+
+**Remaining P-05b:** fresh visual acceptance of dark, light, transparent, and
+frosted states at 100%, 125%, and 150% browser zoom. No visual inconsistency
+was patched or claimed from this dark-theme DOM check alone.
+
+## 2026-08-15 - T-055 P-01a: Workflow File toolbar and menu shell
+
+This batch only moves the existing workflow creation actions into a **File**
+menu and adds the active-workflow command surface. It does not introduce a
+second workflow state store: save, save as, rename, export, and API export
+continue to dispatch the current ComfyUI command IDs established by P-00;
+copy and move-to-trash retain the existing WorkspaceKit workflow actions.
+
+| Check | Result |
+| --- | --- |
+| Backup | ` .codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-workflow-toolbar-file-menu-20260814-235354.zip` was created before edits (347 source files) |
+| Toolbar runtime shell | Test package `:8190` showed the requested order: search → File → Sort → divider → Import icon → Trash icon |
+| File-menu runtime shell | The menu displayed Import, New workflow, New folder, save-related, copy, export, and trash actions; unavailable copy/trash actions were disabled for an active workflow not represented in Browse |
+| Static asset route | After restarting the user-specified visible CPU test launcher, `/extensions/ComfyUI-WorkspaceKit/entry.js` and its Chinese locale route served the new source, including the concise File-menu translation keys |
+| Menu isolation | Source logic closes File before opening Sort and closes Sort before opening File; File-button active styling is also cleared by close/outside-close paths |
+| `node scripts/test-workflow-file-menu-renderer.mjs` | Pass |
+| `node scripts/test-frontend-module-syntax.mjs` | Pass; 118 frontend modules |
+| `npm test` | Pass; JavaScript contracts, Python tests, and release version check all completed |
+| `git diff --check` | Pass |
+
+**Runtime boundary:** the in-app browser session continued to render an already
+cached extension module after the restart, although the server's extension and
+locale routes served the new files. Therefore this record does **not** claim a
+fresh-browser visual confirmation of the concise two new labels or the
+File/Sort mutual-close behavior. The next P-01 acceptance must open a fresh
+browser module session, select a Browse-backed workflow, and verify enabled
+copy/trash plus save/save-as/rename/export success and failure feedback.
+
+### P-01b service-action acceptance (test package only)
+
+The isolated `__WK_TEST__` workflow directory was used for a reversible
+service-level path: save a minimal workflow → copy → rename → move to WK trash
+→ restore to the original path. The resulting paths were
+`p01b-file-menu-source.json`, `p01b-file-menu-source (Copy 1).json`, and
+`p01b-file-menu-renamed.json`; restore returned the renamed path. A duplicate
+rename returned HTTP 409 and copying a nonexistent source returned HTTP 404.
+No main-package workflow was read or changed.
+
+## 2026-08-14 - T-055 P-00: current ComfyUI compatibility probe
+
+This was a read-only compatibility probe before implementing the Professional
+Workspace plan. It did not register, unregister, hide, or otherwise change any
+official sidebar tab; it also did not invoke any workflow command.
+
+| Check | Result |
+| --- | --- |
+| Test launcher | User-specified visible CMD: `G:\AIGC\ComfyUI_test\run_test_cpu_8190.bat` |
+| Service health | CPU test process listened on `:8190`; `/system_stats` returned HTTP 200 |
+| Runtime version | ComfyUI `0.32.0`; installed/required frontend `1.48.7` |
+| Running page | WorkspaceKit sidebar entry was present on the loaded test page |
+| Sidebar contract | The installed frontend's own source map shows `app.extensionManager = useWorkspaceStore()` and exposes `registerSidebarTab`, `unregisterSidebarTab`, and `getSidebarTabs` |
+| Sidebar risk | `unregisterSidebarTab` removes a tab and active state but does **not** unregister its `Workspace.ToggleSidebarTab.<id>` command; only custom tabs receive `destroy()` |
+| Workflow contract | `Comfy.SaveWorkflow`, `Comfy.SaveWorkflowAs`, `Comfy.RenameWorkflow`, `Comfy.ExportWorkflow`, and `Comfy.ExportWorkflowAPI` are currently registered; official actions first activate their target workflow |
+| LiteGraph contract | Current `ContextMenu` accepts object items, `null` separators, event positioning, and parent/child menus |
+| Path boundary | `safe_join` / `safe_relative_path` reject absolute paths, `..`, and resolved paths outside the root |
+
+**Decision:** the active-workflow File menu can proceed as P-01 because its
+official command contracts are present. Hiding the official Workflows/Node
+Library sidebar entries remains blocked on a separate reversible lifecycle
+probe: direct unregistration is not yet a safe implementation strategy.
+
 ## 2026-08-13 - T-054 node preview: one switch, bounded structural card
 
 The previous mode selector was intentionally removed. Node previews now have

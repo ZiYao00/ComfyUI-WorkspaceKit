@@ -58,22 +58,22 @@ export function createWorkflowContextMenuRenderer({
     };
 
     if (item.type === "folder") {
-      addItem("folderPlus", t("menu.newSubfolder"), () => onNewSubfolder(el, item));
-      addItem("palette", t("folder.personalize"), () => onPersonalizeFolder(el, item, { clientX: x, clientY: y }));
-      addItem("refresh", t("folder.resetStyle"), () => onResetFolderStyle(el, item));
+      addItem("workflows.row.newSubfolder", t("menu.newSubfolder"), () => onNewSubfolder(el, item));
+      addItem("workflows.folder.personalize", t("folder.personalize"), () => onPersonalizeFolder(el, item, { clientX: x, clientY: y }));
+      addItem("workflows.folder.resetStyle", t("folder.resetStyle"), () => onResetFolderStyle(el, item));
     } else {
-      addItem("folderOpen", t("menu.open"), () => onOpenWorkflow(item.path));
+      addItem("workflows.toolbar.open", t("menu.open"), () => onOpenWorkflow(item.path));
     }
-    addItem("edit", t("menu.rename"), () => onRename(el, item));
-    addItem("rootArrow", t("menu.moveToRoot"), () => onMoveToRoot(el, item));
+    addItem("workflows.row.rename", t("menu.rename"), () => onRename(el, item));
+    addItem("workflows.row.moveToRoot", t("menu.moveToRoot"), () => onMoveToRoot(el, item));
     if (item.type === "folder" && typeof onFlattenFolder === "function") {
       // Dissolve stays on the delete confirmation, where it reads as the
       // non-destructive alternative. Flatten discards the whole inner
       // structure, so it is a deliberate menu choice of its own and keeps the
       // menu open for its confirmation.
-      addItem("arrowsUpDown", t("menu.flattenFolder"), (button) => onFlattenFolder(el, item, button), { keepOpen: true });
+      addItem("workflows.folder.flatten", t("menu.flattenFolder"), (button) => onFlattenFolder(el, item, button), { keepOpen: true });
     }
-    addItem("trash", t("menu.moveToTrash"), (button) => onMoveToTrash(el, item, button), { keepOpen: true });
+    addItem("workflows.row.moveToTrash", t("menu.moveToTrash"), (button) => onMoveToTrash(el, item, button), { keepOpen: true });
 
     panel.append(menu);
     state.contextMenuElement = menu;

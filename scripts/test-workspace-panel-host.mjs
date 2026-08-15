@@ -71,14 +71,52 @@ assert.equal(host.headerHost.hidden, true);
 assert.equal(host.contextHost.hidden, true);
 assert.equal(host.toolbarHost, host.contextHost);
 assert.equal(host.controlsHost.hidden, true);
+assert.equal(host.statusHost.hidden, true);
 assert.equal(host.headerHost.dataset.workspacekitPanelSlot, "header");
 assert.equal(host.toolbarHost.dataset.workspacekitPanelSlot, "toolbar");
 assert.equal(host.controlsHost.dataset.workspacekitPanelSlot, "controls");
 assert.equal(host.contentHost.dataset.workspacekitPanelSlot, "content");
+assert.equal(host.statusHost.dataset.workspacekitPanelSlot, "status");
 assert.equal(host.moduleFrame.dataset.workspacekitPanelBlueprint, "v1");
 assert.equal(host.contentHost.className, "workspace2-module-body");
 assert.equal(host.contentHost.dataset.workspace2ModuleMount, "true");
-assert.deepEqual(host.moduleFrame.children, [host.headerHost, host.toolbarHost, host.controlsHost, host.contentHost]);
+assert.deepEqual(host.moduleFrame.children, [host.headerHost, host.toolbarHost, host.controlsHost, host.contentHost, host.statusHost]);
+
+// A pre-Blueprint Provider only knows headerHost/contextHost/contentHost and
+// ignores the later toolbarHost/controlsHost/ui additions. The context host
+// was already opt-in before Blueprint v1, so the Provider keeps ownership of
+// showing it while mounted and hiding it during disposal.
+let legacyDisposed = false;
+const legacyProvider = {
+  render({ headerHost, contextHost, contentHost }) {
+    assert.equal(headerHost.hidden, true);
+    assert.equal(contextHost, host.toolbarHost);
+    assert.equal(contentHost, host.contentHost);
+    contextHost.hidden = false;
+    const legacyToolbar = document.createElement("div");
+    legacyToolbar.className = "legacy-provider-toolbar";
+    contextHost.append(legacyToolbar);
+    const legacyContent = document.createElement("div");
+    legacyContent.className = "legacy-provider-content";
+    contentHost.append(legacyContent);
+    return () => {
+      legacyDisposed = true;
+      contextHost.hidden = true;
+      legacyToolbar.remove();
+      legacyContent.remove();
+    };
+  },
+};
+const disposeLegacyProvider = legacyProvider.render({
+  headerHost: host.headerHost,
+  contextHost: host.contextHost,
+  contentHost: host.contentHost,
+});
+assert.equal(host.contextHost.hidden, false);
+assert.equal(host.contextHost.children.at(-1).className, "legacy-provider-toolbar");
+disposeLegacyProvider();
+assert.equal(legacyDisposed, true);
+assert.equal(host.contextHost.hidden, true);
 
 const providerEvents = [];
 const overflowDocument = makeDocument();
@@ -92,8 +130,9 @@ const overflowHost = createWorkspacePanelHost({
   onActivateProvider: (id) => providerEvents.push(`open:${id}`),
   onPinProvider: (id) => providerEvents.push(`pin:${id}`),
 });
-const overflow = overflowHost.tabStrip.children.find((child) => child.className === "workspace2-module-overflow-tab");
+const overflow = overflowHost.tabStrip.children.find((child) => /workspace2-module-overflow-tab/.test(child.className));
 assert.ok(overflow);
+assert.match(overflow.className, /is-active/, "the overflow wrapper owns the active tab surface");
 assert.equal(overflow.children[0].children[0].textContent, "📐 Layout");
 overflow.children[2].click();
 const overflowMenu = overflowDocument.body.children.at(-1);

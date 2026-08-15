@@ -10,7 +10,7 @@ their feature behavior; WorkspaceKit owns tab placement and lifecycle.
   title: "Example",          // required fallback
   iconKey: "example",        // optional local icon identity
   getTitle: () => "示例",     // optional provider-localized title
-  render({ headerHost, contextHost, contentHost, surface, app, translate, ui }) {
+  render({ headerHost, contextHost, contentHost, status, surface, app, translate, ui }) {
     // Append only to the supplied hosts; return dispose().
     // ui is optional; an existing Provider may safely ignore it.
     return () => {};
@@ -30,6 +30,17 @@ WorkspaceKit displays the localized title in its top tab strip, falling back to
 continue to work if the host does not recognize that key. `getTitle()` errors
 are isolated and never hide a tab. Providers must not import WorkspaceKit
 private modules or mutate its sidebar.
+
+`contentHost` is always available. `headerHost`, `toolbarHost` and
+`controlsHost` are opt-in rows and begin hidden so an unused row cannot change
+the core panel layout. A Provider that appends UI to one of those rows must set
+`slot.hidden = false` while mounted, then clear its DOM and restore the hidden
+state in `dispose()`. This is also the existing v1 behavior of `headerHost` and
+the legacy `contextHost`; Blueprint v1 did not change that ownership rule.
+`status` is an optional host-owned bottom-row controller with
+`show({ text, tone, live })` and `clear()`. Providers may ignore it. Its row
+has no visible height until `show()` is called, and must be cleared in
+`dispose()` if used.
 `renderSettings` is optional. When present, WorkspaceKit places it under
 Settings > Advanced > Extension settings; Providers without it create no empty
 settings area.

@@ -198,9 +198,11 @@ export function styles() {
       display: flex;
       align-items: stretch;
       flex-wrap: nowrap;
-      gap: 7px;
-      padding: 9px 10px 7px;
-      border-bottom: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 62%, transparent);
+      gap: 2px;
+      padding: 9px 10px 0;
+      /* The strip is separated from the command bar through spacing and the
+         active tab surface, not another persistent horizontal divider. */
+      border-bottom: 0;
       background: transparent;
       overflow: visible;
       container: workspace2-tabstrip / inline-size;
@@ -212,66 +214,87 @@ export function styles() {
          on top so the third glyph is never the one that gets ellipsised. */
       min-width: calc(3em + 16px);
       max-width: 14em;
-      min-height: 30px;
-      padding: 0 8px;
-      border: 1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14))) 78%, transparent);
-      border-radius: 8px;
+      min-height: 31px;
+      padding: 0 10px;
+      border: 1px solid transparent;
+      border-bottom: 0;
+      border-radius: 9px 9px 0 0;
       color: var(--p-text-muted-color, rgba(255, 255, 255, 0.68));
-      background: var(--workspace2-tab-bg);
+      background: transparent;
       font: 500 12px/1.2 var(--font-family, Arial, sans-serif);
       cursor: pointer;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
     }
-    /* Below roughly 280px of sidebar the 3-glyph budget no longer fits together
+    /* Below roughly 270px of sidebar the 3-glyph budget no longer fits together
        with the settings button, so the floor drops to two glyphs. The settings
        button must never be pushed out of the row. */
-    @container workspace2-tabstrip (max-width: 300px) {
+    @container workspace2-tabstrip (max-width: 270px) {
       .workspace2-module-tab { min-width: calc(2em + 12px); }
       /* width:0 releases the wrapper from its content's min-content floor so it
          shrinks with the plain tabs instead of pinning the settings button out
          of the row. */
-      .workspace2-module-overflow-tab { width: 0; min-width: calc(2em + 12px + 20px); }
+      .workspace2-module-overflow-tab { width: 0; min-width: calc(2em + 12px + 22px); }
       .workspace2-module-overflow-tab > .workspace2-module-tab { min-width: 0; }
     }
     .workspace2-module-tab:hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
-      background: var(--workspace2-tab-hover-bg);
-      border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 32%, var(--workspace2-border, rgba(255,255,255,.14)));
+      background: color-mix(in srgb, var(--workspace2-tab-hover-bg) 72%, transparent);
+      border-color: transparent;
     }
-    .workspace2-module-tab.is-active {
+    .workspace2-module-tab.is-active,
+    .workspace2-module-overflow-tab.is-active {
+      --workspace2-active-tab-surface: color-mix(in srgb, var(--workspace2-tab-active-bg) 76%, var(--workspace2-surface, var(--workspace2-tab-bg)));
+      z-index: 1;
       color: var(--p-text-color, var(--fg-color, #f5f8ff));
-      border-color: color-mix(in srgb, var(--workspace2-accent) 28%, var(--workspace2-border));
-      background: var(--workspace2-tab-active-bg);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--workspace2-accent) 8%, transparent), 0 0 0 1px rgba(0, 0, 0, 0.05);
+      border-color: color-mix(in srgb, var(--workspace2-border) 52%, transparent);
+      background: var(--workspace2-active-tab-surface);
     }
-    .workspace2-module-tab.is-active::after {
+    /* Small shoulder geometry joins the active tab to the module frame without
+       recreating the old thick underline or a hard Chrome colour. */
+    .workspace2-module-tab.is-active::before,
+    .workspace2-module-tab.is-active::after,
+    .workspace2-module-overflow-tab.is-active::before,
+    .workspace2-module-overflow-tab.is-active::after {
       content: "";
       position: absolute;
-      left: 12px;
-      right: 12px;
-      bottom: 4px;
-      height: 2px;
-      border-radius: 2px;
-      background: var(--workspace2-accent-muted);
+      bottom: 0;
+      width: 7px;
+      height: 7px;
+      pointer-events: none;
+      background: var(--workspace2-active-tab-surface);
+    }
+    .workspace2-module-tab.is-active::before,
+    .workspace2-module-overflow-tab.is-active::before {
+      left: -6px;
+      border-radius: 0 0 7px 0;
+      clip-path: polygon(100% 0, 100% 100%, 0 100%);
+    }
+    .workspace2-module-tab.is-active::after,
+    .workspace2-module-overflow-tab.is-active::after {
+      right: -6px;
+      border-radius: 0 0 0 7px;
+      clip-path: polygon(0 0, 100% 100%, 0 100%);
     }
     .workspace2-module-settings {
       min-width: 30px;
-      min-height: 28px;
+      min-height: 31px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid var(--p-content-border-color, var(--border-color, rgba(255, 255, 255, 0.14)));
-      border-radius: var(--p-border-radius, 6px);
+      align-self: stretch;
+      border: 1px solid transparent;
+      border-bottom: 0;
+      border-radius: 9px 9px 0 0;
       color: var(--p-text-muted-color, rgba(255, 255, 255, 0.62));
       background: transparent;
       cursor: pointer;
     }
     .workspace2-module-settings:hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
-      background: var(--p-list-option-hover-background, rgba(255, 255, 255, 0.075));
+      background: color-mix(in srgb, var(--workspace2-tab-hover-bg) 72%, transparent);
     }
     .workspace2-module-settings svg {
       width: 15px;
@@ -279,24 +302,25 @@ export function styles() {
       stroke: currentColor;
       fill: none;
     }
-    /* The label keeps a plain tab's 3-CJK-glyph budget; the divider and larger
-       caret add a fixed ~28px on top. Anything larger and this tab would claim a
-       bigger flex share than its neighbours and push the settings button out. */
-    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: calc(3em + 16px + 28px); max-width: 14em; min-height:30px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:1px solid color-mix(in srgb, var(--p-content-border-color, var(--border-color, rgba(255,255,255,.14))) 78%, transparent); border-radius:8px; background:var(--workspace2-tab-bg); transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
-    .workspace2-module-overflow-tab:hover { background: var(--workspace2-tab-hover-bg); border-color: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 32%, var(--workspace2-border, rgba(255,255,255,.14))); }
-    .workspace2-module-overflow-tab.is-menu-open { border-color: color-mix(in srgb, var(--workspace2-accent) 42%, var(--workspace2-border)); }
+    /* The Provider label needs only its short two-CJK-glyph budget plus the
+       divider/caret. Reserving a core tab's three-glyph floor here caused the
+       Chinese Workflows tab to collapse one step too early at normal sidebar
+       widths. */
+    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: calc(2em + 12px + 22px); max-width: 14em; min-height:31px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:1px solid transparent; border-bottom:0; border-radius:9px 9px 0 0; background:transparent; transition: background 120ms ease, border-color 120ms ease; }
+    .workspace2-module-overflow-tab:hover, .workspace2-module-overflow-tab.is-menu-open { background: color-mix(in srgb, var(--workspace2-tab-hover-bg) 72%, transparent); border-color: transparent; }
+    .workspace2-module-overflow-tab.is-active:hover, .workspace2-module-overflow-tab.is-active.is-menu-open { background: var(--workspace2-active-tab-surface); border-color: color-mix(in srgb, var(--workspace2-border) 52%, transparent); }
     /* The tab button inside the wrapper drops its own chrome: the wrapper draws
        the border and background so the label and caret read as one control.
        min-height is released to the wrapper too, otherwise the button's own
        30px plus the wrapper's border would make this tab a pixel taller than
        the plain ones. */
-    .workspace2-module-overflow-tab > .workspace2-module-tab { flex: 1 1 0; min-width: 0; min-height: 0; border:0; border-radius:7px 0 0 7px; background:transparent; box-shadow:none; text-align:center; }
+    .workspace2-module-overflow-tab > .workspace2-module-tab { flex: 1 1 0; min-width: 0; min-height: 0; border:0; border-radius:8px 0 0 0; background:transparent; box-shadow:none; text-align:center; }
     .workspace2-module-overflow-tab > .workspace2-module-tab:hover { background:transparent; border-color:transparent; }
-    .workspace2-module-overflow-tab > .workspace2-module-tab.is-active { background:var(--workspace2-tab-active-bg); box-shadow:none; }
-    .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::after { left:8px; right:8px; }
+    .workspace2-module-overflow-tab > .workspace2-module-tab.is-active { background:transparent; box-shadow:none; }
+    .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::before, .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::after { display:none; }
     .workspace2-module-tab-label { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
     .workspace2-module-tab-divider { flex:0 0 1px; align-self:center; width:1px; height:14px; margin:0 3px; background: color-mix(in srgb, currentColor 24%, transparent); }
-    .workspace2-module-overflow-caret { flex:0 0 20px; display:inline-flex; align-items:center; justify-content:center; min-width:20px; padding:0; background:transparent; border:0; border-radius:4px; color:var(--p-text-muted-color, rgba(255,255,255,.68)); font-size:13px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease, color 120ms ease; transform-origin:center; }
+    .workspace2-module-overflow-caret { flex:0 0 22px; display:inline-flex; align-items:center; justify-content:center; min-width:22px; padding:0; background:transparent; border:0; border-radius:5px 8px 0 0; color:var(--p-text-muted-color, rgba(255,255,255,.68)); font-size:15px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease, color 120ms ease; transform-origin:center; }
     .workspace2-module-overflow-caret:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 24%, transparent); }
     .workspace2-module-overflow-tab.is-menu-open > .workspace2-module-overflow-caret { transform:rotate(180deg); color: var(--workspace2-accent); }
     /* The dropdown reuses .workspace2-context (shared with the sort/row menus),
@@ -322,7 +346,9 @@ export function styles() {
       overflow: hidden;
     }
     .workspace2-module-header-host[hidden],
-    .workspace2-module-context-host[hidden] {
+    .workspace2-module-context-host[hidden],
+    .workspace2-module-controls-host[hidden],
+    .workspace2-module-status-host[hidden] {
       display: none;
     }
     .workspace2-module-body {
@@ -331,6 +357,23 @@ export function styles() {
       min-height: 0;
       overflow: hidden;
     }
+    .workspace2-module-status-host {
+      flex: 0 0 auto;
+      min-width: 0;
+      padding: 6px 10px 8px;
+      border-top: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent);
+    }
+    .workspace2-module-status {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--workspace2-muted);
+      font: 500 11px/1.35 var(--font-family, Arial, sans-serif);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workspace2-module-status.is-success { color: color-mix(in srgb, var(--workspace2-accent) 78%, var(--workspace2-muted)); }
+    .workspace2-module-status.is-warning { color: var(--p-orange-400, #f0a34b); }
+    .workspace2-module-status.is-error { color: var(--p-red-400, #f18484); }
     .workspace2-settings-backdrop {
       --workspace2-surface: var(--comfy-menu-bg, var(--p-content-background, var(--bg-color, #202124)));
       --workspace2-control-bg: var(--comfy-input-bg, var(--p-form-field-background, var(--workspace2-surface)));
@@ -1110,6 +1153,27 @@ export function styles() {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+    }
+    /* Nodes is the second shared-host migration. Only placement belongs here:
+       searches, favorites, preview, sorting, and node data stay in entry.js. */
+    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-header-host {
+      padding: 10px 10px 0;
+    }
+    .workspace2-module-frame.workspace2-node-blueprint .workspace2-header .workspace2-status {
+      display: none;
+    }
+    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-context-host {
+      padding: 8px 10px 0;
+    }
+    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-controls-host {
+      padding: 8px 10px 6px;
+    }
+    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-body {
+      padding: 0 10px 10px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1 1 auto;
     }
     .workspace2-workflow-content {
       flex: 1 1 auto;

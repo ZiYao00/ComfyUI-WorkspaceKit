@@ -152,7 +152,11 @@ export function createWorkspacePanelHost({
     button.append(label);
 
     const wrap = document.createElement("div");
-    wrap.className = "workspace2-module-overflow-tab";
+    // The wrapper owns the shared Chrome-like tab surface because it contains
+    // both the label action and the Provider selector caret. Keeping the active
+    // state here prevents the overflow tab from drifting into a second visual
+    // language as the plain module tabs evolve.
+    wrap.className = `workspace2-module-overflow-tab ${activeTabId === tab.id ? "is-active" : ""}`;
     wrap.dataset.workspace2ModuleId = tab.id;
 
     const divider = document.createElement("span");
@@ -218,8 +222,14 @@ export function createWorkspacePanelHost({
   contentHost.className = "workspace2-module-body";
   contentHost.dataset.workspace2ModuleMount = "true";
   contentHost.dataset.workspacekitPanelSlot = "content";
+  // Bottom status is an opt-in slot. It must remain after the scrollable
+  // content host so a later status migration cannot alter content ownership.
+  const statusHost = document.createElement("div");
+  statusHost.className = "workspace2-module-status-host";
+  statusHost.dataset.workspacekitPanelSlot = "status";
+  statusHost.hidden = true;
   moduleFrame.dataset.workspacekitPanelBlueprint = "v1";
-  moduleFrame.append(headerHost, toolbarHost, controlsHost, contentHost);
+  moduleFrame.append(headerHost, toolbarHost, controlsHost, contentHost, statusHost);
   shell.append(tabStrip, moduleFrame);
 
   return {
@@ -234,6 +244,7 @@ export function createWorkspacePanelHost({
     contextHost: toolbarHost,
     controlsHost,
     contentHost,
+    statusHost,
     // Removes the document-level overflow-menu listeners and any open menu.
     // renderWorkspace2Panel() builds a fresh host on every tab switch, so
     // without this the listeners accumulate across re-renders.

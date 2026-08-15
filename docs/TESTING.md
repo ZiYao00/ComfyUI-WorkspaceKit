@@ -1,5 +1,86 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-15 - T-056 R1: Chrome-like module tab strip (partial acceptance)
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-r1-chrome-tab-strip-20260815-215021.zip`
+  (23,018,039 bytes; SHA-256
+  `B384929DCB8C2515860718AD7A13A17C837B3028919355310B31123505275BBF`).
+- Changed only the shared host tab strip. Inactive tabs now use the strip
+  rather than individual bordered cards. The active plain tab and active
+  Provider-overflow wrapper share one theme-token surface with a small shoulder
+  geometry; the old active underline and persistent strip divider are removed.
+- Static regression passed: panel host, Provider tab plan, and sidebar startup
+  resilience. The host test now asserts that the Provider-overflow wrapper,
+  rather than only its inner label button, receives the active state.
+- Test package `:8190` DOM evidence: Strip gap is `2px`; strip, plain tabs,
+  Provider wrapper and settings utility have `0px` bottom borders. The active
+  Theme wrapper received `is-active`. At a temporary `480 × 900` viewport the
+  strip had `scrollWidth === clientWidth` (`312px`) and the settings button
+  remained visible. The viewport override was reset after the test.
+- **Not yet visually accepted:** the current test package has Layout's
+  `#alignment-buttons` floating toolbar at the top stacking layer. It covers
+  the sidebar's `y=0..40` tab-strip region in screenshots. This is an external
+  Layout overlay, not evidence that the WK strip itself is positioned wrongly;
+  do not add a WK offset workaround. Dark/light/transparent/frosted visual
+  review and 100/125/150% browser zoom remain pending in an unblocked page.
+
+## 2026-08-15 - T-056 R0: Provider / Blueprint compatibility baseline
+
+- Backup before the test/documentation change:
+  `.codex-backups/50-integrations/ComfyUI-WorkspaceKit-before-r0-provider-compatibility-baseline-20260815-214411.zip`
+  (23,016,934 bytes; SHA-256
+  `4575A0CF0ACC9E8DFD1E2C9B696C68892BC4803FD71E7DE857E306CA94A5EAA5`).
+- Static contracts passed: panel host, Provider-tab plan, Panel UI Template
+  runtime, Template capability negotiation, Template primitives, and sidebar
+  startup resilience.
+- A regression case now mounts a pre-Blueprint-shaped Provider using only
+  `headerHost`, legacy `contextHost` and `contentHost`; it ignores all newer
+  slots and the UI capability, mounts successfully, then releases its opt-in
+  toolbar row during disposal.
+- Test package `:8190` real-page evidence: WK had one sidebar entry; opening
+  the merged Theme Provider created exactly one child in each Header / Toolbar /
+  Controls / Content slot. Switching Theme -> Templates -> Theme retained one
+  child per slot and did not duplicate Provider DOM.
+- Browser inspection runs in an isolated evaluation world, so it cannot read
+  page JavaScript globals such as `WorkspaceKitPanelAPI` directly. DOM lifecycle
+  evidence and the static API contracts are the authoritative evidence for this
+  batch.
+
+## 2026-08-15 - T-034: Refresh stability baseline (test package :8190)
+
+- Scope: a fresh in-app browser page, one reload, and a temporary unsaved empty WorkspaceKit group. No source change and no workflow file write were performed.
+- Before and after reload, the page had exactly one WorkspaceKit sidebar entry, a present `#xzg-group-overlay`, and a full-size canvas (`1280 × 719` in this browser viewport).
+- The temporary group remained after reload at `y = 650`; no group rectangle had a non-finite value or an absolute Y coordinate above `10,000`. This does not reproduce the historical `y ≈ -19,000` failure.
+- Reopening WorkspaceKit after reload showed its sidebar and the expected Workflows / Nodes / Templates / Theme tabs. The temporary group's title was `Group (right-click to edit)`.
+- Read-back of `user/default/workflows/New Workflow.json` showed no persisted `xzgGroups` entry and an unchanged file modification time (`2026-08-15T12:06:13Z`). The temporary group was browser-session state only.
+
+## 2026-08-15 - T-055 P-03a: WK Assets read-only boundary audit (test package :8190)
+
+- Scope: source and local service inspection only. No Asset UI, directory, scanner, import, move, deletion, upload, or user-file mutation was performed.
+- WorkspaceKit currently has no `entry/assets/` module, `/workspace2/assets` route, thumbnail endpoint, or asset-directory scan endpoint. `assets/sorted-custom-node-map.json` is only a Nodes-category map and is not a file-resource index.
+- `service/safe_path.py` and the workflow trash transaction are scoped to the workflow root. They must not be reused as an implied authorization for input, output, or arbitrary user asset roots.
+- Current ComfyUI `server.py` exposes the official read-only `/view` route. In the running test package, `/view?filename=..%2Fwk-assets-probe&type=output` returned **400** and a nonexistent output filename returned **404**. The source additionally checks its selected type root and any `subfolder` against the resolved root.
+- Decision: a future WK Assets implementation must first define a separate read-only contract for allowed roots, metadata fields, preview `/view` parameters, pagination/cache ceilings, and error states. Only after that contract passes can P-03b consider file operations; browser cache is not an asset source of truth.
+
+## 2026-08-15 - T-055 P-05b: Icon visual acceptance (test package :8190)
+
+- Environment: a fresh in-app browser page loaded the test package at `http://127.0.0.1:8190/`; the WorkspaceKit sidebar entry, Workflows, Nodes, Templates, and WK Settings all opened normally.
+- Dark + transparent: Workflows loaded with its File / Sort / Import / Trash toolbar, Browse row actions, and Settings icon. Nodes loaded 2,390 nodes; Templates loaded 3 templates. The rendered DOM found no zero-size or hidden `data-workspacekit-icon` element in the active Templates view.
+- Dark + frosted: switched only the WK background effect to Frosted glass, then inspected Nodes and Templates. The active icon set retained normal computed dimensions (toolbar icons `15–16px`, row actions `14–15px`) and visible opacity; no console error was attributed to WorkspaceKit. The setting was restored to the original transparent mode after inspection.
+- Light: switched ComfyUI's Color Palette from the original `Dark_ZY` to `Light`, inspected Templates and its toolbar/readable active states, then restored `Dark_ZY`. No functional-icon disappearance, clipping, or contrast failure was observed in this viewport.
+- Limitation: this in-app browser reports a fixed `devicePixelRatio = 1`; its `Ctrl +` input did not change browser zoom. Therefore **100% / 125% / 150% browser-zoom acceptance is still pending**. No implementation change was made for this limitation.
+
+## 2026-08-15 - T-055 P-01b official workflow command acceptance (test package :8190)
+
+- Scope: only a temporary workflow under the test package workflow root; no plugin source was changed. Backup before the run: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-before-p01b-official-command-acceptance-20260815-20260815-200419.zip`.
+- Environment: `http://127.0.0.1:8190/` returned `/system_stats` 200, ComfyUI `0.32.0`; WorkspaceKit opened normally and its Workflows file menu exposed Import, New workflow, New folder, Save, Save As, Rename, Copy, Export, Export API, and Move to Trash.
+- Official command path: created a temporary workflow, used **Save As** to create `P01b_command_20260815`, then **Save**. The saved file's UTC modification time advanced from `2026-08-15T12:06:46.6953140Z` to `2026-08-15T12:09:33.6521382Z` after the later Save command.
+- **Rename** opened the official dialog, completed successfully, and updated the Open list and disk name to `P01b_command_final_20260815.json`. The final visible Open item title and `title` path agreed with the actual file.
+- **Export workflow** and **Export API workflow** each opened the official `Export Workflow` dialog and closed normally after confirmation. The in-app browser did not expose those browser-managed export artifacts as a download event, so this is only command/dialog evidence. A separate Chrome attempt was blocked before the page loaded by `ERR_BLOCKED_BY_CLIENT`; no matching P-01b export artifact was found in the local Downloads or Desktop folders. **Pending:** verify both downloaded artifacts in a browser surface with visible download results before P-01b is marked complete.
+- Input boundary discovered from real behavior: these official dialogs expect a filename in the active workflow's current folder. Entering `__WK_TEST__/name` while the active workflow is already in `__WK_TEST__` created `__WK_TEST__/__WK_TEST__/name`; entering only the filename retained the current folder. This is an official command input semantic, not a WorkspaceKit Browse synchronization regression.
+- No WorkspaceKit console error occurred during command actions. One pre-existing ComfyUI frontend error, `ComfyApp graph accessed before initialization` from `assets/settingStore-CwkLtSKP.js`, was present before the checks and was not attributed to WorkspaceKit.
+
 ## 2026-08-15 - T-055 P-05a: Icon-system audit
 
 | Check | Result |
@@ -2670,6 +2751,30 @@ Last verified in the main package on 2026-07-30 (T-009 through T-012): all items
 - Isolated regression check passed: changing only `extra.ds` plus node order remains clean; changing a node title becomes dirty.
 - **2026-07-18 live test-package acceptance:** the clean `小红书 → 99 → 小红书` sequence passed with no dirty dot or Save button on either Open row. The separate dirty-tab reactivation regression is repaired and passed the real-node-move test above; main-package release acceptance remains outstanding.
 # Current release baseline
+
+## 2026-08-15 - T-056 R1 top Strip first real-page acceptance
+
+- R1 backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-r1-chrome-tab-strip-20260815-215021.zip` (SHA-256 `B384929DCB8C2515860718AD7A13A17C837B3028919355310B31123505275BBF`).
+- Static contracts passed: `node scripts/test-workspace-panel-host.mjs`, `node scripts/test-provider-tabs.mjs`, `node scripts/test-sidebar-startup-resilience.mjs`, and `git diff --check`.
+- The blocking cause was not a WK Strip geometry defect: Layout's retired floating `#alignment-buttons` rule still looked for `.workspace2-panel`, while the active host is `.workspace2-shell`. Layout now hides and disables that legacy toolbar only while the WK shell is present; its own regression contract passed.
+- Fresh test-package page at `http://127.0.0.1:8190/`, with WK opened: shell width 312px; Strip width and scroll width both 312px; its bottom border is `0px`; `#alignment-buttons` reported `visibility: hidden` and `pointer-events: none`; a top-strip hit test resolved to the active WK tab rather than the legacy toolbar.
+- At that width, `工作流`, `节点`, `模板`, and the Provider overflow tab all fit without Strip overflow. The workflow label is no longer prematurely shortened. Workflows, Nodes, Templates, and Theme Provider activation were exercised; the WK shell remained visible and no duplicate core tabs appeared. Theme used the same active overflow wrapper surface.
+- This is a dark-theme real-page acceptance. Light, transparent, frosted, and browser 100/125/150% zoom remain cross-theme visual regression evidence; they are not claimed by this record.
+
+## 2026-08-15 - T-056 R2 bottom status slot first acceptance
+
+- R2 backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-r2-status-slot-20260815-221201.zip` (SHA-256 `5EF6726E91E884E192B0414556C5EA73450C75825041FE69E8A7F08E876FB2AE`).
+- Added a host-owned `status` slot after the established scrollable `content` slot. Its controller has `show({ text, tone, live })`, `clear()`, and `dispose()`; empty text clears the row, unknown tones safely use neutral, and the row uses `role=status` with polite/assertive live-region support.
+- Static contracts passed: host-slot order and default hidden state, status-controller behavior, provider-tab plan, startup resilience, and the 120-module frontend syntax scan. `git diff --check` passed.
+- Fresh page at `http://127.0.0.1:8190/`: the rendered slot order was header, toolbar, controls, content, status. Header/toolbar/controls/status were all hidden; the content host retained its normal 679px height and hidden overflow. There were no WorkspaceKit error messages in the captured browser log.
+- R2 intentionally does not move title/status text from Workflows, Nodes, or Templates yet. That visual migration belongs to R3, so this record proves the new slot does not alter the existing layout while unused.
+
+## 2026-08-15 - T-056 R3 Nodes host-slot migration (static stage)
+
+- R3 Nodes backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-r3-nodes-host-migration-20260815-224018.zip` (SHA-256 `850F7D08B8E3A5360C28322406242A05B0B284428C2B1591B83C5B539C13BF00`).
+- The Nodes panel now maps its existing header, search toolbar, favorites/view controls, tree body, and status text to the R1/R2 host slots. Node cache, translation aliases, preview, favorites, sorting, and all data operations remain in their established functions. A direct internal rerender retains the same host mount, so a search, disclosure, or pending-placement update does not silently fall back to a second local panel.
+- Static checks passed: entry syntax, 120-module frontend syntax scan, panel-host/status/provider-tab/startup contracts, workflow regression contracts, and `git diff --check`. The running test server returned the exact current `entry.js` SHA-256 (`C7DEC6AEED18E9DC21D6682156A71FE1C4A180F26E3FC8207032A54E619FCFE3`) and both `/workspace2/workflows` and `/system_stats` returned HTTP 200.
+- This is deliberately **not** a real-page acceptance yet. The available in-app surface held a stale extension module and Chrome blocked `127.0.0.1:8190` with a browser-client extension error, so no visible Nodes interaction is claimed. R3 remains in progress; Templates is next, while Workflows stays after P-01b export-artifact acceptance.
 
 - **2026-07-21:** WorkspaceKit `0.2.2` is published to Comfy Registry. The GitHub Actions release gate was verified on a non-version push: version detection passed and the Registry publishing job was skipped, so ordinary documentation or source changes do not republish the package.
 - **2026-07-20:** The published Comfy Registry release is `0.2.1` for `comfyui-workspacekit`. `pyproject.toml` is the authoritative release-version source; the backend reads it for `/workspace2/info`, and the Settings dialog reads that endpoint.

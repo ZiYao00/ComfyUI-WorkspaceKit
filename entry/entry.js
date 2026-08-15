@@ -77,6 +77,7 @@ import { styles } from "./ui/styles.js";
 import { createWorkspace2Dialogs } from "./ui/dialogs.js";
 import { createOfficialNodeAdapter } from "./integrations/official-node-adapter.js";
 import { createWorkspacePanelHost } from "./ui/workspace-panel-host.js";
+import { createWorkspacePanelStatusController } from "./ui/panel-status.js";
 import { resolveWorkspacePanelProviderLabel } from "./ui/provider-label.js";
 import { PINNED_PROVIDER_KEY, createWorkspaceTabPlan } from "./ui/provider-tabs.js";
 import { MODULE_SHORTCUTS, isModuleShortcutEnabled, moduleShortcutStorageKey, resolveModuleShortcut } from "./ui/module-shortcuts.js";
@@ -716,6 +717,8 @@ const nodesState = {
   expanded: new Set([NODE_DEFAULT_GROUP_ID, "__bookmarked__", "__comfy__", "__extensions__", "__unknown__"]),
   draggingNode: null,
   renderTarget: null,
+  panelMount: null,
+  statusController: null,
   canvasDropReady: false,
   pointerDrag: null,
   groupDrag: null,
@@ -5220,6 +5223,12 @@ function updatePendingNodeUi() {
       : t("nodes.status", { count: nodeTypes.length });
     status.textContent = statusText;
     status.title = statusText;
+  } else if (nodesState.statusController) {
+    const nodeTypes = getNodeDefinitions();
+    const statusText = nodesState.pendingNode
+      ? t("nodes.pendingPlace", { name: nodesState.pendingNode.title })
+      : t("nodes.status", { count: nodeTypes.length });
+    nodesState.statusController.show({ text: statusText, tone: "neutral" });
   }
   target.querySelectorAll(".workspace2-node-row.is-selected").forEach((row) => {
     row.classList.remove("is-selected");
@@ -5949,7 +5958,19 @@ function renderWorkspace2Panel(el) {
     onPinProvider: (id) => { localStorage.setItem(PINNED_PROVIDER_KEY, id); workspaceState.activeModule = id; localStorage.setItem(WORKSPACE2_MODULE_KEY, id); renderWorkspace2Panel(el); },
     overflowLabel: t("workspace.extensions"),
   });
-  workspaceState.panelHostDispose = typeof panelHost.dispose === "function" ? panelHost.dispose : null;
+  const panelStatus = createWorkspacePanelStatusController({ host: panelHost.statusHost, document });
+  workspaceState.panelHostDispose = () => {
+    panelStatus.dispose();
+    panelHost.dispose?.();
+  };
+  const nodesPanelMount = {
+    moduleFrame: panelHost.moduleFrame,
+    headerHost: panelHost.headerHost,
+    toolbarHost: panelHost.toolbarHost,
+    controlsHost: panelHost.controlsHost,
+    contentHost: panelHost.contentHost,
+    status: panelStatus,
+  };
   applyWorkspaceBackgroundEffect(panelHost.shell);
   el.append(panelHost.shell);
   syncWorkspaceGlassOverlay();
@@ -5966,6 +5987,8 @@ function renderWorkspace2Panel(el) {
         // Compatibility name for existing Provider implementations.
         contextHost: panelHost.contextHost,
         contentHost: panelHost.contentHost,
+        // Optional R2 slot; existing Providers remain valid when ignored.
+        status: panelStatus,
       });
       workspaceState.providerDispose = typeof dispose === "function" ? dispose : null;
     } catch (error) {
@@ -5975,7 +5998,7 @@ function renderWorkspace2Panel(el) {
       renderPanel(panelHost.contentHost);
     }
   } else if (workspaceState.activeModule === "nodes") {
-    renderNodesPanel(panelHost.contentHost);
+    renderNodesPanel(panelHost.contentHost, nodesPanelMount);
   } else if (workspaceState.activeModule === "templates") {
     renderTemplatesPanel(panelHost.contentHost);
   } else {
@@ -7240,10 +7263,62 @@ function scheduleNodesResultsRefresh(el) {
   }, NODE_SEARCH_RENDER_DELAY);
 }
 
-function renderNodesPanel(el) {
+function createNodesPanelBlueprint(el, panelMount) {
+  const mount = panelMount?.contentHost === el && panelMount?.moduleFrame?.contains?.(el)
+    ? panelMount
+    : null;
+  const setSlot = (slot, value) => {
+    const children = Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
+    slot.replaceChildren(...children);
+    slot.hidden = children.length === 0;
+  };
+  if (mount) {
+    const element = mount.moduleFrame;
+    element.classList.add("workspace2-panel", "workspace2-node-blueprint");
+    return {
+      isHostBlueprint: true,
+      element,
+      setHeader: (value) => setSlot(mount.headerHost, value),
+      setToolbar: (value) => setSlot(mount.toolbarHost, value),
+      setControls: (value) => setSlot(mount.controlsHost, value),
+      setContent: (value) => setSlot(mount.contentHost, value),
+      setStatus: (value) => {
+        if (value) mount.status?.show?.(value);
+        else mount.status?.clear?.();
+      },
+    };
+  }
+
+  const element = document.createElement("div");
+  const makeSlot = (name) => {
+    const slot = document.createElement("div");
+    slot.className = `workspacekit-ui-panel-${name}-slot`;
+    element.append(slot);
+    return slot;
+  };
+  const header = makeSlot("header");
+  const toolbar = makeSlot("toolbar");
+  const controls = makeSlot("controls");
+  const content = makeSlot("content");
+  return {
+    isHostBlueprint: false,
+    element,
+    setHeader: (value) => setSlot(header, value),
+    setToolbar: (value) => setSlot(toolbar, value),
+    setControls: (value) => setSlot(controls, value),
+    setContent: (value) => setSlot(content, value),
+    setStatus: () => {},
+  };
+}
+
+function renderNodesPanel(el, panelMount = null) {
   const finish = startPerformanceSpan("nodes.render");
   const snapshot = scrollSnapshot(el);
   nodesState.renderTarget = el;
+  if (panelMount?.contentHost === el) {
+    nodesState.panelMount = panelMount;
+    nodesState.statusController = panelMount.status || null;
+  }
   setupNodeCanvasDrop();
   styles();
   setupWorkspaceKeyIsolation();
@@ -7256,12 +7331,10 @@ function renderNodesPanel(el) {
   scheduleRuntimeNodeTitlePresentationRecheck();
   ensureDdTranslationSearchAliases();
 
-  const panel = document.createElement("div");
-  panel.className = "workspace2-panel";
+  const blueprint = createNodesPanelBlueprint(el, panelMount || nodesState.panelMount);
+  const panel = blueprint.element;
+  panel.classList.add("workspace2-panel", "workspace2-node-blueprint");
   applyNodeUiScale(panel);
-
-  const top = document.createElement("div");
-  top.className = "workspace2-top workspace2-node-top";
 
   const nodeTypes = getNodeDefinitions();
   const statusText = nodesState.pendingNode
@@ -7296,7 +7369,11 @@ function renderNodesPanel(el) {
   syncOfficial.disabled = nodesState.officialFavoritesLoading;
   syncOfficial.classList.add("workspace2-node-favorites-manager");
 
-  const header = createPanelHeader(t("nodes.title"), statusText, { statusDataset: "workspace2NodesStatus" });
+  const header = createPanelHeader(
+    t("nodes.title"),
+    blueprint.isHostBlueprint ? "" : statusText,
+    blueprint.isHostBlueprint ? {} : { statusDataset: "workspace2NodesStatus" },
+  );
   const toolbar = createSearchToolbar({
     focusKey: "nodes-search",
     placeholder: t("nodes.searchPlaceholder"),
@@ -7307,14 +7384,19 @@ function renderNodesPanel(el) {
       scheduleNodesResultsRefresh(el);
     },
   });
-  top.append(header, toolbar, nodesFavoriteRootRow(el), nodesViewTabs(el));
+  blueprint.setHeader(header);
+  blueprint.setToolbar(toolbar);
+  blueprint.setControls([nodesFavoriteRootRow(el), nodesViewTabs(el)]);
+  blueprint.setStatus({ text: statusText, tone: "neutral" });
 
   const body = document.createElement("div");
   body.className = "workspace2-tree workspace2-node-tree";
   renderNodesBody(el, body);
 
-  panel.append(top, body);
-  el.append(panel);
+  blueprint.setContent(body);
+  if (!blueprint.isHostBlueprint) {
+    el.append(panel);
+  }
   restoreScrollSnapshot(el, snapshot);
   finish({ nodeCount: nodeTypes.length });
 }

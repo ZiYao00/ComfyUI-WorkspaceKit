@@ -20,6 +20,10 @@ export function createSettingsDialogSections({
   setAltCOpenTemplatesEnabled,
   isPanelIntegrationsEnabled,
   setPanelIntegrationsEnabled,
+  // Optional defaults preserve compatibility with an older entry.js or
+  // isolated contract caller while the status-help setting is rolling out.
+  isStatusHelpEnabled = () => true,
+  setStatusHelpEnabled = () => {},
   moduleShortcutOptions,
   groupPointerShortcutOptions,
   workflowRecentLimit,
@@ -145,6 +149,7 @@ export function createSettingsDialogSections({
     const dataManagement = buildDataManagementSection();
 
     const integrations = settingsSection(t("settings.panelIntegrations"), [
+      settingsCheckbox(t("settings.statusHelp"), isStatusHelpEnabled(), setStatusHelpEnabled),
       settingsCheckbox(
         t("settings.panelIntegrationsEnabled"),
         isPanelIntegrationsEnabled(),

@@ -2,7 +2,7 @@
 // data shaping and ordering: it does not query the filesystem, render DOM, or
 // mutate expansion state. Preserve the custom-order and folder-first rules so
 // a renderer refresh cannot change the user's deliberate drag order.
-export function createWorkflowTreeBuilder({ state, parentPath }) {
+export function createWorkflowTreeBuilder({ state, parentPath, isFavorite = () => false }) {
   function compareItems(a, b, parent = "") {
     const nameCompare = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
     const updatedA = Number(a.updated_at || 0);
@@ -90,6 +90,20 @@ export function createWorkflowTreeBuilder({ state, parentPath }) {
     }
 
     sortTree(root);
+    if (state.browseView !== "favorites") {
+      return root;
+    }
+    // Keep only favorite files and their ancestor folders. This is a view
+    // projection, not a second tree, so drag/drop and all path operations
+    // continue to use the original workflow-relative paths.
+    function keepFavoriteBranch(node) {
+      if (node.type === "file") {
+        return isFavorite(node.path);
+      }
+      node.children = node.children.filter(keepFavoriteBranch);
+      return node.path === "" || node.children.length > 0;
+    }
+    keepFavoriteBranch(root);
     return root;
   }
 

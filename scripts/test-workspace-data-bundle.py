@@ -14,6 +14,7 @@ sys.modules["workspacekit_test"] = package
 from workspacekit_test.service.folder_meta_service import write_folder_meta
 from workspacekit_test.service.node_library_service import write_node_library
 from workspacekit_test.service.template_library_service import write_template_library
+from workspacekit_test.service.workflow_favorites_service import write_workflow_favorites
 from workspacekit_test.service.workspace_data_bundle import (
     build_workspace_data_bundle,
     import_workspace_data_bundle,
@@ -33,12 +34,15 @@ with tempfile.TemporaryDirectory() as directory:
         "trash": [{"id": "deleted", "template": {"id": "deleted", "name": "Deleted template", "nodes": [], "links": []}, "deletedAt": 1}],
     })
     write_folder_meta(root, {"folder": {"icon": "pi pi-folder", "color": "#123456"}})
+    write_workflow_favorites(root, {"favorites": ["Original.json"]})
     settings_path.write_text(json.dumps({"workflowsRootMode": "official"}), encoding="utf-8")
 
     bundle = build_workspace_data_bundle(root, {"workflowsRootMode": "official"})
     assert bundle["schema_version"] == 1
     assert bundle["data"]["node_library"]["favorites"][0]["type"] == "OriginalNode"
+    assert bundle["data"]["workflow_favorites"]["favorites"] == ["Original.json"]
     bundle["data"]["node_library"]["favorites"] = [{"type": "ImportedNode"}]
+    bundle["data"]["workflow_favorites"] = {"favorites": ["Imported.json"]}
 
     result = import_workspace_data_bundle(root, settings_path, bundle, {"workspace2.nodes.sort": "alphabetical"})
     backup = Path(result["backup_path"])
@@ -49,5 +53,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert backed_up["data"]["node_library"]["favorites"][0]["type"] == "OriginalNode"
     assert backed_up["browser_preferences"]["workspace2.nodes.sort"] == "alphabetical"
     assert backed_up["data"]["template_library"]["trash"][0]["template"]["name"] == "Deleted template"
+    assert backed_up["data"]["workflow_favorites"]["favorites"] == ["Original.json"]
+    assert (root / "user/default/comfyui-workspace2/workflow_favorites.json").read_text(encoding="utf-8").find("Imported.json") >= 0
 
 print("workspace data bundle round-trip passed")

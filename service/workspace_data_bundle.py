@@ -10,6 +10,7 @@ from pathlib import Path
 from .folder_meta_service import folder_meta_path, normalize_folder_meta, read_folder_meta
 from .node_library_service import node_library_path, normalize_node_library, read_node_library
 from .template_library_service import template_library_path, normalize_template_library, read_template_library
+from .workflow_favorites_service import read_workflow_favorites, normalize_workflow_favorites, workflow_favorites_path
 
 
 BUNDLE_SCHEMA_VERSION = 1
@@ -45,6 +46,7 @@ def build_workspace_data_bundle(comfy_path, workspace_settings):
             "node_library": read_node_library(comfy_path),
             "template_library": read_template_library(comfy_path),
             "folder_meta": read_folder_meta(comfy_path),
+            "workflow_favorites": read_workflow_favorites(comfy_path),
             "workspace_settings": _clean_settings(workspace_settings),
         },
     }
@@ -66,6 +68,7 @@ def normalize_workspace_data_bundle(bundle):
             "node_library": normalize_node_library(data.get("node_library")),
             "template_library": normalize_template_library(data.get("template_library")),
             "folder_meta": normalize_folder_meta(data.get("folder_meta")),
+            "workflow_favorites": normalize_workflow_favorites(data.get("workflow_favorites")),
             "workspace_settings": _clean_settings(data.get("workspace_settings")),
         },
     }
@@ -88,6 +91,7 @@ def import_workspace_data_bundle(comfy_path, workspace_settings_path, bundle, br
     _atomic_write_json(node_library_path(comfy_path), data["node_library"])
     _atomic_write_json(template_library_path(comfy_path), data["template_library"])
     _atomic_write_json(folder_meta_path(comfy_path), data["folder_meta"])
+    _atomic_write_json(workflow_favorites_path(comfy_path), data["workflow_favorites"])
     _atomic_write_json(workspace_settings_path, data["workspace_settings"])
     return {"bundle": normalized, "backup_path": str(backup_path)}
 

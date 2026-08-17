@@ -30,6 +30,7 @@ from .service.official_favorites_probe import probe_official_favorites
 from .service.official_favorites_sync import write_workspace2_favorites_to_official
 from .service.safe_path import safe_join, safe_relative_path
 from .service.template_library_service import read_template_library, write_template_library
+from .service.workflow_favorites_service import read_workflow_favorites, write_workflow_favorites
 from .service.workflow_copy_service import copy_workflow_file
 from .service.workspace_data_bundle import build_workspace_data_bundle, import_workspace_data_bundle
 from .service.trash_service import (
@@ -391,6 +392,31 @@ async def workspace2_folder_meta(_request):
         return _json_response({"ok": True, "folder_meta": meta})
     except Exception as exc:
         return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.get("/workspace2/workflow-favorites")
+async def workspace2_workflow_favorites(_request):
+    try:
+        favorites = await asyncio.to_thread(read_workflow_favorites, comfy_path)
+        return _json_response({"ok": True, **favorites})
+    except Exception as exc:
+        return _json_error(str(exc), status=500)
+
+
+@server.PromptServer.instance.routes.post("/workspace2/workflow-favorites")
+async def workspace2_workflow_favorites_save(request):
+    try:
+        data = await request.json()
+        favorites = data.get("favorites")
+        if not isinstance(favorites, list):
+            return _json_error("Favorites must be an array")
+        # Keep the browser payload within the same path safety boundary as all
+        # workflow endpoints. The service only stores relative identifiers.
+        normalized = [_require_relative_path(path) for path in favorites]
+        saved = await asyncio.to_thread(write_workflow_favorites, comfy_path, {"favorites": normalized})
+        return _json_response({"ok": True, **saved})
+    except Exception as exc:
+        return _json_error(str(exc), status=400)
 
 
 @server.PromptServer.instance.routes.post("/workspace2/folder-meta")

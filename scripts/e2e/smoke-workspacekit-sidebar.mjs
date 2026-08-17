@@ -98,6 +98,39 @@ async function verifyRecycleBinToolbarStates(page) {
   await verifyCurrentPanel('templates');
 }
 
+async function verifyCorePanelHostSlots(page) {
+  const cases = [
+    { index: 0, blueprint: 'workspace2-workflow-blueprint', label: 'workflows' },
+    { index: 1, blueprint: 'workspace2-node-blueprint', label: 'nodes' },
+    { index: 2, blueprint: 'workspace2-templates-blueprint', label: 'templates' },
+  ];
+  for (const item of cases) {
+    await page.locator('.workspace2-module-tab').nth(item.index).click();
+    const selector = `.workspace2-module-frame.${item.blueprint}`;
+    await page.waitForSelector(selector, { timeout: 10_000 });
+    const report = await page.locator(selector).evaluate((frame) => {
+      const slot = (name) => frame.querySelector(name);
+      const header = slot('.workspace2-module-header-host');
+      const toolbar = slot('.workspace2-module-context-host');
+      const controls = slot('.workspace2-module-controls-host');
+      const content = slot('.workspace2-module-body');
+      const status = slot('.workspace2-module-status-host');
+      return {
+        headerChildren: header?.childElementCount || 0,
+        toolbarChildren: toolbar?.childElementCount || 0,
+        controlsChildren: controls?.childElementCount || 0,
+        contentChildren: content?.childElementCount || 0,
+        statusText: status?.textContent?.trim() || '',
+        legacyStatusDisplay: header ? getComputedStyle(header.querySelector('.workspace2-status')).display : '',
+      };
+    });
+    if (report.headerChildren !== 1 || report.toolbarChildren !== 1 || report.controlsChildren < 1 || report.contentChildren !== 1 || !report.statusText || report.legacyStatusDisplay !== 'none') {
+      throw new Error(`${item.label} shared-slot mismatch: ${JSON.stringify(report)}`);
+    }
+    log('shared_slots', `${item.label}: ${JSON.stringify(report)}`);
+  }
+}
+
 async function main() {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
@@ -149,12 +182,13 @@ async function main() {
         extFound: found,
         globalsFound,
         styleFound,
-        rootSidebarMask: (() => {
+        rootSidebarMark: (() => {
           const wrapper = document.querySelector('.workspace2-tab-button .sidebar-icon-wrapper');
           if (!wrapper) return false;
           const pseudo = getComputedStyle(wrapper, '::before');
-          return String(pseudo.webkitMaskImage || pseudo.maskImage || '').startsWith('url(')
-            && pseudo.backgroundColor !== 'rgba(0, 0, 0, 0)';
+          return pseudo.content.includes('🧩')
+            && pseudo.display === 'flex'
+            && pseudo.opacity !== '0';
         })(),
         providers: typeof window.WorkspaceKitPanelAPI?.getProviders === 'function'
           ? window.WorkspaceKitPanelAPI.getProviders().map((provider) => ({
@@ -172,12 +206,17 @@ async function main() {
     for (const [k, v] of Object.entries(report.extFound)) if (!v) failures.push('missing extension: ' + k);
     for (const [k, v] of Object.entries(report.globalsFound)) if (!v) failures.push('missing global: ' + k);
     for (const [k, v] of Object.entries(report.styleFound)) if (!v) failures.push('missing style#' + k);
-    if (!report.rootSidebarMask) failures.push('WorkspaceKit sidebar SVG mask is missing or transparent');
+    if (!report.rootSidebarMark) failures.push('WorkspaceKit sidebar emoji mark is missing or hidden');
 
     try {
       await verifyRecycleBinToolbarStates(page);
     } catch (error) {
       failures.push(`recycle-bin toolbar verification failed: ${error.message || String(error)}`);
+    }
+    try {
+      await verifyCorePanelHostSlots(page);
+    } catch (error) {
+      failures.push(`shared-slot verification failed: ${error.message || String(error)}`);
     }
 
     // Report console errors, but only fail on the ones that look tied to WorkspaceKit.

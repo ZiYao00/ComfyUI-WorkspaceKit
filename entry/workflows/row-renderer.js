@@ -31,6 +31,10 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
     onNewSubfolder,
     onOpenWorkflowLocation,
     onCopyWorkflow,
+    // Defaults keep isolated renderer callers and an older cached entry module
+    // safe while the virtual-favorites capability is rolling out.
+    isFavorite = () => false,
+    onToggleFavorite = async () => false,
     onRename,
     onMoveToTrash,
     onError,
@@ -152,6 +156,17 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
       }
     }));
   } else {
+    const favorite = iconButton("workflows.row.favorite", t(isFavorite(node.path) ? "workflows.removeFavorite" : "workflows.addFavorite"), async () => {
+      try {
+        await onToggleFavorite(el, node.path);
+      } catch (error) {
+        onError(el, error);
+      }
+    });
+    if (isFavorite(node.path)) {
+      favorite.classList.add("is-favorite-active");
+    }
+    actions.append(favorite);
     actions.append(iconButton("workflows.row.openLocation", t("row.openLocation"), async () => {
       try {
         await onOpenWorkflowLocation(node.path);

@@ -19,6 +19,10 @@ export function createWorkspacePanelStatusController({
   };
 
   const show = ({ text, tone = "neutral", live = "polite" } = {}) => {
+    if (globalThis.localStorage?.getItem("workspace2.statusHelp.enabled") === "0") {
+      clear();
+      return false;
+    }
     const message = String(text ?? "").trim();
     if (!message) {
       clear();

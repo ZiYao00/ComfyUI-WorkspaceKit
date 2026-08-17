@@ -20,6 +20,7 @@ export const WORKSPACEKIT_ICON_SEMANTICS = Object.freeze({
   "workflows.file.exportApi": "download",
   "workflows.file.moveToTrash": "trash",
   "workflows.row.newSubfolder": "folderPlusModern",
+  "workflows.row.favorite": "star",
   "workflows.row.openLocation": "folderOpen",
   "workflows.row.copy": "copy",
   "workflows.row.rename": "edit",

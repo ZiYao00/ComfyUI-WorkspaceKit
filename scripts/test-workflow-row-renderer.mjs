@@ -52,6 +52,8 @@ renderWorkflowBrowseNode({
   onNewSubfolder: async () => {},
   onOpenWorkflowLocation: async () => {},
   onCopyWorkflow: async (_el, item) => calls.push(`copy:${item.path}`),
+  isFavorite: () => false,
+  onToggleFavorite: async (_el, path) => calls.push(`favorite:${path}`),
   onRename: () => calls.push("rename"),
   onMoveToTrash: async (_el, item, anchor) => calls.push(`trash:${item.path}:${anchor?.icon}`),
   onError: (error) => { throw error; },
@@ -59,14 +61,16 @@ renderWorkflowBrowseNode({
 
 const actions = list.children[0].children[4];
 assert.deepEqual(actions.children.map((button) => button.icon), [
+  "workflows.row.favorite",
   "workflows.row.openLocation",
   "workflows.row.copy",
   "workflows.row.rename",
   "workflows.row.moveToTrash",
 ]);
 const event = { preventDefault() {}, stopPropagation() {} };
-await actions.children[1].listeners.get("click")(event);
-await actions.children[3].listeners.get("click")({ ...event, currentTarget: actions.children[3] });
-assert.deepEqual(calls, ["copy:folder/example.json", "trash:folder/example.json:workflows.row.moveToTrash"]);
+await actions.children[0].listeners.get("click")(event);
+await actions.children[2].listeners.get("click")(event);
+await actions.children[4].listeners.get("click")({ ...event, currentTarget: actions.children[4] });
+assert.deepEqual(calls, ["favorite:folder/example.json", "copy:folder/example.json", "trash:folder/example.json:workflows.row.moveToTrash"]);
 
 console.log("Workflow row renderer copy contract passed.");

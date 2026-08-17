@@ -117,6 +117,7 @@ import { createWorkflowResultsRenderer } from "./workflows/results-renderer.js";
 import { createWorkflowContextMenuRenderer } from "./workflows/context-menu-renderer.js";
 import { createWorkflowTrashRenderer } from "./workflows/trash-renderer.js";
 import { createWorkflowItemStore } from "./workflows/item-store.js";
+import { createWorkflowFavoriteStore } from "./workflows/favorite-store.js";
 import { createWorkflowPathState } from "./workflows/path-state.js";
 import { createWorkflowFolderMetaService } from "./workflows/folder-meta.js";
 import { createWorkflowCustomOrderStore } from "./workflows/custom-order-store.js";
@@ -199,6 +200,7 @@ const WORKFLOW_OPEN_SECTION_COLLAPSED_KEY = "workspace2.workflows.openCollapsed"
 // This is a host preference, not a security boundary. It controls whether
 // optional Provider tabs can be merged into WorkspaceKit's sidebar shell.
 const WORKSPACE2_PANEL_INTEGRATIONS_ENABLED_KEY = "workspace2.panelIntegrations.enabled";
+const WORKSPACE2_STATUS_HELP_ENABLED_KEY = "workspace2.statusHelp.enabled";
 const WORKFLOW_BROWSE_SECTION_COLLAPSED_KEY = "workspace2.workflows.browseCollapsed";
 const nodePanelState = createNodePanelState({
   sectionFilters: NODE_SECTION_FILTERS,
@@ -330,6 +332,10 @@ const state = {
   fileMenuElement: null,
   fileMenuCloseHandler: null,
   showTrash: false,
+  // Browse Favorites is a virtual projection of the normal workflow tree;
+  // it never creates a filesystem folder or changes workflow paths.
+  browseView: localStorage.getItem("workspace2.workflows.browseView") === "favorites" ? "favorites" : "all",
+  favoritesLoaded: false,
   trashItems: [],
   draggingItem: null,
   pointerDrag: null,
@@ -345,6 +351,7 @@ const state = {
   strings: {},
   localeTimer: null,
   workflowsTarget: null,
+  workflowPanelMount: null,
   resultsRefreshTimer: null,
   // Last user-driven Browse scroll position. Survives the clear-then-rebuild
   // that a first-time workflow open performs, which a per-render snapshot alone
@@ -434,12 +441,15 @@ const workflowSections = createWorkflowSectionRenderer({
   storage: window.localStorage,
 });
 
+const workflowFavoriteStore = createWorkflowFavoriteStore({ fetchJson, postJson });
+
 // Browse hierarchy construction is pure state-to-tree data shaping. Keeping
 // it before the results renderer ensures the renderer receives a stable tree
 // builder without importing workflow operations or official Store state.
 const workflowTree = createWorkflowTreeBuilder({
   state,
   parentPath,
+  isFavorite: (path) => workflowFavoriteStore.has(path),
 });
 const buildTree = workflowTree.build;
 
@@ -561,6 +571,8 @@ const workflowPathState = createWorkflowPathState({
   onSaveCustomOrder: saveWorkflowCustomOrder,
   onUpdateRecentWorkflowPath: updateRecentWorkflowPath,
   onRemoveRecentWorkflowTree: removeRecentWorkflowTree,
+  onRemapFavorites: (oldPath, newPath) => workflowFavoriteStore.remap(oldPath, newPath),
+  onRemoveFavorites: (path) => workflowFavoriteStore.remove(path),
 });
 
 const templatesState = {
@@ -570,6 +582,8 @@ const templatesState = {
   loading: false,
   error: "",
   renderTarget: null,
+  panelMount: null,
+  statusController: null,
   draggingTemplate: null,
   draggingGroupId: "",
   pendingTemplate: null,
@@ -1480,6 +1494,9 @@ function setWorkspacePanelIntegrationsEnabled(checked) {
   return enabled;
 }
 
+function isWorkspaceStatusHelpEnabled() { return localStorage.getItem(WORKSPACE2_STATUS_HELP_ENABLED_KEY) !== "0"; }
+function setWorkspaceStatusHelpEnabled(checked) { localStorage.setItem(WORKSPACE2_STATUS_HELP_ENABLED_KEY, checked ? "1" : "0"); }
+
 function isElementVisible(element) {
   if (!(element instanceof HTMLElement) || !element.isConnected) {
     return false;
@@ -1661,6 +1678,8 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
   setAltCOpenTemplatesEnabled: (checked) => localStorage.setItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY, checked ? "1" : "0"),
   isPanelIntegrationsEnabled: isWorkspacePanelIntegrationsEnabled,
   setPanelIntegrationsEnabled: setWorkspacePanelIntegrationsEnabled,
+  isStatusHelpEnabled: isWorkspaceStatusHelpEnabled,
+  setStatusHelpEnabled: setWorkspaceStatusHelpEnabled,
   moduleShortcutOptions,
   groupPointerShortcutOptions,
   workflowRecentLimit,
@@ -2093,6 +2112,10 @@ async function loadWorkflows() {
     state.officialRoot = data.official_root || "";
     state.folderMeta = data.folder_meta || {};
     state.isOfficialRoot = data.is_official_root !== false;
+    if (!state.favoritesLoaded) {
+      await workflowFavoriteStore.load();
+      state.favoritesLoaded = true;
+    }
     state.status = t("status.items", { count: state.items.length });
     finish({ itemCount: state.items.length });
   } catch (error) {
@@ -3760,12 +3783,18 @@ function updatePendingTemplateUi() {
     return;
   }
   const selectedId = templatesState.pendingTemplate?.id || "";
-  const status = target.querySelector("[data-workspace2-templates-status]");
-  if (status) {
-    const templates = templatesState.library?.templates || [];
-    status.textContent = selectedId
-      ? t("templates.pendingPlace", { name: templatesState.pendingTemplate.name })
-      : t("templates.status", { count: templates.length });
+  const templates = templatesState.library?.templates || [];
+  const statusText = selectedId
+    ? t("templates.pendingPlace", { name: templatesState.pendingTemplate.name })
+    : t("templates.status", { count: templates.length });
+  if (templatesState.panelMount?.contentHost === target && templatesState.statusController) {
+    templatesState.statusController.show({ text: statusText, tone: "neutral" });
+  } else {
+    const status = target.querySelector("[data-workspace2-templates-status]");
+    if (status) {
+      status.textContent = statusText;
+      status.title = statusText;
+    }
   }
   target.querySelectorAll(".workspace2-template-row.is-selected").forEach((row) => {
     row.classList.remove("is-selected");
@@ -5971,6 +6000,8 @@ function renderWorkspace2Panel(el) {
     contentHost: panelHost.contentHost,
     status: panelStatus,
   };
+  const templatesPanelMount = { ...nodesPanelMount };
+  const workflowPanelMount = { ...nodesPanelMount };
   applyWorkspaceBackgroundEffect(panelHost.shell);
   el.append(panelHost.shell);
   syncWorkspaceGlassOverlay();
@@ -5995,14 +6026,14 @@ function renderWorkspace2Panel(el) {
       console.error("[WorkspaceKit] Provider render failed", provider.id, error);
       workspaceState.activeModule = "workflows";
       localStorage.setItem(WORKSPACE2_MODULE_KEY, "workflows");
-      renderPanel(panelHost.contentHost);
+      renderPanel(panelHost.contentHost, workflowPanelMount);
     }
   } else if (workspaceState.activeModule === "nodes") {
     renderNodesPanel(panelHost.contentHost, nodesPanelMount);
   } else if (workspaceState.activeModule === "templates") {
-    renderTemplatesPanel(panelHost.contentHost);
+    renderTemplatesPanel(panelHost.contentHost, templatesPanelMount);
   } else {
-    renderPanel(panelHost.contentHost);
+    renderPanel(panelHost.contentHost, workflowPanelMount);
   }
   window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 0);
   window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 180);
@@ -6467,6 +6498,14 @@ function renderNode(el, list, node, depth, activeTrail = null) {
     onNewSubfolder: (target, path) => createFolder(target, path),
     onOpenWorkflowLocation: openWorkflowLocation,
     onCopyWorkflow: copyWorkflow,
+    isFavorite: (path) => workflowFavoriteStore.has(path),
+    onToggleFavorite: async (target, path) => {
+      await workflowFavoriteStore.toggle(path);
+      state.status = workflowFavoriteStore.has(path)
+        ? t("workflows.favoriteAdded")
+        : t("workflows.favoriteRemoved");
+      renderPanel(target);
+    },
     onRename: (target, path) => beginWorkflowRename(target, path, "browse"),
     onMoveToTrash: (target, item, anchor) => requestMoveWorkflowToTrash(target, item, anchor),
     onError: handleError,
@@ -6564,7 +6603,7 @@ function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
   });
 }
 
-function renderPanel(el) {
+function renderPanel(el, panelMount = null) {
   const finish = startPerformanceSpan("workflows.render", {
     itemCount: state.items.length,
     trash: state.showTrash,
@@ -6572,6 +6611,7 @@ function renderPanel(el) {
   const snapshot = scrollSnapshot(el);
   const openHistoryScrollTop = el?.querySelector?.(".workspace2-open-history-list")?.scrollTop || 0;
   state.workflowsTarget = el;
+  if (panelMount?.contentHost === el) state.workflowPanelMount = panelMount;
   startAutoRefresh(el);
   styles();
   setupWorkspaceKeyIsolation();
@@ -6582,8 +6622,17 @@ function renderPanel(el) {
   // Consume the shared Blueprint without changing the established workflow
   // service/mount target. If a stale host cannot provide it during startup,
   // use an equivalent local slot structure rather than failing the panel.
+  const mount = (panelMount || state.workflowPanelMount)?.contentHost === el
+    && (panelMount || state.workflowPanelMount)?.moduleFrame?.contains?.(el)
+    ? (panelMount || state.workflowPanelMount) : null;
+  const setHostSlot = (slot, value) => { const children = Array.isArray(value) ? value.filter(Boolean) : value ? [value] : []; slot.replaceChildren(...children); slot.hidden = children.length === 0; };
   const panelUi = workspaceState.panelUiTemplate?.create?.({ document });
-  const blueprint = panelUi?.createPanelBlueprint?.() || (() => {
+  const blueprint = mount ? {
+    isHostBlueprint: true, element: mount.moduleFrame,
+    setHeader: (value) => setHostSlot(mount.headerHost, value), setToolbar: (value) => setHostSlot(mount.toolbarHost, value),
+    setControls: (value) => setHostSlot(mount.controlsHost, value), setContent: (value) => setHostSlot(mount.contentHost, value),
+    setStatus: (value) => value ? mount.status?.show?.(value) : mount.status?.clear?.(),
+  } : panelUi?.createPanelBlueprint?.() || (() => {
     const element = document.createElement("div");
     const makeSlot = (name) => {
       const slot = document.createElement("div");
@@ -6601,21 +6650,24 @@ function renderPanel(el) {
       slot.hidden = children.length === 0;
     };
     return {
+      isHostBlueprint: false,
       element, header, toolbar, controls, content,
       setHeader: (value) => setSlot(header, value),
       setToolbar: (value) => setSlot(toolbar, value),
       setControls: (value) => setSlot(controls, value),
       setContent: (value) => setSlot(content, value),
+      setStatus: () => {},
     };
   })();
   const panel = blueprint.element;
   panel.classList.add("workspace2-panel", "workspace2-workflow-blueprint");
   applyWorkflowUiScale(panel);
-  panel.addEventListener("click", () => {
+  if (!blueprint.isHostBlueprint || !panel.dataset.workspace2WorkflowMenuDismissBound) panel.addEventListener("click", () => {
     closeContextMenu();
     closeWorkflowSortMenu();
     closeWorkflowFileMenu();
   });
+  panel.dataset.workspace2WorkflowMenuDismissBound = "1";
 
   const file = toolbarTextButton(t("workflows.fileMenu"), t("workflows.fileMenuTitle"), (event) => {
     event.preventDefault();
@@ -6656,7 +6708,7 @@ function renderPanel(el) {
     trash.classList.add("is-active", "is-trash-return");
   }
 
-  const header = createPanelHeader(t("workflows.title"), state.status);
+  const header = createPanelHeader(t("workflows.title"), blueprint.isHostBlueprint ? "" : state.status);
   const toolbar = createSearchToolbar({
     focusKey: "workflow-search",
     placeholder: t("search.placeholder"),
@@ -6669,6 +6721,7 @@ function renderPanel(el) {
   });
   blueprint.setHeader(header);
   blueprint.setToolbar(toolbar);
+  blueprint.setStatus({ text: state.status, tone: "neutral" });
 
   if (state.showTrash) {
     const emptyTrashRow = createRootActionRow({
@@ -6699,7 +6752,7 @@ function renderPanel(el) {
     blueprint.setControls(emptyTrashRow);
     blueprint.setContent(trashContent);
     renderTrashPanel(el, trashContent);
-    el.append(panel);
+    if (!blueprint.isHostBlueprint) el.append(panel);
     finish({ renderedTrashCount: state.trashItems.length });
     return;
   }
@@ -6719,6 +6772,24 @@ function renderPanel(el) {
     control: fontControl(el),
     setupDrop: (row) => makeDropTarget(el, row, ""),
   });
+
+  const browseViewTabs = document.createElement("div");
+  browseViewTabs.className = "workspace2-workflow-view-tabs";
+  for (const view of ["all", "favorites"]) {
+    const active = state.browseView === view;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `workspace2-workflow-view-tab ${active ? "is-active" : ""}`;
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.textContent = t(`workflows.view.${view}`);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.browseView = view;
+      localStorage.setItem("workspace2.workflows.browseView", view);
+      renderPanel(el);
+    });
+    browseViewTabs.append(button);
+  }
 
   renderWorkflowTreeBody(el, tree);
 
@@ -6741,10 +6812,13 @@ function renderPanel(el) {
   workflowContent.className = "workspace2-workflow-content";
   workflowContent.append(openSection, browseSection);
 
-  blueprint.setControls(moveRootRow);
+  const workflowControls = document.createElement("div");
+  workflowControls.className = "workspace2-workflow-controls";
+  workflowControls.append(browseViewTabs, moveRootRow);
+  blueprint.setControls(workflowControls);
   blueprint.setContent(workflowContent);
   renderContextMenu(el, panel);
-  el.append(panel);
+  if (!blueprint.isHostBlueprint) el.append(panel);
   restoreScrollSnapshot(el, snapshot);
 }
 
@@ -7114,12 +7188,30 @@ function openSortMenu(el, anchor) {
   }, 0);
 }
 
-function renderTemplatesPanel(el) {
+function createTemplatesPanelBlueprint(el, panelMount) {
+  const mount = panelMount?.contentHost === el && panelMount?.moduleFrame?.contains?.(el) ? panelMount : null;
+  const setSlot = (slot, value) => { const children = Array.isArray(value) ? value.filter(Boolean) : value ? [value] : []; slot.replaceChildren(...children); slot.hidden = children.length === 0; };
+  if (mount) {
+    const element = mount.moduleFrame;
+    element.classList.add("workspace2-panel", "workspace2-templates-blueprint");
+    return { isHostBlueprint: true, element,
+      setHeader: (value) => setSlot(mount.headerHost, value), setToolbar: (value) => setSlot(mount.toolbarHost, value),
+      setControls: (value) => setSlot(mount.controlsHost, value), setContent: (value) => setSlot(mount.contentHost, value),
+      setStatus: (value) => value ? mount.status?.show?.(value) : mount.status?.clear?.() };
+  }
+  const element = document.createElement("div");
+  const makeSlot = (name) => { const slot = document.createElement("div"); slot.className = `workspacekit-ui-panel-${name}-slot`; element.append(slot); return slot; };
+  const header = makeSlot("header"), toolbar = makeSlot("toolbar"), controls = makeSlot("controls"), content = makeSlot("content");
+  return { isHostBlueprint: false, element, setHeader: (value) => setSlot(header, value), setToolbar: (value) => setSlot(toolbar, value), setControls: (value) => setSlot(controls, value), setContent: (value) => setSlot(content, value), setStatus: () => {} };
+}
+
+function renderTemplatesPanel(el, panelMount = null) {
   const finish = startPerformanceSpan("templates.render", {
     templateCount: templatesState.library?.templates?.length || 0,
   });
   const snapshot = scrollSnapshot(el);
   templatesState.renderTarget = el;
+  if (panelMount?.contentHost === el) { templatesState.panelMount = panelMount; templatesState.statusController = panelMount.status || null; }
   setupNodeCanvasDrop();
   styles();
   setupWorkspaceKeyIsolation();
@@ -7127,16 +7219,15 @@ function renderTemplatesPanel(el) {
   closeTemplateSortMenu();
   prepareWorkspaceModuleMount(el);
 
-  const panel = document.createElement("div");
-  panel.className = "workspace2-panel";
+  const blueprint = createTemplatesPanelBlueprint(el, panelMount || templatesState.panelMount);
+  const panel = blueprint.element;
+  panel.classList.add("workspace2-panel", "workspace2-templates-blueprint");
   applyTemplateUiScale(panel);
-  const top = document.createElement("div");
-  top.className = "workspace2-top";
   const templates = templatesState.library?.templates || [];
   const header = createPanelHeader(
     t("templates.title"),
-    t("templates.status", { count: templates.length }),
-    { statusDataset: "workspace2TemplatesStatus" },
+    blueprint.isHostBlueprint ? "" : t("templates.status", { count: templates.length }),
+    blueprint.isHostBlueprint ? {} : { statusDataset: "workspace2TemplatesStatus" },
   );
   const newGroup = toolbarButton("templates.groups.create", t("templates.newGroup"), async () => {
     try {
@@ -7174,7 +7265,9 @@ function renderTemplatesPanel(el) {
       renderTemplatesPanel(el);
     },
   });
-  top.append(header, toolbar);
+  blueprint.setHeader(header);
+  blueprint.setToolbar(toolbar);
+  blueprint.setStatus({ text: t("templates.status", { count: templates.length }), tone: "neutral" });
 
   if (templatesState.showTrash) {
     const clearRow = createRootActionRow({
@@ -7190,24 +7283,24 @@ function renderTemplatesPanel(el) {
         });
       },
     });
-    top.append(clearRow);
+    blueprint.setControls(clearRow);
     const body = document.createElement("div");
     body.className = "workspace2-tree";
     renderTemplateTrashBody(el, body);
-    panel.append(top, body);
-    el.append(panel);
+    blueprint.setContent(body);
+    if (!blueprint.isHostBlueprint) el.append(panel);
     restoreScrollSnapshot(el, snapshot);
     finish({ renderedTrashCount: templatesState.library?.trash?.length || 0 });
     return;
   }
 
-  top.append(templatesRootRow(el));
+  blueprint.setControls(templatesRootRow(el));
 
   const body = document.createElement("div");
   body.className = "workspace2-tree";
   renderTemplatesBody(el, body);
-  panel.append(top, body);
-  el.append(panel);
+  blueprint.setContent(body);
+  if (!blueprint.isHostBlueprint) el.append(panel);
   restoreScrollSnapshot(el, snapshot);
   finish();
 }

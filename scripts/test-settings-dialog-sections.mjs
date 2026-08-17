@@ -44,6 +44,8 @@ const factory = createSettingsDialogSections({
   setAltCOpenTemplatesEnabled: (value) => actions.push(["altC", value]),
   isPanelIntegrationsEnabled: () => true,
   setPanelIntegrationsEnabled: (value) => actions.push(["panelIntegrations", value]),
+  isStatusHelpEnabled: () => true,
+  setStatusHelpEnabled: (value) => actions.push(["statusHelp", value]),
   moduleShortcutOptions: () => [
     { label: "Shift + 1", checked: true, onChange: (value) => actions.push(["workflowShortcut", value]) },
     { label: "Shift + 4", checked: false, onChange: (value) => actions.push(["extensionShortcut", value]) },
@@ -134,6 +136,9 @@ assert.equal(sections.nodeCache.children[0].children[0].textContent, "settings.n
 assert.equal(sections.dataManagement.kind, "data-management");
 assert.equal(sections.integrations.children[0].checked, true);
 sections.integrations.children[0].onChange(false);
+assert.deepEqual(actions.shift(), ["statusHelp", false]);
+assert.equal(sections.integrations.children[1].checked, true);
+sections.integrations.children[1].onChange(false);
 assert.deepEqual(actions.shift(), ["panelIntegrations", false]);
 assert.equal(sections.versionInfo.text, "settings.versionLoading");
 

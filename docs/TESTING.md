@@ -2752,6 +2752,14 @@ Last verified in the main package on 2026-07-30 (T-009 through T-012): all items
 - **2026-07-18 live test-package acceptance:** the clean `小红书 → 99 → 小红书` sequence passed with no dirty dot or Save button on either Open row. The separate dirty-tab reactivation regression is repaired and passed the real-node-move test above; main-package release acceptance remains outstanding.
 # Current release baseline
 
+## 2026-08-17 - T-056 R5 workflow virtual favorites acceptance (test package)
+
+- Created the pre-change archive: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-r5-workflow-favorites-20260817-170119.zip` (SHA-256 `DC57263190A0B26C093954A279832E2053F138A880665D56633138B1A322F8FD`).
+- Favorites are stored server-side at `user/default/comfyui-workspace2/workflow_favorites.json` as normalized workflow-relative paths. The server rejects non-relative API paths; no physical Favorites folder is created.
+- Contracts passed: favorite schema normalization and atomic persistence; workflow path-state dispatch for rename/move and delete; bundle export/import includes `workflow_favorites` and the automatic pre-import backup preserves the old collection.
+- Fresh CPU test package on `http://127.0.0.1:8190/` served the new endpoint and bundle schema. The project-owned Playwright run selected existing `B11.json`, clicked its favorite control, verified the persisted endpoint, switched to the virtual Favorites view (one projected row), returned to All, and removed the favorite. Cleanup left the server collection empty. No WorkspaceKit browser console error was reported.
+- Lifecycle rule: rename/move remap favorite paths; delete removes them; copy and trash restore do not create a new favorite. This prevents a restored/copy file from being silently promoted.
+
 ## 2026-08-15 - T-056 R1 top Strip first real-page acceptance
 
 - R1 backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-r1-chrome-tab-strip-20260815-215021.zip` (SHA-256 `B384929DCB8C2515860718AD7A13A17C837B3028919355310B31123505275BBF`).
@@ -2774,7 +2782,19 @@ Last verified in the main package on 2026-07-30 (T-009 through T-012): all items
 - R3 Nodes backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-r3-nodes-host-migration-20260815-224018.zip` (SHA-256 `850F7D08B8E3A5360C28322406242A05B0B284428C2B1591B83C5B539C13BF00`).
 - The Nodes panel now maps its existing header, search toolbar, favorites/view controls, tree body, and status text to the R1/R2 host slots. Node cache, translation aliases, preview, favorites, sorting, and all data operations remain in their established functions. A direct internal rerender retains the same host mount, so a search, disclosure, or pending-placement update does not silently fall back to a second local panel.
 - Static checks passed: entry syntax, 120-module frontend syntax scan, panel-host/status/provider-tab/startup contracts, workflow regression contracts, and `git diff --check`. The running test server returned the exact current `entry.js` SHA-256 (`C7DEC6AEED18E9DC21D6682156A71FE1C4A180F26E3FC8207032A54E619FCFE3`) and both `/workspace2/workflows` and `/system_stats` returned HTTP 200.
-- This is deliberately **not** a real-page acceptance yet. The available in-app surface held a stale extension module and Chrome blocked `127.0.0.1:8190` with a browser-client extension error, so no visible Nodes interaction is claimed. R3 remains in progress; Templates is next, while Workflows stays after P-01b export-artifact acceptance.
+- **2026-08-16 real-page acceptance:** the project-owned headless Playwright path loaded the test package at `:8190` and recorded no WorkspaceKit console error. Nodes mounted exactly one child into each Header / Toolbar / Content slot and two controls, hid the legacy header status, and showed `2390 个节点` in the bottom status slot. Templates mounted one child into each shared slot, hid its legacy header status, and showed `3 个模板` in the bottom status slot. The recycle-bin return transition also passed for both Workflows and Templates. R3 remains in progress only for Workflows, which stays after P-01b export-artifact acceptance.
+
+## 2026-08-16 - T-055 P-01b export-download acceptance
+
+- The project-owned headless Playwright browser opened WK Workflows on the test package at `:8190`, opened the localized File menu, and invoked the official `导出工作流` and `导出 API 工作流` commands independently.
+- After supplying only a filename in each official dialog, Playwright captured the actual browser download events: `p01b_workflow_export_probe.json` and `p01b_api_export_probe.json`. The downloads remained in the isolated temporary browser context; no workflow, template, node-library, or plugin data was written.
+- This closes the previous “dialog only” evidence gap. P-01b no longer blocks R3‑Workflows.
+
+## 2026-08-17 - T-056 R3 core-panel host acceptance
+
+- The test package at `:8190` completed the project-owned headless Smoke with no WorkspaceKit console error. Workflows, Nodes, and Templates each mounted exactly one header, toolbar, controls, and content child in the shared module frame; the legacy header status was hidden and the new bottom status slot contained current text.
+- Observed bottom states were `11 个回收站项目` for Workflows, `1595 个节点` for Nodes, and `3 个模板` for Templates. The transient recycle-bin transitions for Workflows and Templates also passed.
+- R3 is complete. R4 may now add only the status-help setting; it must not alter the established shared-slot geometry.
 
 - **2026-07-21:** WorkspaceKit `0.2.2` is published to Comfy Registry. The GitHub Actions release gate was verified on a non-version push: version detection passed and the Registry publishing job was skipped, so ordinary documentation or source changes do not republish the package.
 - **2026-07-20:** The published Comfy Registry release is `0.2.1` for `comfyui-workspacekit`. `pyproject.toml` is the authoritative release-version source; the backend reads it for `/workspace2/info`, and the Settings dialog reads that endpoint.

@@ -1148,12 +1148,43 @@ export function styles() {
       padding: 8px 10px;
       border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent);
     }
+    .workspace2-workflow-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .workspace2-workflow-view-tabs {
+      display: inline-flex;
+      align-self: flex-start;
+      padding: 2px;
+      gap: 2px;
+      border: 1px solid color-mix(in srgb, var(--workspace2-border) 70%, transparent);
+      border-radius: var(--workspace2-radius-sm);
+      background: color-mix(in srgb, var(--workspace2-control-bg) 84%, transparent);
+    }
+    .workspace2-workflow-view-tab {
+      min-height: 22px;
+      padding: 2px 8px;
+      border: 0;
+      border-radius: calc(var(--workspace2-radius-sm) - 2px);
+      color: var(--workspace2-muted);
+      background: transparent;
+      font: 600 11px/1 var(--font-family, Arial, sans-serif);
+      cursor: pointer;
+    }
+    .workspace2-workflow-view-tab:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: var(--workspace2-hover); }
+    .workspace2-workflow-view-tab.is-active { color: var(--workspace2-accent); background: var(--workspace2-accent-soft, rgba(80, 150, 255, .16)); }
     .workspace2-workflow-blueprint .workspacekit-ui-panel-content-slot {
       padding: 8px 10px 10px;
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
+    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-header-host { padding: 10px 10px 0; }
+    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-header .workspace2-status { display: none; }
+    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-context-host { padding: 8px 10px 0; }
+    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-controls-host { padding: 8px 10px; border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent); }
+    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-body { padding: 8px 10px 10px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     /* Nodes is the second shared-host migration. Only placement belongs here:
        searches, favorites, preview, sorting, and node data stay in entry.js. */
     .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-header-host {
@@ -1175,6 +1206,11 @@ export function styles() {
       min-height: 0;
       flex: 1 1 auto;
     }
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-header-host { padding: 10px 10px 0; }
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-header .workspace2-status { display: none; }
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-context-host { padding: 8px 10px 0; }
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-controls-host { padding: 8px 10px 6px; }
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-body { padding: 0 10px 10px; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
     .workspace2-workflow-content {
       flex: 1 1 auto;
       min-height: 0;

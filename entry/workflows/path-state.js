@@ -11,6 +11,8 @@ export function createWorkflowPathState({
   onSaveCustomOrder,
   onUpdateRecentWorkflowPath,
   onRemoveRecentWorkflowTree,
+  onRemapFavorites = () => {},
+  onRemoveFavorites = () => {},
 }) {
   function remap(oldPath, newPath) {
     if (!oldPath || !newPath || oldPath === newPath) {
@@ -37,6 +39,7 @@ export function createWorkflowPathState({
     state.customOrder = nextOrder;
     onSaveCustomOrder();
     onUpdateRecentWorkflowPath(oldPath, newPath);
+    onRemapFavorites(oldPath, newPath);
   }
 
   function remove(path) {
@@ -66,6 +69,7 @@ export function createWorkflowPathState({
     state.customOrder = nextOrder;
     onSaveCustomOrder();
     onRemoveRecentWorkflowTree(path);
+    onRemoveFavorites(path);
   }
 
   return { remap, remove };

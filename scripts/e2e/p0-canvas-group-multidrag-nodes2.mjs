@@ -70,7 +70,9 @@ async function main() {
         bounds: { ...window.Workspace2CanvasGroups.groups[groupId].bounds },
         nodes: nodeIds.map((id) => {
           const node = window.app.graph.getNodeById(id);
-          return { id, x: node.pos[0], y: node.pos[1] };
+          const element = document.querySelector(`[data-testid="node-body-${id}"]`)?.closest('.lg-node');
+          const rect = element?.getBoundingClientRect();
+          return { id, x: node.pos[0], y: node.pos[1], posType: node.pos?.constructor?.name, domX: rect?.x, domY: rect?.y };
         }),
       })),
     }), fixture);
@@ -87,7 +89,9 @@ async function main() {
       bounds: { ...window.Workspace2CanvasGroups.groups[groupId].bounds },
       nodes: nodeIds.map((id) => {
         const node = window.app.graph.getNodeById(id);
-        return { id, x: node.pos[0], y: node.pos[1] };
+        const element = document.querySelector(`[data-testid="node-body-${id}"]`)?.closest('.lg-node');
+        const rect = element?.getBoundingClientRect();
+        return { id, x: node.pos[0], y: node.pos[1], posType: node.pos?.constructor?.name, domX: rect?.x, domY: rect?.y };
       }),
     })), fixture);
     const expected = { x: pixelDelta.x / before.scale, y: pixelDelta.y / before.scale };
@@ -99,6 +103,11 @@ async function main() {
         && group.nodes.every((node, index) => (
           nearly(node.x - original.nodes[index].x, expected.x)
           && nearly(node.y - original.nodes[index].y, expected.y)
+          && node.posType === original.nodes[index].posType
+          && Number.isFinite(node.domX)
+          && Number.isFinite(node.domY)
+          && nearly((node.domX - original.nodes[index].domX) / before.scale, expected.x)
+          && nearly((node.domY - original.nodes[index].domY) / before.scale, expected.y)
         ));
     });
     if (!valid) throw new Error(`Nodes 2.0 group multi-drag mismatch: ${JSON.stringify({ before, after, expected })}`);

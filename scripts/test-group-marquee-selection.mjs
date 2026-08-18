@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  groupIdsIntersectingMarquee,
+  groupIdsContainedInMarquee,
   hasMeaningfulMarqueeDrag,
   marqueeRectFromPoints,
   shouldStartGroupMarquee,
@@ -29,6 +29,6 @@ assert.equal(hasMeaningfulMarqueeDrag({ x: 10, y: 10 }, { x: 12, y: 12 }), false
 const marquee = marqueeRectFromPoints({ x: 100, y: 100 }, { x: 20, y: 40 });
 assert.deepEqual(marquee, { left: 20, top: 40, right: 100, bottom: 100 });
 const makeElement = (left, top, right, bottom) => ({ getBoundingClientRect: () => ({ left, top, right, bottom }) });
-assert.deepEqual(groupIdsIntersectingMarquee({ inside: makeElement(50, 50, 90, 90), edge: makeElement(100, 60, 120, 80), outside: makeElement(101, 60, 140, 90) }, marquee), ["inside", "edge"]);
+assert.deepEqual(groupIdsContainedInMarquee({ inside: makeElement(50, 50, 90, 90), edge: makeElement(100, 60, 120, 80), outside: makeElement(101, 60, 140, 90) }, marquee), ["inside"]);
 
 console.log("group marquee selection contract passed");

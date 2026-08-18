@@ -6,7 +6,7 @@ const NODES2_SETTING = "Comfy.VueNodes.Enabled";
 
 async function waitForGroups(page) {
   await page.waitForFunction(() => window.app?.extensionManager?.setting && window.Workspace2CanvasGroups?.overlay, null, {
-    timeout: 12_000,
+    timeout: 45_000,
     polling: 250,
   });
 }
@@ -52,6 +52,15 @@ async function main() {
 
     const header = page.locator(`#xzg-group-overlay [data-group-id='${fixture.groupId}'] .xzg-group-header`);
     await header.waitFor({ state: "visible", timeout: 10_000 });
+    await page.mouse.move(20, 850);
+    await page.waitForTimeout(180);
+    const hiddenHandles = await page.locator(`#xzg-group-overlay [data-group-id='${fixture.groupId}'] .xzg-resize-handle`).evaluateAll((handles) => handles.map((handle) => ({
+      opacity: getComputedStyle(handle).opacity,
+      pointerEvents: getComputedStyle(handle).pointerEvents,
+    })));
+    if (hiddenHandles.length !== 4 || hiddenHandles.some((handle) => handle.opacity !== "0" || handle.pointerEvents !== "none")) {
+      throw new Error(`WK resize handles should stay hidden outside the group: ${JSON.stringify(hiddenHandles)}`);
+    }
     const before = await page.evaluate(({ groupId, nodeIds }) => {
       const groups = window.Workspace2CanvasGroups;
       return {
@@ -59,14 +68,24 @@ async function main() {
         group: { ...groups.groups[groupId].bounds },
         nodes: nodeIds.map((id) => {
           const node = window.app.graph.getNodeById(id);
-          return { id, x: node.pos[0], y: node.pos[1] };
+          const element = document.querySelector(`[data-testid="node-body-${id}"]`)?.closest('.lg-node');
+          const rect = element?.getBoundingClientRect();
+          return { id, x: node.pos[0], y: node.pos[1], posType: node.pos?.constructor?.name, domX: rect?.x, domY: rect?.y };
         }),
       };
     }, fixture);
     const box = await header.boundingBox();
     if (!box) throw new Error("Fixture group header is not measurable");
-    const pixelDelta = { x: 45, y: 27 };
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(180);
+    const visibleHandles = await page.locator(`#xzg-group-overlay [data-group-id='${fixture.groupId}'] .xzg-resize-handle`).evaluateAll((handles) => handles.map((handle) => ({
+      opacity: getComputedStyle(handle).opacity,
+      pointerEvents: getComputedStyle(handle).pointerEvents,
+    })));
+    if (visibleHandles.length !== 4 || visibleHandles.some((handle) => handle.opacity !== "0.6" || handle.pointerEvents !== "auto")) {
+      throw new Error(`WK resize handles should appear inside the group: ${JSON.stringify(visibleHandles)}`);
+    }
+    const pixelDelta = { x: 45, y: 27 };
     await page.mouse.down();
     await page.mouse.move(box.x + box.width / 2 + pixelDelta.x, box.y + box.height / 2 + pixelDelta.y, { steps: 5 });
     await page.mouse.up();
@@ -77,7 +96,9 @@ async function main() {
         group: { ...groups.groups[groupId].bounds },
         nodes: nodeIds.map((id) => {
           const node = window.app.graph.getNodeById(id);
-          return { id, x: node.pos[0], y: node.pos[1] };
+          const element = document.querySelector(`[data-testid="node-body-${id}"]`)?.closest('.lg-node');
+          const rect = element?.getBoundingClientRect();
+          return { id, x: node.pos[0], y: node.pos[1], posType: node.pos?.constructor?.name, domX: rect?.x, domY: rect?.y };
         }),
       };
     }, fixture);
@@ -88,8 +109,15 @@ async function main() {
       nearly(node.x - before.nodes[index].x, expected.x)
       && nearly(node.y - before.nodes[index].y, expected.y)
     ));
-    if (!groupMoved || !nodesMoved) {
-      throw new Error(`Nodes 2.0 group drag mismatch: ${JSON.stringify({ before, after, expected, groupMoved, nodesMoved })}`);
+    const nodesDomMoved = after.nodes.every((node, index) => (
+      Number.isFinite(node.domX)
+      && Number.isFinite(node.domY)
+      && node.posType === before.nodes[index].posType
+      && nearly((node.domX - before.nodes[index].domX) / before.scale, expected.x)
+      && nearly((node.domY - before.nodes[index].domY) / before.scale, expected.y)
+    ));
+    if (!groupMoved || !nodesMoved || !nodesDomMoved) {
+      throw new Error(`Nodes 2.0 group drag mismatch: ${JSON.stringify({ before, after, expected, groupMoved, nodesMoved, nodesDomMoved })}`);
     }
     console.log(JSON.stringify({ before, after, expected }, null, 2));
   } finally {

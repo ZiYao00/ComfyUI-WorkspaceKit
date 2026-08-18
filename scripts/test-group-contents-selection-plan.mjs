@@ -16,10 +16,10 @@ const nodes = [
 ];
 
 const parentPlan = buildGroupContentsSelectionPlan({ groups, nodes, groupId: "parent" });
-assert.deepEqual(new Set(parentPlan.groupIds), new Set(["parent", "childA", "childB", "grandchild", "legacy"]));
+assert.deepEqual(new Set(parentPlan.groupIds), new Set(["childA", "childB", "grandchild", "legacy"]));
 assert.deepEqual(new Set(parentPlan.nodeIds), new Set(["1", "2", "3", "4", "6"]));
 const childPlan = buildGroupContentsSelectionPlan({ groups, nodes, groupId: "childA" });
-assert.deepEqual(new Set(childPlan.groupIds), new Set(["childA", "grandchild"]));
+assert.deepEqual(new Set(childPlan.groupIds), new Set(["grandchild"]));
 assert.deepEqual(new Set(childPlan.nodeIds), new Set(["1", "4"]));
 assert.deepEqual(buildGroupContentsSelectionPlan({ groups, nodes, groupId: "missing" }), { groupIds: [], nodeIds: [] });
 console.log("Canvas group contents selection plan contract passed.");

@@ -56,14 +56,14 @@ async function main() {
       bounds: { ...window.Workspace2CanvasGroups.groups[groupId].bounds },
       positions: nodeIds.map((id) => [...window.app.graph.getNodeById(id).pos]),
     }), fixture);
-    const handle = page.locator(`#xzg-group-overlay [data-group-id='${fixture.groupId}'] .xzg-resize-handle`);
+    const handle = page.locator(`#xzg-group-overlay [data-group-id='${fixture.groupId}'] .xzg-resize-handle[data-resize-corner='se']`);
     const box = await handle.boundingBox();
     if (!box) throw new Error('Fixture resize handle is not measurable');
     const handlePoint = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
     await page.mouse.move(handlePoint.x, handlePoint.y);
     await page.waitForTimeout(40);
     const hit = await page.evaluate(({ groupId, point }) => {
-      const handle = document.querySelector(`#xzg-group-overlay [data-group-id='${groupId}'] .xzg-resize-handle`);
+      const handle = document.querySelector(`#xzg-group-overlay [data-group-id='${groupId}'] .xzg-resize-handle[data-resize-corner='se']`);
       const target = document.elementFromPoint(point.x, point.y);
       const canvasPoint = window.Workspace2CanvasGroups.getCanvasPointFromPointerEvent({ clientX: point.x, clientY: point.y });
       return {

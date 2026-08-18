@@ -1,6 +1,11 @@
-// WorkspaceKit observes ComfyUI's existing Ctrl/Meta canvas marquee.  It never
+// WorkspaceKit observes ComfyUI's existing Ctrl/Meta canvas marquee. It never
 // cancels the native pointer event: LiteGraph remains responsible for selecting
-// nodes and native groups while this helper only derives the overlay-group ids.
+// nodes and native groups while this helper only derives overlay-group ids.
+//
+// A WK group is selected only when the marquee fully contains its frame. An
+// intersection rule made a small node-only marquee inside a large parent frame
+// select that parent as a side effect, preventing the user from moving only the
+// selected nodes.
 
 export function shouldStartGroupMarquee(event, canvas) {
   if (event?.button !== 0 || !canvas) return false;
@@ -30,17 +35,19 @@ export function rectsIntersect(a, b) {
   return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
 }
 
-export function groupIdsIntersectingMarquee(groupElements, marqueeRect) {
+export function groupIdsContainedInMarquee(groupElements, marqueeRect) {
   const ids = [];
   for (const [groupId, element] of Object.entries(groupElements || {})) {
     if (!element?.getBoundingClientRect) continue;
     const rect = element.getBoundingClientRect();
-    if (rectsIntersect(marqueeRect, {
-      left: rect.left,
-      top: rect.top,
-      right: rect.right,
-      bottom: rect.bottom,
-    })) ids.push(groupId);
+    if (
+      rect.left >= marqueeRect.left
+      && rect.top >= marqueeRect.top
+      && rect.right <= marqueeRect.right
+      && rect.bottom <= marqueeRect.bottom
+    ) {
+      ids.push(groupId);
+    }
   }
   return ids;
 }

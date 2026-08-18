@@ -2779,6 +2779,21 @@ Last verified in the main package on 2026-07-30 (T-009 through T-012): all items
 - Real WK Templates-panel placement under Nodes 2.0 (`scripts/e2e/p0-templates-panel-placement-nodes2.mjs`) selected the existing 10-node template `template-1786109223821-q1cf1g`, clicked the same official graph canvas surface, and observed all ten expected node types added. The script removed every added graph node and restored the complete template-library response captured before the test. WK canvas groups remain separate work.
 - WK canvas-group Nodes 2.0 smoke initially found a real bounds failure: Vue nodes rendered wider/taller than stale graph `node.size`, while `boundingRect` was `[0,0,0,0]` before layout. `entry/canvas-groups/node-visual-bounds.js` now rejects zero-size rectangles and, when available, converts the rendered `node-body-{id}` / `.lg-node` DOM rectangle back to graph coordinates; Legacy metadata remains the fallback. In an isolated Nodes 2.0 page, two disposable `GetNode` nodes were grouped and the rendered WK group rectangle contained both full DOM node rectangles. The group and nodes were removed before exit. `test-node-visual-bounds`, group-membership, canvas-group action-icon, the 122-module frontend syntax scan, and `git diff --check` passed. Later P0-E evidence separately accepted core drag, multi-select, `Esc` clear and wheel zoom; resize, nesting, conversion, and save/reload remain unaccepted.
 
+## 2026-08-18 - Nodes 2.0 编组节点位置桥接
+
+- 用户的真实体验发现了此前验收缺口：旧的单拖/多拖脚本只断言 `node.pos`，没有断言
+  Vue `.lg-node` 的屏幕位置，因此不能证明画面节点确实跟随编组。
+- `entry/canvas-groups/node-position-sync.js` 现在是唯一的节点位置兼容边界：Legacy
+  继续就地写入坐标；Nodes 2.0 整体替换 `node.pos`，让官方 Vue 布局桥接收到更新。
+- 真实 Playwright 复验单拖：`0.9` 缩放，编组标题栏拖动 `45×27` 屏幕像素，两个成员
+  节点的图坐标各移动 `50×30`，对应 `.lg-node` DOM 也各移动 `45×27`。
+- 真实 Playwright 复验 Shift 多选两个 WK 编组：拖动 `36×18` 屏幕像素，四个成员节点
+  的图坐标各移动 `40×20`，DOM 均移动 `36×18`；成员的 `pos` 前后仍为 `Float64Array`。
+  两份验收脚本从此必须同时检查图数据与 DOM 位置。
+- 四角调整手柄默认 `opacity: 0` 且 `pointer-events: none`；鼠标进入编组几何范围后，
+  四角恢复为 `opacity: 0.6` 与可交互状态。单编组 Nodes 2.0 验收覆盖了隐藏、显示及
+  后续拖动，不会产生不可见热区。
+
 ## 2026-08-17 - T-056 R5 workflow virtual favorites acceptance (test package)
 
 - Created the pre-change archive: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-r5-workflow-favorites-20260817-170119.zip` (SHA-256 `DC57263190A0B26C093954A279832E2053F138A880665D56633138B1A322F8FD`).

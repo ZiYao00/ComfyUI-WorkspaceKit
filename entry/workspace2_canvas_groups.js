@@ -46,7 +46,7 @@ import {
 } from "./canvas-groups/selection-cancel-events.js?v=20260724_group_ctrl_marquee_r2";
 import { shouldDeleteSelectedWorkspaceKitGroups } from "./canvas-groups/delete-key-events.js?v=20260724_group_delete_key_r1";
 import {
-    groupIdsIntersectingMarquee,
+    groupIdsContainedInMarquee,
     hasMeaningfulMarqueeDrag,
     marqueeRectFromPoints,
     shouldStartGroupMarquee,
@@ -58,6 +58,10 @@ import {
 import { validateNativeGroupConversionResult, countStaleWorkspaceKitNodeMarkers } from "./canvas-groups/conversion-result.js?v=20260727_group_conversion_result_c3";
 import { createNativeToWorkspaceKitConversionPlan } from "./canvas-groups/reverse-conversion-plan.js?v=20260727_group_reverse_conversion_c6_2";
 import { resolveNodeVisualBounds } from "./canvas-groups/node-visual-bounds.js?v=20260817_nodes2_visual_bounds_p0";
+import {
+    isNodes2Enabled,
+    setNodeGraphPositionFromStart,
+} from "./canvas-groups/node-position-sync.js?v=20260818_nodes2_group_layout_bridge_r1";
 
 const MODE_ALWAYS = 0;
 const MODE_BYPASS = 4;
@@ -694,7 +698,7 @@ const Workspace2CanvasGroups = {
         this.canvasMarquee = null;
         const end = { x: event.clientX, y: event.clientY };
         if (!hasMeaningfulMarqueeDrag(marquee.start, end)) return false;
-        const ids = groupIdsIntersectingMarquee(this.groupEls, marqueeRectFromPoints(marquee.start, end))
+        const ids = groupIdsContainedInMarquee(this.groupEls, marqueeRectFromPoints(marquee.start, end))
             .filter((groupId) => Boolean(this.groups[groupId]));
         if (!ids.length) return false;
         for (const groupId of ids) this.selectedGroupIds.add(groupId);
@@ -735,7 +739,7 @@ const Workspace2CanvasGroups = {
             nodes: graph?._nodes || [],
             groupId: gid,
         });
-        if (!plan.groupIds.length) return false;
+        if (!plan.groupIds.length && !plan.nodeIds.length) return false;
 
         this.selectedGroupIds = new Set(plan.groupIds);
         this.activeGroupId = String(gid);
@@ -991,6 +995,18 @@ const Workspace2CanvasGroups = {
             }) === ACTION_ICON_VISIBILITY.VISIBLE;
             const iconVisibility = iconsVisible ? 'visible' : 'hidden';
             if (delBtn) delBtn.style.visibility = iconVisibility;
+            // Resize affordances follow the same geometric hover rule as the
+            // title-bar actions. The frame itself is pointer-events:none so
+            // nodes remain interactive; a CSS :hover rule would therefore
+            // fail over the group body. Keep the handles visible throughout a
+            // gesture, otherwise there would be no reliable target to finish
+            // a resize after the pointer leaves a corner.
+            const resizeHandlesVisible = isPointInsideBounds(b, pointerCanvasPoint)
+                || (pointerHeld && (gid === this.activeGroupId || this.selectedGroupIds.has(gid)));
+            el.querySelectorAll('.xzg-resize-handle').forEach((handle) => {
+                handle.style.opacity = resizeHandlesVisible ? '0.6' : '0';
+                handle.style.pointerEvents = resizeHandlesVisible ? 'auto' : 'none';
+            });
             // T-039: the execute icon dims when the group holds nothing that can
             // produce an image, reusing the very count the click path already
             // checks so a dim icon and its "no output nodes" notice cannot disagree.
@@ -1697,8 +1713,17 @@ const Workspace2CanvasGroups = {
             <div class="xzg-border-left" style="position:absolute;left:0;top:${headerHeight}px;width:10px;bottom:0;pointer-events:auto;cursor:move;z-index:2;"></div>
             <div class="xzg-border-right" style="position:absolute;right:0;top:${headerHeight}px;width:10px;bottom:0;pointer-events:auto;cursor:move;z-index:2;"></div>
             <div class="xzg-border-bottom" style="position:absolute;left:7px;right:7px;bottom:0;height:10px;pointer-events:auto;cursor:move;z-index:2;"></div>
-            <div class="xzg-resize-handle" title="${t('groups.resize')}" style="position:absolute;right:2px;bottom:2px;width:14px;height:14px;cursor:nwse-resize;pointer-events:auto;opacity:0.6;z-index:3;">
+            <div class="xzg-resize-handle" data-resize-corner="se" title="${t('groups.resize')}" style="position:absolute;right:2px;bottom:2px;width:14px;height:14px;cursor:nwse-resize;pointer-events:none;opacity:0;transition:opacity 120ms ease;z-index:5;">
                 <svg viewBox="0 0 14 14" width="14" height="14"><path d="M12 2L2 12 M8 12h4v-4" stroke="#FFD700" stroke-width="1.5" fill="none"/></svg>
+            </div>
+            <div class="xzg-resize-handle" data-resize-corner="nw" title="${t('groups.resize')}" style="position:absolute;left:2px;top:2px;width:14px;height:14px;cursor:nwse-resize;pointer-events:none;opacity:0;transition:opacity 120ms ease;z-index:5;">
+                <svg viewBox="0 0 14 14" width="14" height="14"><path d="M2 12 12 2 M2 6v-4h4" stroke="#FFD700" stroke-width="1.5" fill="none"/></svg>
+            </div>
+            <div class="xzg-resize-handle" data-resize-corner="ne" title="${t('groups.resize')}" style="position:absolute;right:2px;top:2px;width:14px;height:14px;cursor:nesw-resize;pointer-events:none;opacity:0;transition:opacity 120ms ease;z-index:5;">
+                <svg viewBox="0 0 14 14" width="14" height="14"><path d="M12 12 2 2 M8 2h4v4" stroke="#FFD700" stroke-width="1.5" fill="none"/></svg>
+            </div>
+            <div class="xzg-resize-handle" data-resize-corner="sw" title="${t('groups.resize')}" style="position:absolute;left:2px;bottom:2px;width:14px;height:14px;cursor:nesw-resize;pointer-events:none;opacity:0;transition:opacity 120ms ease;z-index:5;">
+                <svg viewBox="0 0 14 14" width="14" height="14"><path d="M2 2 12 12 M2 8v4h4" stroke="#FFD700" stroke-width="1.5" fill="none"/></svg>
             </div>
         `;
 
@@ -1866,8 +1891,7 @@ const Workspace2CanvasGroups = {
         });
 
         // 调整大小手柄
-        const resizeHandle = el.querySelector('.xzg-resize-handle');
-        resizeHandle.addEventListener('mousedown', e => {
+        el.querySelectorAll('.xzg-resize-handle').forEach((resizeHandle) => resizeHandle.addEventListener('mousedown', e => {
             // 鼠标中键 → 透传到画布以支持画布平移
             if (e.button === 1) {
                 e.preventDefault();
@@ -1886,9 +1910,10 @@ const Workspace2CanvasGroups = {
                 return;
             }
             e.stopPropagation(); e.preventDefault();
-            self.startResize(group.id, e);
-        });
-        resizeHandle.addEventListener('wheel', e => {
+            self.activeGroupId = group.id;
+            self.startResize(group.id, e, resizeHandle.dataset.resizeCorner || 'se');
+        }));
+        el.querySelectorAll('.xzg-resize-handle').forEach((resizeHandle) => resizeHandle.addEventListener('wheel', e => {
             e.preventDefault();
             const cv = app?.canvas;
             if (!cv?.ds) return;
@@ -1898,7 +1923,7 @@ const Workspace2CanvasGroups = {
             const rc = cv.canvas.getBoundingClientRect();
             cv.ds.changeScale(ns, [e.clientX - rc.left, e.clientY - rc.top]);
             cv.setDirty(true, true);
-        }, { passive: false });
+        }, { passive: false }));
 
         return el;
     },
@@ -2931,6 +2956,7 @@ const Workspace2CanvasGroups = {
         if (!group?.bounds) return;
 
         const scale = canvas.ds.scale || 1;
+        const nodes2 = isNodes2Enabled(app);
         const startX = downEv.clientX;
         const startY = downEv.clientY;
         const startBX = group.bounds.x;
@@ -3029,15 +3055,15 @@ const Workspace2CanvasGroups = {
             const dy = (e.clientY - startY) / scale;
             group.bounds.x = startBX + dx;
             group.bounds.y = startBY + dy;
-            nodeStarts.forEach(s => { s.node.pos[0] = s.x + dx; s.node.pos[1] = s.y + dy; });
+            nodeStarts.forEach(s => setNodeGraphPositionFromStart(s, dx, dy, { nodes2 }));
             // 子编组 bounds 及其所有节点一起跟随移动
             childGroupData.forEach(cg => {
                 cg.group.bounds.x = cg.startX + dx;
                 cg.group.bounds.y = cg.startY + dy;
-                cg.nodeStarts.forEach(s => { s.node.pos[0] = s.x + dx; s.node.pos[1] = s.y + dy; });
+                cg.nodeStarts.forEach(s => setNodeGraphPositionFromStart(s, dx, dy, { nodes2 }));
             });
             // 部分重叠编组中完全落在大边框内的节点也跟随移动
-            partialOverlapNodes.forEach(s => { s.node.pos[0] = s.x + dx; s.node.pos[1] = s.y + dy; });
+            partialOverlapNodes.forEach(s => setNodeGraphPositionFromStart(s, dx, dy, { nodes2 }));
             graph.setDirtyCanvas?.(true, true);
         };
         const onUp = createOnceGuard(() => {
@@ -3082,6 +3108,7 @@ const Workspace2CanvasGroups = {
             .filter(node => nodeIds.has(String(node.id)) && hasNodePosition(node))
             .map(node => ({ node, x: node.pos[0], y: node.pos[1] }));
         const scale = canvas.ds.scale || 1;
+        const nodes2 = isNodes2Enabled(app);
         const startX = downEv.clientX;
         const startY = downEv.clientY;
         const self = this;
@@ -3103,10 +3130,7 @@ const Workspace2CanvasGroups = {
                 group.bounds.x = x + dx;
                 group.bounds.y = y + dy;
             });
-            nodeStarts.forEach(({ node, x, y }) => {
-                node.pos[0] = x + dx;
-                node.pos[1] = y + dy;
-            });
+            nodeStarts.forEach((start) => setNodeGraphPositionFromStart(start, dx, dy, { nodes2 }));
             window.Workspace2CanvasGroupsLastMultiDrag.lastDelta = { x: dx, y: dy };
             graph.setDirtyCanvas?.(true, true);
         };
@@ -3209,7 +3233,7 @@ const Workspace2CanvasGroups = {
     },
 
     /* ── 调整大小 ── */
-    startResize(gid, downEv) {
+    startResize(gid, downEv, corner = 'se') {
         const group = this.groups[gid];
         if (!group?.bounds) return;
 
@@ -3221,13 +3245,21 @@ const Workspace2CanvasGroups = {
         const startY = downEv.clientY;
         const startW = group.bounds.w;
         const startH = group.bounds.h;
+        const startBX = group.bounds.x;
+        const startBY = group.bounds.y;
+        const resizeWest = corner.includes('w');
+        const resizeNorth = corner.includes('n');
 
         const self = this;
         const onMove = e => {
             const dx = (e.clientX - startX) / scale;
             const dy = (e.clientY - startY) / scale;
-            group.bounds.w = Math.max(120, startW + dx);
-            group.bounds.h = Math.max(44, startH + dy);
+            const nextW = Math.max(120, startW + (resizeWest ? -dx : dx));
+            const nextH = Math.max(44, startH + (resizeNorth ? -dy : dy));
+            group.bounds.w = nextW;
+            group.bounds.h = nextH;
+            group.bounds.x = resizeWest ? startBX + (startW - nextW) : startBX;
+            group.bounds.y = resizeNorth ? startBY + (startH - nextH) : startBY;
             app.graph?.setDirtyCanvas?.(true, true);
         };
         const onUp = createOnceGuard(() => {

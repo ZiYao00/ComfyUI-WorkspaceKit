@@ -5,19 +5,24 @@ import {
   shouldPassThroughGroupHitRegions,
 } from "../entry/canvas-groups/hit-region-passthrough.js";
 
-// T-041 (2026-08-05): the group frame's drag/resize regions must yield to a node
+// T-041 (2026-08-05): the group frame's drag strips must yield to a node
 // underneath, mirroring native ComfyUI's node-before-group hit-test order
 // (docs/NATIVE_BEHAVIOR_REFERENCE.md §3).
 
 // ── Region selector ──
 
-// The three drag strips and the resize handle are the only yielding regions.
-for (const cls of ["xzg-border-left", "xzg-border-right", "xzg-border-bottom", "xzg-resize-handle"]) {
+// The three drag strips are the only yielding regions. The explicit resize
+// control must remain usable when a Vue node overlaps a group corner.
+for (const cls of ["xzg-border-left", "xzg-border-right", "xzg-border-bottom"]) {
   assert.ok(
     GROUP_HIT_REGION_SELECTOR.includes(`.${cls}`),
     `${cls} must be able to yield to a node`
   );
 }
+assert.ok(
+  !GROUP_HIT_REGION_SELECTOR.includes("xzg-resize-handle"),
+  "the explicit resize handle must never yield to a node"
+);
 
 // The title bar must never yield: it carries the rename input and the action
 // buttons, which stay clickable even when a node overlaps them.

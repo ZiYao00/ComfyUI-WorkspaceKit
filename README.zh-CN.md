@@ -250,11 +250,11 @@ flow.json
 
 测试阶段为保证兼容性，模板数据仍使用 ComfyUI 用户目录下现有的 Workspace2 兼容存储位置；升级后已有模板数据仍可继续使用。请定期备份重要模板数据。
 
-### 透明标题
+### WK Transparent Title（透明标题）
 
 ![透明标题节点](Preview/006.jpg)
 
-一个轻量的画布标题 / 注释节点，适合给大型工作流添加区域标题、说明和视觉分隔。在 ComfyUI 节点菜单的 **🧩 WorkspaceKit** 分类下，显示为 **Transparent Title（透明标题）**。
+一个轻量的画布标题 / 注释节点，适合给大型工作流添加区域标题、说明和视觉分隔。在 ComfyUI 节点菜单的 **🧩 WorkspaceKit** 分类下，显示为 **WK Transparent Title**。
 
 默认样式：
 

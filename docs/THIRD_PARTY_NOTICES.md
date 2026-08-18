@@ -1,5 +1,18 @@
 # Third-party notices
 
+## WK Latent Size references (2026-08-17)
+
+`WK Latent Size` independently implements a compact backend-only node after
+studying the public behaviour of two MIT-licensed nodes: the megapixel/aspect
+ratio calculation from [ControlAltAI-Nodes](https://github.com/gseth/ControlAltAI-Nodes)
+(`721492b66c9cede8ae23ae10615462ad80cfd061`) and the batched `LATENT` output
+shape from [ComfyUI_essentials](https://github.com/cubiq/ComfyUI_essentials)
+(`9d9f4bedfc9f0321c19faf71855e228c93bd0dc9`).
+
+No source file, preview-image implementation, font asset, or frontend code is
+copied into WK. The two source snapshots and their original MIT licenses are
+retained locally in the Nodes 2.0 P0 backup archive for audit only.
+
 ## Lucide Static v1.28.0
 
 The local SVG definitions in `entry/ui-kit/icons.js` are derived from the

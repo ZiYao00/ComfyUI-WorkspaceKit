@@ -12,11 +12,11 @@
 //
 // Keep this decision pure so it can be asserted without a DOM or a live graph.
 
-// Regions that exist only to start a group drag/resize and therefore may yield
-// to a node.  The title bar is deliberately absent: it carries the rename input
-// and the action buttons, which must stay clickable (see the plan doc §10.5).
+// Drag strips may yield to a node. The title bar and the small, visible resize
+// handle are deliberately absent: they are explicit controls and must remain
+// clickable even where a Vue node overlaps the group edge.
 export const GROUP_HIT_REGION_SELECTOR =
-  ".xzg-border-left, .xzg-border-right, .xzg-border-bottom, .xzg-resize-handle";
+  ".xzg-border-left, .xzg-border-right, .xzg-border-bottom";
 
 /**
  * Decide whether the group frame's drag/resize regions should let pointer input

@@ -10,6 +10,8 @@ import folder_paths
 import server
 from aiohttp import web
 
+from .wk_nodes.latent_size import WKLatentSize
+
 from .service.folder_meta_service import read_folder_meta, write_folder_meta
 from .service.folder_dissolve_service import dissolve_folder, flatten_folder
 from .service.n_sidebar_migration import (
@@ -63,11 +65,13 @@ class Workspace2Title:
 
 NODE_CLASS_MAPPINGS = {
     "Workspace2Title": Workspace2Title,
+    "WKLatentSize": WKLatentSize,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     # The mapping key remains legacy-compatible; this string is what users see
     # in the ComfyUI node menu and can follow the new public brand.
-    "Workspace2Title": "Transparent Title（透明标题）",
+    "Workspace2Title": "WK Transparent Title",
+    "WKLatentSize": "WK Latent Size",
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 

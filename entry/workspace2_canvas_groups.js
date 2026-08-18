@@ -57,6 +57,7 @@ import {
 } from "./canvas-groups/conversion-archive.js?v=20260727_group_conversion_archive_r1";
 import { validateNativeGroupConversionResult, countStaleWorkspaceKitNodeMarkers } from "./canvas-groups/conversion-result.js?v=20260727_group_conversion_result_c3";
 import { createNativeToWorkspaceKitConversionPlan } from "./canvas-groups/reverse-conversion-plan.js?v=20260727_group_reverse_conversion_c6_2";
+import { resolveNodeVisualBounds } from "./canvas-groups/node-visual-bounds.js?v=20260817_nodes2_visual_bounds_p0";
 
 const MODE_ALWAYS = 0;
 const MODE_BYPASS = 4;
@@ -1413,15 +1414,13 @@ const Workspace2CanvasGroups = {
     },
 
     nodeVisualBounds(node) {
-        const rect = node?.boundingRect;
-        if (Array.isArray(rect) && rect.length >= 4 && rect.every(v => Number.isFinite(Number(v)))) {
-            return { x: Number(rect[0]), y: Number(rect[1]), w: Number(rect[2]), h: Number(rect[3]) };
-        }
-        if (!node?.pos || typeof node.pos[0] !== 'number' || typeof node.pos[1] !== 'number') return null;
         const titleHeight = Number(window.LiteGraph?.NODE_TITLE_HEIGHT || 0) || 0;
-        const w = node.size?.[0] || 200;
-        const h = node.size?.[1] || 100;
-        return { x: node.pos[0], y: node.pos[1] - titleHeight, w, h: h + titleHeight };
+        return resolveNodeVisualBounds({
+            node,
+            canvas: app?.canvas,
+            documentRef: document,
+            titleHeight,
+        });
     },
 
     /* ── 计算包围盒 ── */
@@ -3041,18 +3040,21 @@ const Workspace2CanvasGroups = {
             partialOverlapNodes.forEach(s => { s.node.pos[0] = s.x + dx; s.node.pos[1] = s.y + dy; });
             graph.setDirtyCanvas?.(true, true);
         };
-        const onUp = () => {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
+        const onUp = createOnceGuard(() => {
+            DRAG_MOVE_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onMove, true));
+            DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onUp, true));
             self._suspendMembershipSync = false;
             const el = self.groupEls[group.id];
             if (el) el._xzgSyncFrame = 10;
             self.syncGroupsToExtra();
             graph.change?.();
-        };
+        });
         this._suspendMembershipSync = true;
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
+        // Nodes 2.0 owns pointer-captured gestures.  In that renderer a
+        // compatibility mousemove is not guaranteed, so ordinary group drag
+        // must listen to the pointer family just like native-node joint drag.
+        DRAG_MOVE_EVENT_NAMES.forEach((name) => document.addEventListener(name, onMove, true));
+        DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.addEventListener(name, onUp, true));
     },
 
     /* ── 多选拖动：选中编组和节点均按唯一 ID 仅移动一次 ── */
@@ -3108,9 +3110,9 @@ const Workspace2CanvasGroups = {
             window.Workspace2CanvasGroupsLastMultiDrag.lastDelta = { x: dx, y: dy };
             graph.setDirtyCanvas?.(true, true);
         };
-        const onUp = () => {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
+        const onUp = createOnceGuard(() => {
+            DRAG_MOVE_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onMove, true));
+            DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onUp, true));
             self._suspendMembershipSync = false;
             // Resume periodic membership checks on a later frame, after the
             // final node and border positions are visible to the overlay.
@@ -3120,9 +3122,9 @@ const Workspace2CanvasGroups = {
             });
             self.syncGroupsToExtra();
             graph.change?.();
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
+        });
+        DRAG_MOVE_EVENT_NAMES.forEach((name) => document.addEventListener(name, onMove, true));
+        DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.addEventListener(name, onUp, true));
     },
 
     // Native node drag companion: LiteGraph owns selected node positions.  WK
@@ -3228,14 +3230,14 @@ const Workspace2CanvasGroups = {
             group.bounds.h = Math.max(44, startH + dy);
             app.graph?.setDirtyCanvas?.(true, true);
         };
-        const onUp = () => {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
+        const onUp = createOnceGuard(() => {
+            DRAG_MOVE_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onMove, true));
+            DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onUp, true));
             self.syncGroupsToExtra();
             app.graph?.change?.();
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
+        });
+        DRAG_MOVE_EVENT_NAMES.forEach((name) => document.addEventListener(name, onMove, true));
+        DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.addEventListener(name, onUp, true));
     },
 
     /* ── 样式更新 ── */

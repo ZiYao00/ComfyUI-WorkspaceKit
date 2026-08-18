@@ -219,6 +219,90 @@ function markDirty() {
   app.graph?.change?.();
 }
 
+function applyNode2TitlePresentation(node) {
+  const nodeElement = document.querySelector(`[data-node-id="${CSS.escape(String(node.id))}"]`);
+  if (!nodeElement) return;
+
+  const props = ensureProps(node);
+  const inner = nodeElement.querySelector('[data-testid="node-inner-wrapper"]');
+  if (inner) {
+    // Nodes 2.0 owns the DOM surface and does not call LiteGraph's
+    // onDrawBackground. Hide only its generic node card; the resize handles
+    // remain siblings on the root element and therefore keep working.
+    inner.style.opacity = "0";
+    inner.style.pointerEvents = "none";
+  }
+
+  let overlay = nodeElement.querySelector(":scope > .workspace2-title-node2-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = "workspace2-title-node2-overlay";
+    nodeElement.append(overlay);
+  }
+
+  const fontSize = clamp(props.fontSize, 8, 120) || DEFAULT_PROPS.fontSize;
+  const bgOpacity = clamp(props.bgOpacity, 0, 1);
+  const borderOpacity = clamp(props.borderOpacity, 0, 1);
+  const borderRadius = Math.max(0, Number(props.borderRadius) || 0);
+  overlay.textContent = String(props.text || defaultTitleText());
+  overlay.style.cssText = [
+    "position:absolute",
+    "inset:0",
+    "z-index:1",
+    "pointer-events:none",
+    "display:flex",
+    `align-items:${props.textAlign === "left" ? "center" : "center"}`,
+    `justify-content:${props.textAlign === "left" ? "flex-start" : props.textAlign === "right" ? "flex-end" : "center"}`,
+    "box-sizing:border-box",
+    "padding:14px",
+    "overflow:hidden",
+    "white-space:pre-wrap",
+    "word-break:break-word",
+    `font:600 ${fontSize}px/${Number(props.lineHeight) || DEFAULT_PROPS.lineHeight} Arial, 'Microsoft YaHei', '微软雅黑', sans-serif`,
+    `letter-spacing:${Number(props.letterSpacing) || 0}px`,
+    `color:${props.fontColor || DEFAULT_PROPS.fontColor}`,
+    `background:${bgOpacity > 0 ? alphaColor(props.bgColor, bgOpacity) : "transparent"}`,
+    `border:${borderOpacity > 0 ? `1px solid ${alphaColor(props.borderColor, borderOpacity)}` : "1px solid transparent"}`,
+    `border-radius:${borderRadius}px`,
+    props.glowEnabled
+      ? `text-shadow:0 0 ${clamp(props.glowSize, 0, 80) * clamp(props.glowIntensity, 0, 2)}px ${props.glowColor || DEFAULT_PROPS.glowColor}`
+      : "text-shadow:none",
+  ].join(";");
+}
+
+function startNode2TitlePresentationLoop() {
+  if (!window.__workspace2Node2TitleDblClickBound) {
+    window.__workspace2Node2TitleDblClickBound = true;
+    // Vue node internals can stop a double-click before it bubbles to the
+    // root. In some Nodes 2.0 builds the canvas owns the pointer target even
+    // though the Vue node is visibly above it, so use the rendered node
+    // rectangle rather than event.target. This keeps the visual overlay
+    // pointer-transparent and does not interfere with drag events.
+    document.addEventListener("dblclick", (event) => {
+      if (!app?.extensionManager?.setting?.get?.("Comfy.VueNodes.Enabled")) return;
+      for (const node of app?.graph?._nodes || []) {
+        if (node?.type !== NODE_TYPE) continue;
+        const nodeElement = document.querySelector(`[data-node-id="${CSS.escape(String(node.id))}"]`);
+        const rect = nodeElement?.getBoundingClientRect?.();
+        if (!rect || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) continue;
+        event.preventDefault();
+        event.stopPropagation();
+        startEditor(node, "style");
+        return;
+      }
+    }, true);
+  }
+  const sync = () => {
+    if (app?.extensionManager?.setting?.get?.("Comfy.VueNodes.Enabled")) {
+      for (const node of app?.graph?._nodes || []) {
+        if (node?.type === NODE_TYPE) applyNode2TitlePresentation(node);
+      }
+    }
+    requestAnimationFrame(sync);
+  };
+  requestAnimationFrame(sync);
+}
+
 function makeButton(text, title) {
   const button = document.createElement("button");
   button.type = "button";
@@ -594,7 +678,9 @@ app.registerExtension({
     nodeType.prototype.onNodeCreated = function (...args) {
       originalCreated?.apply(this, args);
       ensureProps(this);
-      this.size = this.size || [260, 90];
+      if (!Array.isArray(this.size) || this.size[1] < 52) {
+        this.size = [260, 90];
+      }
       this.title = "";
     };
 
@@ -649,3 +735,8 @@ app.registerExtension({
     };
   },
 });
+
+// Nodes 2.0 renders Vue DOM instead of LiteGraph canvas. Keep this small
+// adapter local to the title node so ordinary WK nodes keep the official
+// renderer unchanged.
+startNode2TitlePresentationLoop();

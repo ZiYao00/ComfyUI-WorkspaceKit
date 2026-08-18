@@ -250,13 +250,13 @@ Templates are reusable connected node groups. Use them for common structures suc
 
 During the beta compatibility period, template data continues to use the existing Workspace2-compatible location under the ComfyUI user directory. Existing template data remains available after upgrading. Back up important template data regularly.
 
-### Transparent Title
+### WK Transparent Title
 
-![Transparent Title](Preview/006.jpg)
+![WK Transparent Title](Preview/006.jpg)
 
 A lightweight visual title and annotation node for large workflows. It appears in
 the ComfyUI node menu under the **🧩 WorkspaceKit** category as
-**Transparent Title（透明标题）**.
+**WK Transparent Title**.
 
 Default style:
 

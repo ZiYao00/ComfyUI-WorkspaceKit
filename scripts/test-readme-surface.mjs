@@ -75,10 +75,10 @@ assert.ok(existsSync(join(repoRoot, "Preview/archive/README.md")), "the archive 
 // READMEs called it "Title2" long after the node was renamed, which sent users
 // looking for a menu entry that does not exist.
 const nodeDisplayName = read("__init__.py");
-assert.match(nodeDisplayName, /"Workspace2Title": "Transparent Title（透明标题）"/, "node display name changed; update both READMEs");
+assert.match(nodeDisplayName, /"Workspace2Title": "WK Transparent Title"/, "node display name changed; update both READMEs");
 assert.ok(!en.includes("Title2") && !zh.includes("标题2"), "the retired 'Title2' name must not return");
-assert.ok(en.includes("### Transparent Title"), "English README needs the Transparent Title section");
-assert.ok(zh.includes("### 透明标题"), "Chinese README needs the Transparent Title section");
+assert.ok(en.includes("### WK Transparent Title"), "English README needs the WK Transparent Title section");
+assert.ok(zh.includes("### WK Transparent Title（透明标题）"), "Chinese README needs the WK Transparent Title section");
 
 // Facts the content audit fixes in place (.dev-docs/README_CONTENT_AUDIT.md).
 assert.ok(!zh.includes("复制模板名称"), "the removed 'copy template name' action must not return");

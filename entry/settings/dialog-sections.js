@@ -76,7 +76,7 @@ export function createSettingsDialogSections({
 
     const workflowSettings = settingsSection(t("settings.workflowSettings"), [
       settingsRange(t("settings.recentWorkflows"), workflowRecentLimit(), {
-        min: 5,
+        min: 2,
         max: 15,
         snap: snapWorkflowRecentLimit,
         onChange: setWorkflowRecentLimit,

@@ -56,7 +56,8 @@ const host = createWorkspacePanelHost({
   createSettingsIcon: () => new FakeElement("svg"),
 });
 
-assert.equal(host.shell.className, "workspace2-shell");
+assert.match(host.shell.className, /\bworkspace2-shell\b/);
+assert.match(host.shell.className, /\bworkspacekit-ui-root\b/);
 assert.equal(host.tabButtons.size, 4);
 assert.match(host.tabButtons.get("nodes").className, /is-active/);
 assert.equal(host.tabButtons.get("nodes").attributes.get("aria-current"), "page");
@@ -78,7 +79,8 @@ assert.equal(host.controlsHost.dataset.workspacekitPanelSlot, "controls");
 assert.equal(host.contentHost.dataset.workspacekitPanelSlot, "content");
 assert.equal(host.statusHost.dataset.workspacekitPanelSlot, "status");
 assert.equal(host.moduleFrame.dataset.workspacekitPanelBlueprint, "v1");
-assert.equal(host.contentHost.className, "workspace2-module-body");
+assert.match(host.contentHost.className, /\bworkspace2-module-body\b/);
+assert.match(host.contentHost.className, /\bworkspacekit-ui-panel-content-slot\b/);
 assert.equal(host.contentHost.dataset.workspace2ModuleMount, "true");
 assert.deepEqual(host.moduleFrame.children, [host.headerHost, host.toolbarHost, host.controlsHost, host.contentHost, host.statusHost]);
 

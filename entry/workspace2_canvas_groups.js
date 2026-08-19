@@ -56,7 +56,7 @@ import {
     validateWorkspaceKitGroupConversionArchive,
 } from "./canvas-groups/conversion-archive.js?v=20260727_group_conversion_archive_r1";
 import { validateNativeGroupConversionResult, countStaleWorkspaceKitNodeMarkers } from "./canvas-groups/conversion-result.js?v=20260727_group_conversion_result_c3";
-import { createNativeToWorkspaceKitConversionPlan } from "./canvas-groups/reverse-conversion-plan.js?v=20260727_group_reverse_conversion_c6_2";
+import { createNativeToWorkspaceKitConversionPlan } from "./canvas-groups/reverse-conversion-plan.js?v=20260819_t040_native_defaults";
 import { resolveNodeVisualBounds } from "./canvas-groups/node-visual-bounds.js?v=20260817_nodes2_visual_bounds_p0";
 import {
     isNodes2Enabled,

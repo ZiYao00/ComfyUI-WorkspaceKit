@@ -23,7 +23,9 @@ export function createWorkspacePanelHost({
     throw new TypeError("A DOM document is required to create the WorkspaceKit panel host.");
   }
   const shell = document.createElement("div");
-  shell.className = "workspace2-shell";
+  // The shell is also the typography-token root so tabs (which sit above the
+  // panel frame) and all hosted Slots inherit the same UI Kit type scale.
+  shell.className = "workspace2-shell workspacekit-ui-root";
 
   const tabStrip = document.createElement("div");
   tabStrip.className = "workspace2-module-tabs";
@@ -199,33 +201,36 @@ export function createWorkspacePanelHost({
   tabStrip.append(settingsButton);
 
   const moduleFrame = document.createElement("div");
-  moduleFrame.className = "workspace2-module-frame";
+  // The Host itself is the UI Kit root. This gives built-in panels and merged
+  // family Providers one token source instead of relying on Provider-created
+  // template roots to inject or scope the shared geometry.
+  moduleFrame.className = "workspace2-module-frame workspacekit-ui-root workspacekit-ui-panel-blueprint";
   // The legacy host names remain valid while the Blueprint exposes the
   // product-wide header / toolbar / controls / content anatomy.  Built-in
   // renderers still mount into contentHost in this batch, so merely adding
   // the slots cannot change their render lifecycle or visual layout.
   const headerHost = document.createElement("div");
-  headerHost.className = "workspace2-module-header-host";
+  headerHost.className = "workspace2-module-header-host workspacekit-ui-panel-header-slot";
   headerHost.dataset.workspacekitPanelSlot = "header";
   headerHost.hidden = true;
   const toolbarHost = document.createElement("div");
-  toolbarHost.className = "workspace2-module-context-host";
+  toolbarHost.className = "workspace2-module-context-host workspacekit-ui-panel-toolbar-slot";
   toolbarHost.dataset.workspacekitPanelSlot = "toolbar";
   toolbarHost.hidden = true;
   const controlsHost = document.createElement("div");
-  controlsHost.className = "workspace2-module-controls-host";
+  controlsHost.className = "workspace2-module-controls-host workspacekit-ui-panel-controls-slot";
   controlsHost.dataset.workspacekitPanelSlot = "controls";
   controlsHost.hidden = true;
   const contentHost = document.createElement("div");
   // Existing panel renderers intentionally continue to receive this exact
   // class. prepareWorkspaceModuleMount() depends on it during the migration.
-  contentHost.className = "workspace2-module-body";
+  contentHost.className = "workspace2-module-body workspacekit-ui-panel-content-slot";
   contentHost.dataset.workspace2ModuleMount = "true";
   contentHost.dataset.workspacekitPanelSlot = "content";
   // Bottom status is an opt-in slot. It must remain after the scrollable
   // content host so a later status migration cannot alter content ownership.
   const statusHost = document.createElement("div");
-  statusHost.className = "workspace2-module-status-host";
+  statusHost.className = "workspace2-module-status-host workspacekit-ui-panel-status-slot";
   statusHost.dataset.workspacekitPanelSlot = "status";
   statusHost.hidden = true;
   moduleFrame.dataset.workspacekitPanelBlueprint = "v1";

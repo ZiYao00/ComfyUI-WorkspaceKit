@@ -24,7 +24,7 @@ export function createWorkflowOpenListRenderer({ document, translate, iconButton
   }) {
     const section = document.createElement("div");
     section.className = "workspace2-recent-workflows workspace2-open-history-list";
-    section.style.setProperty("--workspace2-open-history-rows", String(Math.max(5, Math.min(15, Number(capacity) || 5))));
+    section.style.setProperty("--workspace2-open-history-rows", String(Math.max(2, Math.min(15, Number(capacity) || 5))));
     const label = document.createElement("div");
     label.className = "workspace2-current-workflow-label";
     label.textContent = translate("workflows.recent");

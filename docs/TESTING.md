@@ -1,5 +1,47 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-19 - Open surface and frosted-blur effective range
+
+- The Workflows Open-history surface now uses `50%` of the theme control
+  surface, rather than `75%`; row hover/selection colours do not change.
+- Frosted Glass removes the old visually weak `0–20` input region. New slider
+  `0` maps to the former `20` appearance (about `6px`), and new `100` remains
+  the former `100` appearance (`32px`). Existing stored values are migrated
+  once to preserve their physical blur — for example old `20` becomes new `0`.
+- `test-panel-background-state.mjs` covers endpoint mapping and migration.
+  Fresh isolated `:8190` acceptance seeded legacy blur `20` before startup;
+  the page migrated it to stored `0` with scale version `2`, applied `6px` to
+  the live glass shell, and computed the Open surface as a 0.5-alpha theme
+  colour. No WorkspaceKit page error occurred.
+
+## 2026-08-19 - Workflows Open-history resize and surface alignment
+
+- Backup before the source change:
+  `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-open-history-resize-alignment-20260819-152359.zip`
+  (SHA-256 `9A470B2F38F6CEC1E8A66C252EBA6A023B8D8F1160158FE8AFB619FE20EF63D2`).
+- The Open-history setting remains the single persisted source of truth. Its
+  linear range is now `2–15` visible rows, and the new bottom resize handle
+  maps pointer movement to that same integer rather than storing a separate
+  pixel height. During drag only the CSS row count previews; persistence and a
+  panel rebuild occur on release, so pointer capture cannot be interrupted.
+- The fixed `scrollbar-gutter: stable` reserved a 15px empty right strip even
+  when the Open list did not overflow. It is now `auto`: ordinary lists align
+  with the full container width, while real overflow still receives the native
+  scrollbar. Open rows now also use symmetric `6px` inline padding.
+- The Open container uses a theme-derived `75%` control-surface fill, including
+  transparent and glass modes. It does not change row selection or hover
+  colours.
+- Real `:8190` acceptance: before the fix the list was `268px` and its row
+  `253px`; after it both measured `268px` with no WorkspaceKit page error. A
+  pointer drag previewed `5 → 7` without localStorage mutation, then persisted
+  `7` and rebuilt the handle on release. Separate real drags clamped and
+  persisted both endpoints (`2`, `15`); the Settings range rendered
+  `min=2`, `max=15`, `value=2`. Syntax, both focused contracts, and
+  `git diff --check` passed. The complete `npm test` suite also passed:
+  100 JavaScript contracts, 8 Python contracts, and release-version check
+  `0.2.6`. The Host contract now asserts the already-intended shared UI-root
+  and Content-slot classes rather than the pre-Blueprint class strings.
+
 ## 2026-08-19 - Hosted Workflows scale-slider regression repair
 
 - Backup before the source change:
@@ -17,6 +59,180 @@
   WorkspaceKit console errors. Its new real interaction assertion drove the
   Workflows range input from `50` to `100` and observed
   `--workspace2-row-height` change from `35px` to `42px`.
+
+## 2026-08-19 - Single UI system B1: shared core-panel scale surface
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/WorkspaceKit-before-single-layout-system-b1-shared-slider-root-20260819-122000.zip`
+  (SHA-256 `2677DEDAC0B319339D12C5966B3071FF475FFD5199EFDB377BDC73777FDAA655`).
+- Root cause: after the Blueprint migration, Nodes and Templates received the
+  Content slot, which is *inside* `.workspace2-panel`. Their density controls
+  searched only downward, so they updated state and localStorage but never
+  applied the CSS scale variables to the actual panel surface. Workflows had
+  a separate ancestor-aware lookup, causing the inconsistent behaviour.
+- `resolveWorkspacePanelSurface()` is now the single mount-to-panel resolver
+  used by Workflows, Nodes, and Templates. This batch changes no geometry,
+  padding, Slot ownership, or business action.
+- Real test-package page acceptance: each of the three sliders changed from
+  `50` / `35px` to `100` / `42px` and produced no WorkspaceKit page error.
+  Syntax and `git diff --check` passed.
+
+## 2026-08-19 - Single UI system B2: shared core-panel geometry
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/WorkspaceKit-before-single-layout-system-b2-shared-geometry-20260819-131847.zip`
+  (SHA-256 `2ED54052EF34BE98745A64892E37E49C8A62F47F07EC56F78EB5BD17B26E573C`).
+- Live DOM measurement first confirmed that the three hosted core panels have
+  exactly one geometry owner: their four Host Slots had `10px` horizontal
+  padding, while the outer frame already had `0px` padding and gap. The change
+  therefore cannot create a double `20px` gutter.
+- The shared Host now defines the core geometry tokens and applies the same
+  values to Workflows, Nodes, and Templates: Toolbar `12px 20px 0`, Controls
+  `12px 20px 12px`, Content `0 20px 16px`, Status `8px 20px 10px`.
+  `entry/ui-kit/styles.js` exposes matching public defaults for future family
+  panels; no existing Layout or Theme Vendor output was changed in this batch.
+- Fresh `:8190` page acceptance measured those exact computed values in all
+  three panels. Each real range input also changed from `50` to `100`, with no
+  WorkspaceKit console errors. JavaScript syntax checks and `git diff --check`
+  passed.
+
+## 2026-08-19 - Single UI system B3: core panels consume public UI Kit Slots
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/WorkspaceKit-before-single-layout-system-b3-standard-slot-classes-20260819-133336.zip`
+  (SHA-256 `0A69E287C95C4E83EDD39145F4A705B44CF5015B6DAE61C554CDF20888C3B9BA`).
+- Cause confirmed by live DOM inspection: the Host allocated only legacy
+  `workspace2-module-*` classes, while the public UI Kit Slot CSS was injected
+  only when a Provider called `WorkspaceKitPanelUITemplate.create()`. Core WK
+  panels therefore had a second, legacy geometry path despite the Blueprint
+  migration.
+- The Host now marks its frame as the UI Kit Root/Blueprint and its four Slots
+  with the public UI Kit classes. WK startup explicitly installs the shared
+  UI Kit stylesheet; this is idempotent with Provider `create()` calls.
+  Removed rules were dormant Workflows-only 10px Slot overrides, not workflow,
+  node, template, scroll, or status business logic.
+- Fresh test-package acceptance waited for the real WK startup completion,
+  confirmed the public stylesheet exists, and measured every core page with
+  the same standard classes and values: Toolbar `12px 20px 0`, Controls
+  `12px 20px 0`, Content `12px 20px 16px`, Status `8px 20px 10px`.
+  Workflows, Nodes, and Templates each retained content and a functioning
+  `50 → 100` range control; no WorkspaceKit console error occurred.
+
+## 2026-08-19 - Single UI system B4: optional public Status Slot
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/WorkspaceKit-before-single-layout-system-b4-status-slot-20260819-134456.zip`
+  (SHA-256 `0EEEA82F0A2A409BC562ABF47E5BCAEF1F6E01ABCC241E8EF9CF3F28C40E3468`).
+- The Host already allocated a fifth bottom Status Slot and panels already used
+  its controller, but both the host and its status line were styled only by
+  WK-private selectors. This was the remaining shared-panel geometry outside
+  the public UI Kit contract.
+- Added optional `workspacekit-ui-panel-status-slot` and
+  `workspacekit-ui-panel-status` primitives. The existing WK classes remain
+  on the same elements for compatibility; dormant Status Slots stay hidden.
+  No status message, preference, hover-help behaviour, or panel action changed.
+- Fresh `:8190` page acceptance verified all three status hosts use the public
+  class with `8px 20px 10px` padding and a 1px border. Workflows (`31` items),
+  Nodes (`1596` nodes), and Templates (`3` templates) retained their live
+  status text and each range input still changed `50 → 100`, with no WK error.
+
+## 2026-08-19 - UI refinement B1: 15px shared panel gutter
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/WorkspaceKit-before-ui-refinement-b1-15px-gutter-20260819-140606.zip`
+  (SHA-256 `602B841C6B02B1BA78DF2ECB71694FAE27E83802D6D6DA6BFAE08245A2BC2246`).
+- The live Slot audit established that the only active horizontal-gutter source
+  is `--workspacekit-ui-panel-inline-padding`; the similarly named
+  `--workspacekit-panel-*` declarations in host CSS had no consumers and were
+  removed rather than left as a misleading second source of truth.
+- Changed the UI Kit shared horizontal gutter from `20px` to `15px`. No local
+  panel-specific padding or business renderer was changed.
+- Fresh `:8190` acceptance measured all three core pages: Toolbar
+  `12px 15px 0`, Controls `12px 15px 0`, Content `12px 15px 16px`, Status
+  `8px 15px 10px`. Every scale range still changed `50 → 100`; no WK console
+  error occurred. Syntax and `git diff --check` passed.
+
+## 2026-08-19 - UI refinement B2: active tab-to-panel connection
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/WorkspaceKit-before-ui-refinement-b2-active-tab-connection-20260819-141445.zip`
+  (SHA-256 `F7BD3C3EF1C5B7E88A5CB918BD19E6BDD2545D0C1697624EC8505192DEF79E96`).
+- Live screenshot and computed-style inspection found that the active tab took
+  a blue-tinted fallback from the outer tab strip, while the panel used the
+  white `--workspace2-panel-fill`. The boxes touched but their surfaces did
+  not, so the tab read as detached.
+- Active core and overflow tabs now take `--workspace2-panel-fill` as their
+  surface and add a one-pixel same-surface seam cover. The existing rounded
+  shoulder pseudo-elements remain; no tab labels, overflow menu, Provider
+  pinning, or panel content changed.
+- Fresh `:8190` page acceptance confirmed the active surface equals the
+  frame's panel-fill token, the seam cover is present, and Nodes → Templates
+  → Workflows switches activate the expected tab with no WK error. Before/after
+  screenshots are retained locally under `.dev-docs/artifacts/`.
+
+## 2026-08-19 - UI refinement B3: shared view switcher and Nodes divider removal
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/WorkspaceKit-before-ui-refinement-b3-view-switcher-20260819-141655.zip`
+  (SHA-256 `5472128970E16CD15360162C537CD9D0A9A8B866FD6A210B89F4E2021057D75D`).
+- Workflows' All/Favorites was a two-button compact pill while Nodes' three
+  section controls were a separate tab implementation. They share visual
+  purpose but not selection semantics: Workflows is exclusive; Nodes allows
+  multiple enabled filters. The Nodes row also retained a legacy top divider
+  that duplicated the shared Controls-slot spacing.
+- Added shared `workspacekit-ui-view-tabs` / `workspacekit-ui-view-tab`
+  visual classes. Workflows supplies two columns; Nodes supplies three and
+  retains its 8px separation from the root row without a border. Existing
+  state, localStorage keys, button labels, and click handlers remain intact.
+- Fresh `:8190` acceptance measured a two-column Workflow switcher and a
+  three-column Node switcher, both without a top border. All/Favorites changed
+  `true,false → false,true`; a Node filter changed `true → false → true`.
+  No WK console error occurred; syntax and `git diff --check` passed.
+
+## 2026-08-19 - UI refinement B4: first public typography-token migration
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/WorkspaceKit-before-ui-refinement-b4-typography-tokens-20260819-143100.zip`
+  (SHA-256 `89A1AA9DA2EB3E819669E98A6009B511C87DE1746A710CBE9464F0214367E1CE`).
+- The UI Kit had a base font but no named compact-panel scale. Core chrome
+  mixed literals with legacy panel metadata variables, so typography could not
+  be consistently reused by future family panels.
+- Added public sizes `meta=10`, `compact=11`, `control=12`, `body=13`,
+  `title=14` and weights `400/500/600/700`. The Host Shell is now the type
+  token root so its tab strip inherits the same scale as hosted Slots.
+  This batch deliberately excludes scalable tree rows, preview cards, dialogs,
+  and settings content.
+- Fresh `:8190` acceptance measured: active module tab `12px/500`, toolbar
+  text action `12px/600`, view switcher `10px/500`, and bottom status
+  `11px/500`; all preserve their theme-derived colors. The Workflow range
+  still changed `50 → 100`, no WK error occurred, and syntax/
+  `git diff --check` passed.
+
+## 2026-08-19 - T-056 R6 / T-602: Family Provider lifecycle acceptance
+
+- Backups before this verification/fix batch:
+  - `ComfyUI-WorkspaceKit/.codex-backups/10-ui-canvas/WorkspaceKit-before-T056-provider-lifecycle-acceptance-20260819-120300.zip`
+    (SHA-256 `16E2117AD87C4E47B5282DD0FD283384676ADC6FA6734DC96BA22FB31BF208E0`);
+  - `ComfyUI-WorkspaceKit-Layout/.codex-backups/10-ui-canvas/WorkspaceKit-Layout-before-T056-provider-startup-fix-20260819-115800.zip`
+    (SHA-256 `DC49BF1FB8F131043683A89B63F648D9D1318B64E9645303EDA7ABB2BA829EF4`).
+- Real failure reproduced at `:8190`: Layout requested successfully but never
+  registered. The browser reported `vite:preloadError ... isPermanent is not
+  defined`; the legacy toolbar initialization had a bare `isPermanent` branch
+  after its value had already been folded into `storedMode`. This aborted the
+  entire Layout module before Provider registration.
+- Minimal Layout repair: remove only that unreachable bare-variable branch and
+  add a source regression test. It does not alter NodeAligner commands,
+  sidebar styling, or the user's pre-existing uncommitted Layout changes.
+- Real page acceptance is now automated by
+  `scripts/e2e/t056-family-provider-lifecycle.mjs`: Theme and Layout both
+  register; Theme -> Layout -> Nodes -> Theme leaves exactly one active
+  Provider slot and no prior Provider DOM; a fresh browser context with WK
+  integration disabled exposes both standalone tabs, mounts each bundled Vendor
+  panel, then removes its panel-owned DOM on disposal. The run completed with
+  `errs_workspace: 0`.
+- Still not claimed: narrow-width and four-background visual comparison, plus
+  real Chrome 100/125/150% zoom. These remain part of the shared P-05 visual
+  matrix and cannot be substituted by the headless lifecycle test.
 
 ## 2026-08-19 - T-056 R3 core-panel geometry and Workflows Browse order
 
@@ -2828,6 +3044,37 @@ Last verified in the main package on 2026-07-30 (T-009 through T-012): all items
 - **2026-07-18 live test-package acceptance:** the clean `小红书 → 99 → 小红书` sequence passed with no dirty dot or Save button on either Open row. The separate dirty-tab reactivation regression is repaired and passed the real-node-move test above; main-package release acceptance remains outstanding.
 # Current release baseline
 
+## 2026-08-19 - T-102-R1 Canvas-group conversion real disk persistence (test package)
+
+- Created the pre-change archive: `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-T102-real-persistence-20260819-111424.zip` (SHA-256 `B18D52D370B7CB30657D746F766E96D9629828D7923076D3EC317DD0945A4EEA`).
+- Added repeatable acceptance `scripts/e2e/t102-conversion-disk-persistence.mjs`. In a disposable browser graph it creates one WK group, assigns stable native colour `#9f7aea`, converts it to a LiteGraph native group, and saves through `POST /workspace2/workflow/save` to `__WK_TEST__/t102-conversion-disk-persistence.json`.
+- The endpoint returned HTTP 200. After a full browser-page reload, the script read that file through `GET /workspace2/workflow/read` and loaded the returned workflow with `app.loadGraphData()`.
+- The reopened workflow retained `groupRepresentation: native`, one native group titled `T102 native colour persistence`, native group colour `#9f7aea`, and archive `nativeGroupColor: #9f7aea`; no `.xzg-group-box` overlay remained. This closes the prior gap where in-memory `serialize() → loadGraphData()` had been treated as disk-persistence evidence.
+
+## 2026-08-19 - T-035 rgthree `pale_blue` real filter persistence (test package)
+
+- Created the pre-change archive: `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-T035-rgthree-native-color-20260819-112456.zip` (SHA-256 `1C5715778EE8272BD9E0EBA7FA9065E76E318F1EDF81F45B57C967A56F3BA33C`).
+- Added repeatable acceptance `scripts/e2e/t035-rgthree-pale-blue-disk-persistence.mjs`. It creates two WK groups with persisted identities `pale_blue` / `#3f789e` and `red` / `#aa8888`, then adds the real installed `Fast Groups Bypasser (rgthree)` with `@matchColors=pale_blue`.
+- rgthree Fast Groups has an intentional ~400ms group-list cache. The acceptance calls its public `SERVICE.getGroupsUnsorted()` before `refreshWidgets()` so the test proves the post-cache result rather than an obsolete list. This does not change product code.
+- Before save and after `POST /workspace2/workflow/save` → full page reload → `GET /workspace2/workflow/read` → `app.loadGraphData()`, the Bypasser rendered exactly `Enable T035 pale-blue target`; it did not render the red control group. Both bridge adapters retained their expected colours and both saved WK group records retained `nativeGroupColor`. No queue execution was performed; this accepts filter identity and persistence only.
+
+## 2026-08-19 - T-021-R1 nested multi-selection real-pointer acceptance (test package)
+
+- Created the pre-change archive: `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-T021-multiselect-real-pointer-20260819-112857.zip` (SHA-256 `18DE2B7C2C5473215BB257F405999B4633AAE22A8B5A03B04A4593FAB12EB1C8`).
+- Added repeatable `scripts/e2e/t021-multiselect-nested-real-pointer.mjs`, with a parent WK group, an entirely nested child group, and an independent two-node group in a disposable Nodes 2.0 graph.
+- A physical double-click on the parent header selected the child frame and the parent's two internal nodes only. The parent frame and unrelated independent-group nodes were not selected. This supersedes the stale wording that implied the parent should first be selected and then Shift-removed.
+- Physical clicks selected parent + child + independent frames. Dragging a selected header by `36×18` screen pixels at `0.9` scale moved all three frames and all four graph nodes by exactly `40×20` graph pixels; the Vue DOM node rectangles moved by the corresponding screen delta, proving no duplicate movement. `Esc` cleared the transient group selection.
+
+## 2026-08-19 - T-055 P-05b browser-zoom acceptance blocked externally
+
+- The required Chrome browser surface was connected successfully, but opening the local test package at `http://127.0.0.1:8190/` returned `ERR_BLOCKED_BY_CLIENT` from a browser extension layer.
+- The existing in-app/headless browser has already been documented as unable to report actual browser zoom. It was not used as a substitute for Chrome 100% / 125% / 150% evidence. No implementation change or visual acceptance is claimed; retry only after the browser-side local-page block is removed.
+
+## 2026-08-19 - T-054 node-preview visual matrix: static recheck only
+
+- `test-node-preview-model`, `test-node-preview-adapters`, `test-node-preview-archetypes`, and `test-node-preview-visual-contract` all passed against the current source.
+- This confirms the ten-row bounded model, media adapters, structural fallback classification, narrow-card port CSS, and no-external-shadow visual contract have not regressed. It does **not** close the remaining real-hover matrix (light theme, narrow card, complex/port-dense and unregistered third-party cases), because Chrome navigation to the local test package is currently blocked by `ERR_BLOCKED_BY_CLIENT`.
+
 ## 2026-08-18 — Nodes 2.0 P0 closure
 
 - **WK Latent Size:** pure-Python contract confirms all Flux Resolution Calc megapixel values and all 23 public aspect ratios; the WK node keeps its independent LATENT, width, height, resolution and batch outputs.
@@ -2917,3 +3164,20 @@ Last verified in the main package on 2026-07-30 (T-009 through T-012): all items
 - **2026-07-21:** WorkspaceKit `0.2.2` is published to Comfy Registry. The GitHub Actions release gate was verified on a non-version push: version detection passed and the Registry publishing job was skipped, so ordinary documentation or source changes do not republish the package.
 - **2026-07-20:** The published Comfy Registry release is `0.2.1` for `comfyui-workspacekit`. `pyproject.toml` is the authoritative release-version source; the backend reads it for `/workspace2/info`, and the Settings dialog reads that endpoint.
 - Historical entries below retain their original `0.2.1b0` observations and must not be rewritten as though they were recorded against a later release.
+# T-040 — Native-to-WorkspaceKit conversion defaults (2026-08-19)
+
+- Backup: `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-native-to-wk-defaults-20260819-155907.zip`
+  (SHA-256 `EA63C8AF700D04F978A00C0B076F4B56F3C5526B803921B7F107EA2B5BF25439`).
+- Scope: only native groups with no valid WorkspaceKit conversion archive use the
+  conversion landing style. Archived round trips retain their saved WK style.
+- Contract target: 16px `#F2F2F2` unified title/border, 2px at 40% border
+  opacity, native-colour title bar at 50% opacity, no fill, no shadow, 8px
+  radius, 12px padding and no effect.
+- Automated evidence: `node scripts/test-group-reverse-conversion-plan.mjs`
+  passed. Real `:8190` evidence also passed through
+  `node scripts/e2e/t040-native-to-wk-defaults.mjs`: a fresh native
+  `#3f789e` group became `rgba(63,120,158,0.5)` with every listed conversion
+  default, while an archived WK group deliberately configured as `23px`,
+  `5px`, `77%`, filled and shadowed restored those exact values after
+  WK → native → WK. The E2E uses only an in-memory temporary graph and does
+  not save a workflow file or alter a browser setting.

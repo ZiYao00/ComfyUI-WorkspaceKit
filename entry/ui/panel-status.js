@@ -30,10 +30,10 @@ export function createWorkspacePanelStatusController({
     }
     if (!line) {
       line = document.createElement("div");
-      line.className = "workspace2-module-status";
+      line.className = "workspace2-module-status workspacekit-ui-panel-status";
       host.append(line);
     }
-    line.className = `workspace2-module-status is-${["neutral", "success", "warning", "error"].includes(tone) ? tone : "neutral"}`;
+    line.className = `workspace2-module-status workspacekit-ui-panel-status is-${["neutral", "success", "warning", "error"].includes(tone) ? tone : "neutral"}`;
     line.textContent = message;
     line.setAttribute("role", "status");
     line.setAttribute("aria-live", live === "assertive" ? "assertive" : "polite");

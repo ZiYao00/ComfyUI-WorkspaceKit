@@ -30,19 +30,36 @@ export const PANEL_UI_TEMPLATE_CSS = `
     --workspacekit-ui-radius-sm: var(--workspace2-radius-sm, 6px);
     --workspacekit-ui-control-height: 30px;
     --workspacekit-ui-gap: 8px;
+    /* Shared panel geometry. Hosted products receive matching Host tokens;
+       standalone/future providers consume these defaults without copying the
+       old 10px measurements into their own styles. */
+    --workspacekit-ui-panel-inline-padding: 15px;
+    --workspacekit-ui-panel-section-gap: 12px;
+    --workspacekit-ui-panel-content-bottom-padding: 16px;
+    /* Public type scale: compact panel chrome deliberately remains denser
+       than document UI, while all family modules share the same names. */
+    --workspacekit-ui-font-meta: 10px;
+    --workspacekit-ui-font-compact: 11px;
+    --workspacekit-ui-font-control: 12px;
+    --workspacekit-ui-font-body: 13px;
+    --workspacekit-ui-font-title: 14px;
+    --workspacekit-ui-weight-regular: 400;
+    --workspacekit-ui-weight-medium: 500;
+    --workspacekit-ui-weight-semibold: 600;
+    --workspacekit-ui-weight-bold: 700;
     box-sizing: border-box;
     color: var(--workspacekit-ui-text);
-    font: 500 13px/1.2 var(--font-family, Arial, sans-serif);
+    font: var(--workspacekit-ui-weight-medium) var(--workspacekit-ui-font-body)/1.2 var(--font-family, Arial, sans-serif);
   }
   .workspacekit-ui-root *, .workspacekit-ui-root *::before, .workspacekit-ui-root *::after { box-sizing: border-box; }
   /* Exact product-header geometry used by Workflows, Nodes, and Templates. */
   .workspacekit-ui-header { min-height:28px; display:flex; align-items:center; justify-content:space-between; flex-wrap:nowrap; gap:8px; }
-  .workspacekit-ui-header-title { min-width:0; font-size:14px; font-weight:700; flex:0 0 auto; white-space:nowrap; }
+  .workspacekit-ui-header-title { min-width:0; font-size:var(--workspacekit-ui-font-title); font-weight:var(--workspacekit-ui-weight-bold); flex:0 0 auto; white-space:nowrap; }
   .workspacekit-ui-header-status { min-width:0; flex:1 1 auto; overflow:hidden; text-align:right; text-overflow:ellipsis; white-space:nowrap; color:var(--workspacekit-ui-muted); opacity:.72; }
   .workspacekit-ui-section { display:grid; gap:6px; min-width:0; }
   .workspacekit-ui-section-head { display:flex; align-items:center; gap:8px; min-height:24px; }
-  .workspacekit-ui-section-title { font-size:12px; font-weight:650; color:var(--workspacekit-ui-text); }
-  .workspacekit-ui-section-description { color:var(--workspacekit-ui-muted); font-size:11px; line-height:1.35; }
+  .workspacekit-ui-section-title { font-size:var(--workspacekit-ui-font-control); font-weight:var(--workspacekit-ui-weight-semibold); color:var(--workspacekit-ui-text); }
+  .workspacekit-ui-section-description { color:var(--workspacekit-ui-muted); font-size:var(--workspacekit-ui-font-compact); line-height:1.35; }
   .workspacekit-ui-disclosure { margin:0; border:0; border-radius:var(--workspacekit-ui-radius); background:color-mix(in srgb, var(--workspacekit-ui-control) 68%, transparent); }
   .workspacekit-ui-disclosure-summary { cursor:pointer; list-style:none; padding:7px 8px; border-radius:var(--workspacekit-ui-radius); }
   .workspacekit-ui-disclosure-summary::-webkit-details-marker { display:none; }
@@ -81,22 +98,29 @@ export const PANEL_UI_TEMPLATE_CSS = `
   .workspacekit-ui-command { min-width:0; min-height:39px; display:grid; place-items:center; padding:6px; }
   .workspacekit-ui-standalone-shell { height:100%; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
   .workspacekit-ui-standalone-tabs { display:grid; grid-template-columns:minmax(0,1fr) var(--workspacekit-ui-control-height); gap:7px; padding:9px 10px 7px; border-bottom:1px solid color-mix(in srgb, var(--workspacekit-ui-border) 62%, transparent); }
-  .workspacekit-ui-standalone-tab { position:relative; min-height:var(--workspacekit-ui-control-height); border:1px solid color-mix(in srgb, var(--workspacekit-ui-border) 78%, transparent); border-radius:var(--workspacekit-ui-radius); color:var(--workspacekit-ui-muted); background:var(--workspacekit-ui-tab-bg); font:500 12px/1.2 var(--font-family, Arial, sans-serif); cursor:pointer; transition:background 120ms ease,border-color 120ms ease,color 120ms ease,box-shadow 120ms ease; }
+  .workspacekit-ui-standalone-tab { position:relative; min-height:var(--workspacekit-ui-control-height); border:1px solid color-mix(in srgb, var(--workspacekit-ui-border) 78%, transparent); border-radius:var(--workspacekit-ui-radius); color:var(--workspacekit-ui-muted); background:var(--workspacekit-ui-tab-bg); font:var(--workspacekit-ui-weight-medium) var(--workspacekit-ui-font-control)/1.2 var(--font-family, Arial, sans-serif); cursor:pointer; transition:background 120ms ease,border-color 120ms ease,color 120ms ease,box-shadow 120ms ease; }
   .workspacekit-ui-standalone-tab:hover { color:var(--workspacekit-ui-text); border-color:color-mix(in srgb, var(--workspacekit-ui-accent) 32%, var(--workspacekit-ui-border)); background:var(--workspacekit-ui-tab-hover); }
   .workspacekit-ui-standalone-tab[aria-current="page"] { color:var(--workspacekit-ui-text); border-color:color-mix(in srgb, var(--workspacekit-ui-accent) 28%, var(--workspacekit-ui-border)); background:var(--workspacekit-ui-tab-active); box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--workspacekit-ui-accent) 8%, transparent),0 0 0 1px rgba(0,0,0,.05); }
   .workspacekit-ui-standalone-content { flex:1 1 auto; min-height:0; overflow:auto; padding:10px; display:grid; align-content:start; gap:10px; }
   .workspacekit-ui-panel-blueprint { height:100%; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
-  .workspacekit-ui-panel-header-slot { flex:0 0 auto; padding:10px 10px 0; }
-  .workspacekit-ui-panel-toolbar-slot { flex:0 0 auto; padding:8px 10px 0; }
-  .workspacekit-ui-panel-controls-slot { flex:0 0 auto; padding:8px 10px 0; }
-  .workspacekit-ui-panel-content-slot { flex:1 1 auto; min-height:0; overflow:auto; padding:10px; }
-  .workspacekit-ui-product-header-slot { padding:10px 10px 0; }
-  .workspacekit-ui-product-controls-slot { padding:8px 10px; border-bottom:1px solid color-mix(in srgb, var(--workspacekit-ui-border) 62%, transparent); }
-  .workspacekit-ui-product-content-slot { padding:8px 10px 10px; }
-  .workspacekit-ui-product-panel .workspacekit-ui-panel-header-slot { padding:10px 10px 0; }
-  .workspacekit-ui-product-panel .workspacekit-ui-panel-controls-slot { padding:8px 10px; border-bottom:1px solid color-mix(in srgb, var(--workspacekit-ui-border) 62%, transparent); }
-  .workspacekit-ui-product-panel .workspacekit-ui-panel-content-slot { padding:8px 10px 10px; }
-  .workspacekit-ui-panel-header-slot[hidden], .workspacekit-ui-panel-toolbar-slot[hidden], .workspacekit-ui-panel-controls-slot[hidden] { display:none; }
+  .workspacekit-ui-panel-header-slot { flex:0 0 auto; padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding) 0; }
+  .workspacekit-ui-panel-toolbar-slot { flex:0 0 auto; padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding) 0; }
+  .workspacekit-ui-panel-controls-slot { flex:0 0 auto; padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding) 0; }
+  .workspacekit-ui-panel-content-slot { flex:1 1 auto; min-height:0; overflow:auto; padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding) var(--workspacekit-ui-panel-content-bottom-padding); }
+  /* The Host may expose this optional fifth Slot below scrolling content.
+     Providers that do not use status simply keep it hidden. */
+  .workspacekit-ui-panel-status-slot { flex:0 0 auto; min-width:0; padding:8px var(--workspacekit-ui-panel-inline-padding) 10px; border-top:1px solid color-mix(in srgb, var(--workspacekit-ui-border) 62%, transparent); }
+  .workspacekit-ui-panel-status { min-width:0; overflow:hidden; color:var(--workspacekit-ui-muted); font:var(--workspacekit-ui-weight-medium) var(--workspacekit-ui-font-compact)/1.35 var(--font-family, Arial, sans-serif); text-overflow:ellipsis; white-space:nowrap; }
+  .workspacekit-ui-panel-status.is-success { color:color-mix(in srgb, var(--workspacekit-ui-accent) 78%, var(--workspacekit-ui-muted)); }
+  .workspacekit-ui-panel-status.is-warning { color:var(--p-orange-400, #f0a34b); }
+  .workspacekit-ui-panel-status.is-error { color:var(--p-red-400, #f18484); }
+  .workspacekit-ui-product-header-slot { padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding) 0; }
+  .workspacekit-ui-product-controls-slot { padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding); border-bottom:1px solid color-mix(in srgb, var(--workspacekit-ui-border) 62%, transparent); }
+  .workspacekit-ui-product-content-slot { padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding) var(--workspacekit-ui-panel-content-bottom-padding); }
+  .workspacekit-ui-product-panel .workspacekit-ui-panel-header-slot { padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding) 0; }
+  .workspacekit-ui-product-panel .workspacekit-ui-panel-controls-slot { padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding); border-bottom:1px solid color-mix(in srgb, var(--workspacekit-ui-border) 62%, transparent); }
+  .workspacekit-ui-product-panel .workspacekit-ui-panel-content-slot { padding:var(--workspacekit-ui-panel-section-gap) var(--workspacekit-ui-panel-inline-padding) var(--workspacekit-ui-panel-content-bottom-padding); }
+  .workspacekit-ui-panel-header-slot[hidden], .workspacekit-ui-panel-toolbar-slot[hidden], .workspacekit-ui-panel-controls-slot[hidden], .workspacekit-ui-panel-status-slot[hidden] { display:none; }
   .workspacekit-ui-slot-stack { flex:1 1 auto; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
   .workspacekit-ui-host-header { flex:0 0 auto; padding:10px 10px 0; }
   .workspacekit-ui-host-context { flex:0 0 auto; padding:0 10px; }

@@ -221,7 +221,7 @@ export function styles() {
       border-radius: 10px 10px 0 0;
       color: var(--p-text-muted-color, rgba(255, 255, 255, 0.68));
       background: transparent;
-      font: 500 12px/1.2 var(--font-family, Arial, sans-serif);
+      font: var(--workspacekit-ui-weight-medium) var(--workspacekit-ui-font-control)/1.2 var(--font-family, Arial, sans-serif);
       cursor: pointer;
       white-space: nowrap;
       overflow: hidden;
@@ -245,10 +245,16 @@ export function styles() {
     }
     .workspace2-module-tab.is-active,
     .workspace2-module-overflow-tab.is-active {
-      --workspace2-active-tab-surface: var(--workspace2-surface, var(--workspace2-tab-active-bg));
+      /* The strip is deliberately darker than the panel. An active tab must
+         therefore take the panel fill itself, not a tint of the strip; using
+         the latter was what made it look detached even though the boxes met. */
+      --workspace2-active-tab-surface: var(--workspace2-panel-fill, var(--workspace2-surface, var(--workspace2-tab-active-bg)));
       z-index: 3;
       color: var(--p-text-color, var(--fg-color, #f5f8ff));
       background: var(--workspace2-active-tab-surface);
+      /* Cover the frame seam by one pixel, like a browser's selected tab.
+         This remains a surface connection rather than a heavy underline. */
+      box-shadow: 0 1px 0 var(--workspace2-active-tab-surface);
     }
     /* Small shoulder geometry joins the active tab to the module frame without
        recreating the old thick underline or a hard Chrome colour. */
@@ -326,7 +332,7 @@ export function styles() {
       --workspace2-accent: var(--p-primary-color, var(--accent-color, #0A84FF));
       max-width: min(300px, calc(100vw - 24px));
     }
-    .workspace2-module-overflow-open { width:100%; min-width:0; display:flex; align-items:center; gap:7px; overflow:hidden; text-align:left; white-space:nowrap; font:500 12px/1.2 var(--font-family,Arial,sans-serif); }
+    .workspace2-module-overflow-open { width:100%; min-width:0; display:flex; align-items:center; gap:7px; overflow:hidden; text-align:left; white-space:nowrap; font:var(--workspacekit-ui-weight-medium) var(--workspacekit-ui-font-control)/1.2 var(--font-family,Arial,sans-serif); }
     .workspace2-module-overflow-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .workspace2-module-overflow-current-marker { flex:0 0 auto; color:var(--workspace2-accent); font-size:13px; line-height:1; }
     .workspace2-module-overflow-open.is-current { color:var(--workspace2-accent); background:color-mix(in srgb, var(--workspace2-accent) 13%, transparent); }
@@ -351,23 +357,6 @@ export function styles() {
       min-height: 0;
       overflow: hidden;
     }
-    .workspace2-module-status-host {
-      flex: 0 0 auto;
-      min-width: 0;
-      padding: 6px 10px 8px;
-      border-top: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent);
-    }
-    .workspace2-module-status {
-      min-width: 0;
-      overflow: hidden;
-      color: var(--workspace2-muted);
-      font: 500 11px/1.35 var(--font-family, Arial, sans-serif);
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .workspace2-module-status.is-success { color: color-mix(in srgb, var(--workspace2-accent) 78%, var(--workspace2-muted)); }
-    .workspace2-module-status.is-warning { color: var(--p-orange-400, #f0a34b); }
-    .workspace2-module-status.is-error { color: var(--p-red-400, #f18484); }
     .workspace2-settings-backdrop {
       --workspace2-surface: var(--comfy-menu-bg, var(--p-content-background, var(--bg-color, #202124)));
       --workspace2-control-bg: var(--comfy-input-bg, var(--p-form-field-background, var(--workspace2-surface)));
@@ -822,7 +811,7 @@ export function styles() {
       color: inherit;
       background: var(--workspace2-control-bg-glass, var(--workspace2-control-bg));
       box-shadow: var(--workspace2-control-shadow-glass, none);
-      font: 600 12px/1 var(--font-family, Arial, sans-serif);
+      font: var(--workspacekit-ui-weight-semibold) var(--workspacekit-ui-font-control)/1 var(--font-family, Arial, sans-serif);
       white-space: nowrap;
       cursor: pointer;
     }
@@ -1132,62 +1121,22 @@ export function styles() {
     .workspace2-module-frame.workspace2-panel.workspace2-workflow-blueprint,
     .workspace2-module-frame.workspace2-panel.workspace2-node-blueprint,
     .workspace2-module-frame.workspace2-panel.workspace2-templates-blueprint {
+      /* Core panels use the same geometry tokens as the public UI Kit.  The
+         Host owns these four slots, so a module cannot accidentally add a
+         second left/right gutter while rendering its own feature content. */
       padding: 0;
       gap: 0;
-    }
-    .workspace2-workflow-blueprint .workspacekit-ui-panel-header-slot {
-      padding: 10px 10px 0;
-    }
-    .workspace2-workflow-blueprint .workspacekit-ui-panel-toolbar-slot {
-      padding: 8px 10px 0;
-    }
-    .workspace2-workflow-blueprint .workspacekit-ui-panel-controls-slot {
-      padding: 8px 10px;
-      border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent);
     }
     .workspace2-workflow-controls {
       display: flex;
       flex-direction: column;
       gap: 7px;
     }
-    .workspace2-workflow-view-tabs {
-      display: inline-flex;
-      align-self: flex-start;
-      padding: 2px;
-      gap: 2px;
-      border: 1px solid color-mix(in srgb, var(--workspace2-border) 70%, transparent);
-      border-radius: var(--workspace2-radius-sm);
-      background: color-mix(in srgb, var(--workspace2-control-bg) 84%, transparent);
-    }
-    .workspace2-workflow-view-tab {
-      min-height: 22px;
-      padding: 2px 8px;
-      border: 0;
-      border-radius: calc(var(--workspace2-radius-sm) - 2px);
-      color: var(--workspace2-muted);
-      background: transparent;
-      font: 600 11px/1 var(--font-family, Arial, sans-serif);
-      cursor: pointer;
-    }
-    .workspace2-workflow-view-tab:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: var(--workspace2-hover); }
-    .workspace2-workflow-view-tab.is-active { color: var(--workspace2-accent); background: var(--workspace2-accent-soft, rgba(80, 150, 255, .16)); }
-    .workspace2-workflow-blueprint .workspacekit-ui-panel-content-slot {
-      padding: 8px 10px 10px;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
     /* Hosted core panels deliberately leave the Header slot empty: their
        module tab is the title and their status is the bottom status slot. */
-    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-context-host,
-    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-context-host,
-    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-context-host { padding: 8px 10px 0; }
-    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-controls-host,
-    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-controls-host,
-    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-controls-host { padding: 8px 10px 6px; }
     .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-body,
     .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-body,
-    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-body { padding: 0 10px 10px; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-body { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
     /* Nodes is the second shared-host migration. Only placement belongs here:
        searches, favorites, preview, sorting, and node data stay in entry.js. */
     .workspace2-workflow-content {
@@ -1223,7 +1172,9 @@ export function styles() {
       padding: 6px;
       border: 1px solid color-mix(in srgb, var(--workspace2-border) 54%, transparent);
       border-radius: var(--workspace2-radius);
-      background: color-mix(in srgb, var(--workspace2-hover) 38%, transparent);
+      /* A dedicated surface keeps Open readable in all four WK appearances,
+         including transparent and glass modes. */
+      background: color-mix(in srgb, var(--workspace2-control-bg) 50%, transparent);
       overflow: hidden;
     }
     .workspace2-workflow-section.is-open-history .workspace2-section-header {
@@ -1315,7 +1266,10 @@ export function styles() {
       padding: 0;
       overflow-y: auto;
       overscroll-behavior: contain;
-      scrollbar-gutter: stable;
+      /* Do not reserve a right scrollbar gutter while there is nothing to
+         scroll: it made the Open rows 15px narrower than their container.
+         A real overflow still receives the browser scrollbar normally. */
+      scrollbar-gutter: auto;
     }
     .workspace2-current-workflow {
       display: grid;
@@ -1323,7 +1277,7 @@ export function styles() {
       align-items: center;
       gap: 8px;
       min-height: var(--workspace2-open-history-row-height, var(--workspace2-row-height));
-      padding: 1px 5px 1px 6px;
+      padding: 1px 6px;
       border: 1px solid transparent;
       border-radius: var(--workspace2-radius-sm);
     }
@@ -1339,7 +1293,7 @@ export function styles() {
     .workspace2-current-workflow-label {
       display: none;
       color: var(--workspace2-muted);
-      font-size: var(--workspace2-meta-font);
+      font-size: var(--workspacekit-ui-font-meta);
       line-height: 1.2;
       padding: 0 6px 2px;
     }
@@ -1382,6 +1336,32 @@ export function styles() {
     }
     .workspace2-current-workflow .workspace2-actions {
       opacity: 1;
+    }
+    .workspace2-open-history-resize-handle {
+      height: 8px;
+      margin: 3px -2px -5px;
+      cursor: row-resize;
+      touch-action: none;
+      position: relative;
+      outline: none;
+    }
+    .workspace2-open-history-resize-handle::before {
+      content: "";
+      position: absolute;
+      inset: 3px 6px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--workspace2-border) 62%, transparent);
+      opacity: 0;
+      transition: opacity 120ms ease, background 120ms ease;
+    }
+    .workspace2-workflow-section.is-open-history:hover .workspace2-open-history-resize-handle::before,
+    .workspace2-open-history-resize-handle:focus-visible::before,
+    .workspace2-open-history-resize-handle.is-resizing::before {
+      opacity: 1;
+    }
+    .workspace2-open-history-resize-handle:focus-visible::before,
+    .workspace2-open-history-resize-handle.is-resizing::before {
+      background: var(--workspace2-accent);
     }
     .workspace2-row.is-drop,
     .workspace2-root.is-drop,
@@ -2451,18 +2431,22 @@ export function styles() {
       opacity: .72;
       text-align: right;
     }
-    .workspace2-node-tabs {
+    /* Shared visual component for the core panels' view scope controls.
+       Workflow view is exclusive, Nodes is multi-select; only their grid
+       count and data behaviour differ. */
+    .workspacekit-ui-view-tabs {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(var(--workspacekit-ui-view-tab-count), minmax(0, 1fr));
       gap: 8px;
       min-height: 27px;
-      padding: 8px 0 0;
+      padding: 0;
       border: 0;
-      border-top: 1px solid color-mix(in srgb, var(--workspace2-border) 72%, transparent);
       border-radius: 0;
       background: transparent;
     }
-    .workspace2-node-tab {
+    .workspace2-node-tabs { --workspacekit-ui-view-tab-count: 3; padding-top: 8px; }
+    .workspace2-workflow-view-tabs { --workspacekit-ui-view-tab-count: 2; }
+    .workspacekit-ui-view-tab {
       min-width: 0;
       min-height: 23px;
       display: inline-flex;
@@ -2474,28 +2458,29 @@ export function styles() {
       color: var(--workspace2-muted);
       background: transparent;
       cursor: pointer;
-      font-size: var(--workspace2-meta-font);
+      font-size: var(--workspacekit-ui-font-meta);
+      font-weight: var(--workspacekit-ui-weight-medium);
       opacity: .72;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       padding: 3px 6px;
     }
-    .workspace2-node-tab::before {
+    .workspacekit-ui-view-tab::before {
       display: none;
       content: none;
     }
-    .workspace2-node-tab:hover {
+    .workspacekit-ui-view-tab:hover {
       background: var(--workspace2-hover);
       opacity: .9;
     }
-    .workspace2-node-tab.is-active {
+    .workspacekit-ui-view-tab.is-active {
       background: var(--workspace2-accent-soft);
       color: var(--workspace2-accent);
       opacity: 1;
-      font-weight: 500;
+      font-weight: var(--workspacekit-ui-weight-medium);
     }
-    .workspace2-node-tab.is-active::before {
+    .workspacekit-ui-view-tab.is-active::before {
       background: currentColor;
       box-shadow: inset 0 0 0 2px var(--workspace2-control-bg);
     }

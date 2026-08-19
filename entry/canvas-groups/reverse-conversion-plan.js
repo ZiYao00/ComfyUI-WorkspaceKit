@@ -14,7 +14,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 const CONVERTED_HEADER_OPACITY = 0.5;
 
 const DEFAULT_STYLE = Object.freeze({
-    fontSize: 14,
+    fontSize: 16,
     colorHue: 48,
     colorSat: 100,
     colorLit: 55,
@@ -22,7 +22,7 @@ const DEFAULT_STYLE = Object.freeze({
     effect: "none",
     effectSpeed: 3,
     borderWidth: 2,
-    borderOpacity: 0.65,
+    borderOpacity: 0.4,
     cornerRadius: 8,
     shadowSize: 0,
     shadowColor: "#000000",
@@ -30,7 +30,7 @@ const DEFAULT_STYLE = Object.freeze({
     headerBgColor: "rgba(0,0,0,0.25)",
     backgroundFillEnabled: false,
     backgroundOpacity: 0.125,
-    titleColor: "#FFD700",
+    titleColor: "#F2F2F2",
 });
 
 /*
@@ -38,14 +38,15 @@ const DEFAULT_STYLE = Object.freeze({
  *
  * A native group carries only a colour, a title and geometry — it has no font
  * colour, border or effect to preserve. So rather than inheriting WK's generic
- * DEFAULT_STYLE (gold text on a 2px gold border, tuned for a WK group the user
- * built themselves), a converted group gets a neutral white-on-white treatment
- * that reads as "this came from a native group".
+ * DEFAULT_STYLE is the user-approved landing style for native-origin groups:
+ * 16px near-white title and matching 2px border at 40% opacity.  The native
+ * colour remains the title-bar colour, so the converted group still identifies
+ * with the native group it came from.
  *
  * White is expressed as HSL saturation 0 / lightness 100 because the border
  * colour is stored as hue/sat/lit, not a hex. `useUnifiedColor: true` is what
- * makes the border follow the title colour, so both end up white together —
- * setting the font white without it would leave a gold border.
+ * makes the border follow the title colour, so both end up near-white together.
+ * Setting the title colour alone would leave the old HSL border colour behind.
  *
  * This applies ONLY to groups with no archive entry. A group that was WK before,
  * converted to native and is now coming back has its own saved style in the
@@ -54,10 +55,10 @@ const DEFAULT_STYLE = Object.freeze({
 const CONVERTED_STYLE = Object.freeze({
     ...DEFAULT_STYLE,
     useUnifiedColor: true,
-    titleColor: "#FFFFFF",
+    titleColor: "#F2F2F2",
     colorSat: 0,
-    colorLit: 100,
-    borderWidth: 1,
+    colorLit: 95,
+    borderWidth: 2,
 });
 
 // Native groups carry a solid hex `color`. Convert it to the rgba title bar WK

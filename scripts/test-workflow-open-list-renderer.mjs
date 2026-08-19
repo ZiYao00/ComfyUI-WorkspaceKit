@@ -25,6 +25,12 @@ const section = renderOpenWorkflowList({
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(section.className.includes("workspace2-open-history-list"), true);
 assert.equal(section.style.values.get("--workspace2-open-history-rows"), "9");
+const minimumCapacity = renderOpenWorkflowList({
+  entries: [], capacity: 2, createRenameInput: () => ({ input: true }),
+  onOpen: async () => {}, onSave: async () => {}, onStartRename: () => {},
+  onCloseOfficial: async () => {}, onRemoveRecent: async () => {}, onError: () => {},
+});
+assert.equal(minimumCapacity.style.values.get("--workspace2-open-history-rows"), "2");
 assert.equal(section.scrollTop, 42);
 assert.equal(section.children.length, 3);
 const officialRow = section.children[1];

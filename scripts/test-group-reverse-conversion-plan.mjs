@@ -32,7 +32,7 @@ assert.equal(plan.groups["wk-one"].nativeGroupColor, "#ff0000");
 assert.equal(plan.groups.native_8.allowEmpty, true);
 assert.equal(plan.groups.native_8.headerBgColor, "rgba(0,255,0,0.5)");
 assert.equal(plan.groups.native_8.nativeGroupColor, "#00ff00");
-assert.equal(plan.groups.native_8.fontSize, 14);
+assert.equal(plan.groups.native_8.fontSize, 16);
 assert.deepEqual(plan.archivedGroupIdsWithoutNativeMatch, []);
 
 const noArchivePlan = createNativeToWorkspaceKitConversionPlan({
@@ -119,12 +119,12 @@ assert.equal(colorlessPlan.groups.native_32.headerBgColor, "rgba(0,0,0,0.25)",
   "an unparseable native colour must not yield a malformed rgba()");
 
 /*
- * T-045: a native-origin group lands on a neutral white-on-white look.
+ * T-040/T-045: a native-origin group lands on the approved neutral WK look.
  *
  * A native group carries only a colour, title and geometry — no font colour,
  * border or effect to preserve. WK's generic default (gold text on a 2px gold
  * border) is tuned for a group the user built themselves, so a converted group
- * gets white text with a matching 1px white border instead.
+ * gets near-white text with a matching 2px near-white border at 40% opacity.
  *
  * `useUnifiedColor` is load-bearing: it is what makes the border follow the
  * title colour. Setting the font white without it leaves a gold border, which is
@@ -137,19 +137,26 @@ for (const [label, group] of [
   ["shorthand", shorthandPlan.groups.native_21],
   ["colourless", colorlessPlan.groups.native_31],
 ]) {
-  assert.equal(group.titleColor, "#FFFFFF", `${label}: converted title text must be white`);
+  assert.equal(group.fontSize, 16, `${label}: converted title uses the 16px WK default`);
+  assert.equal(group.titleColor, "#F2F2F2", `${label}: converted title text must be near-white`);
   assert.equal(group.useUnifiedColor, true,
-    `${label}: unified colour is what carries white through to the border`);
-  assert.equal(group.borderWidth, 1, `${label}: converted border must be 1px`);
-  assert.equal(group.colorSat, 0, `${label}: border saturation 0 is how white is stored`);
-  assert.equal(group.colorLit, 100, `${label}: border lightness 100 is how white is stored`);
+    `${label}: unified colour is what carries the title colour through to the border`);
+  assert.equal(group.borderWidth, 2, `${label}: converted border must be 2px`);
+  assert.equal(group.borderOpacity, 0.4, `${label}: converted border opacity must be 40%`);
+  assert.equal(group.colorSat, 0, `${label}: border saturation 0 is how near-white is stored`);
+  assert.equal(group.colorLit, 95, `${label}: border lightness 95 is how near-white is stored`);
+  assert.equal(group.backgroundFillEnabled, false, `${label}: converted groups start without a body fill`);
+  assert.equal(group.shadowSize, 0, `${label}: converted groups start without a shadow`);
+  assert.equal(group.cornerRadius, 8, `${label}: converted groups keep the WK 8px radius`);
+  assert.equal(group.contentPadding, 12, `${label}: converted groups keep the WK 12px padding`);
+  assert.equal(group.effect, "none", `${label}: converted groups start without an animation`);
 }
 
 // A group that was WorkspaceKit before must get its OWN saved style back — that
 // round trip is the point of the archive, and the converted look must not
 // overwrite it.
 assert.equal(plan.groups["wk-one"].fontSize, 18, "a restored group keeps its archived font size");
-assert.notEqual(plan.groups["wk-one"].titleColor, "#FFFFFF",
+assert.notEqual(plan.groups["wk-one"].titleColor, "#F2F2F2",
   "a restored group must not be repainted with the converted-group look");
 
 console.log("Native-to-WorkspaceKit conversion plan contract passed.");

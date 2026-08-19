@@ -16,6 +16,7 @@ export const WORKFLOW_RECENT_LIMIT_KEY = "workspace2.workflows.recentLimit";
 export const WORKSPACE2_PANEL_OPACITY_KEY = "workspace2.panelOpacity";
 export const WORKSPACE2_PANEL_GLASS_KEY = "workspace2.panelGlass";
 export const WORKSPACE2_PANEL_BLUR_KEY = "workspace2.panelBlur";
+export const WORKSPACE2_PANEL_BLUR_SCALE_VERSION_KEY = "workspace2.panelBlurScaleVersion";
 export const WORKSPACE2_PANEL_BACKGROUND_MODE_KEY = "workspace2.panelBackgroundMode";
 export const WORKSPACE2_PANEL_GLASS_TRANSPARENCY_KEY = "workspace2.panelGlassTransparency";
 export const NODE_FONT_SCALE_KEY = "workspace2.nodes.fontScale";

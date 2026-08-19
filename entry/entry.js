@@ -4,6 +4,7 @@ import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260805
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260804_native_group_color_r1";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { publishWorkspaceKitPanelUiTemplate } from "./integrations/panel-ui-template-api.js";
+import { installPanelUiTemplateStyles } from "./ui-kit/styles.js";
 import { createWorkspaceKitIcon } from "./ui-kit/icons.js";
 import { resolveWorkspaceKitIcon } from "./ui-kit/icon-semantics.js";
 import {
@@ -113,6 +114,7 @@ import { createWorkflowRecentStore } from "./workflows/recents.js";
 import { createWorkflowOpenState } from "./workflows/open-state.js";
 import { createActiveWorkflowTrail, activeTrailRole } from "./workflows/active-trail.js";
 import { createWorkflowSectionRenderer } from "./workflows/sections.js";
+import { attachOpenHistoryResize } from "./workflows/open-history-resize.js";
 import { createWorkflowResultsRenderer } from "./workflows/results-renderer.js";
 import { createWorkflowContextMenuRenderer } from "./workflows/context-menu-renderer.js";
 import { createWorkflowTrashRenderer } from "./workflows/trash-renderer.js";
@@ -5353,8 +5355,7 @@ function fontControl(el) {
     // its ancestor. The legacy/standalone mount keeps the panel below `el`.
     // Support both trees so a shared slider cannot silently stop applying its
     // CSS variables after a slot migration.
-    const panel = el?.closest?.(".workspace2-panel")
-      || el?.querySelector?.(".workspace2-panel");
+    const panel = resolveWorkspacePanelSurface(el);
     if (panel) {
       applyWorkflowUiScale(panel);
     }
@@ -5537,6 +5538,16 @@ function applyTemplateUiScale(panel) {
   panel.style.setProperty("--workspace2-node-list-gap", vars.nodeGap);
 }
 
+// Built-in panels are mounted into the shared Blueprint Content slot. That
+// slot is inside `.workspace2-panel`, not the panel itself, while legacy
+// standalone mounts may still receive the panel root. Keep this lookup in one
+// place so all three density controls address the same rendered surface.
+function resolveWorkspacePanelSurface(mount) {
+  return mount?.closest?.(".workspace2-panel")
+    || mount?.querySelector?.(".workspace2-panel")
+    || null;
+}
+
 function nodesDensityControl(el) {
   nodesState.uiScale = clampNodeUiScale(nodesState.uiScale);
   const wrap = document.createElement("label");
@@ -5560,7 +5571,7 @@ function nodesDensityControl(el) {
     localStorage.setItem(NODE_UI_SCALE_KEY, String(nodesState.uiScale));
     valueLabel.textContent = nodeScaleLabel(nodesState.uiScale);
     showSliderValue(wrap);
-    const panel = el.querySelector(".workspace2-panel");
+    const panel = resolveWorkspacePanelSurface(el);
     if (panel) {
       applyNodeUiScale(panel);
     }
@@ -5595,7 +5606,7 @@ function templatesDensityControl(el) {
     localStorage.setItem(TEMPLATE_UI_SCALE_KEY, String(templatesState.uiScale));
     valueLabel.textContent = templateScaleLabel(templatesState.uiScale);
     showSliderValue(wrap);
-    const panel = el.querySelector(".workspace2-panel");
+    const panel = resolveWorkspacePanelSurface(el);
     if (panel) {
       applyTemplateUiScale(panel);
     }
@@ -5640,13 +5651,13 @@ function nodesViewTabs(el) {
     nodesState.visibleSections = defaults;
   }
   const tabs = document.createElement("div");
-  tabs.className = "workspace2-node-tabs workspace2-node-filter-row";
+  tabs.className = "workspacekit-ui-view-tabs workspace2-node-tabs workspace2-node-filter-row";
   for (const section of NODE_SECTION_FILTERS) {
     const active = nodesState.visibleSections[section] !== false;
     const label = t(`nodes.view.${section}`);
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `workspace2-node-tab ${active ? "is-active" : ""}`;
+    button.className = `workspacekit-ui-view-tab workspace2-node-tab ${active ? "is-active" : ""}`;
     button.setAttribute("aria-pressed", active ? "true" : "false");
     button.textContent = label;
     button.title = t(active ? "nodes.filterHide" : "nodes.filterShow", { section: label });
@@ -6782,12 +6793,12 @@ function renderPanel(el, panelMount = null) {
   });
 
   const browseViewTabs = document.createElement("div");
-  browseViewTabs.className = "workspace2-workflow-view-tabs";
+  browseViewTabs.className = "workspacekit-ui-view-tabs workspace2-workflow-view-tabs";
   for (const view of ["all", "favorites"]) {
     const active = state.browseView === view;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `workspace2-workflow-view-tab ${active ? "is-active" : ""}`;
+    button.className = `workspacekit-ui-view-tab workspace2-workflow-view-tab ${active ? "is-active" : ""}`;
     button.setAttribute("aria-pressed", active ? "true" : "false");
     button.textContent = t(`workflows.view.${view}`);
     button.addEventListener("click", (event) => {
@@ -6807,6 +6818,14 @@ function renderPanel(el, panelMount = null) {
     className: "is-open-history",
     collapsible: false,
     content: recentWorkflowRows(el, { scrollTop: openHistoryScrollTop }),
+  });
+  attachOpenHistoryResize(openSection, {
+    getLimit: workflowRecentLimit,
+    // Keep the panel mounted while dragging. The normal Settings path still
+    // owns its immediate full render through the recent-store callback.
+    setLimit: (value) => workflowRecents.setLimit(value, { notify: false }),
+    snapLimit: snapWorkflowRecentLimit,
+    onCommit: () => renderPanel(el),
   });
 
   const browseSection = createWorkflowSection({
@@ -8789,6 +8808,13 @@ app.registerExtension({
       startLocaleWatcher();
     });
     await runWorkspaceStartupStage("panel-api", async () => {
+      // Built-in panels now use the same Slot classes as family Providers.
+      // Publishing the public Template alone is intentionally side-effect free,
+      // so the Host must install its shared stylesheet before it mounts those
+      // classes. Provider calls to Template.create() remain idempotent.
+      if (!installPanelUiTemplateStyles(document)) {
+        console.warn("[WorkspaceKit] Panel UI Template stylesheet was not installed");
+      }
       const panelUiTemplate = publishWorkspaceKitPanelUiTemplate(globalThis);
       if (!panelUiTemplate.ok) {
         console.warn("[WorkspaceKit] Panel UI Template v1 was not published", panelUiTemplate.code);

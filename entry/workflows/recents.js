@@ -20,7 +20,9 @@ export function createWorkflowRecentStore({
   function snapLimit(value) {
     // This is a genuinely linear UI setting: every integer represents one
     // visible Open-history row. Do not retain the older near-5 snapping rule.
-    return Math.max(5, Math.min(15, Math.round(Number(value) || 5)));
+    const numeric = Number(value);
+    const normalized = Number.isFinite(numeric) ? numeric : 5;
+    return Math.max(2, Math.min(15, Math.round(normalized)));
   }
 
   function limit() {
@@ -47,11 +49,12 @@ export function createWorkflowRecentStore({
     localStorage.setItem(recentKey, JSON.stringify(items.slice(0, limit())));
   }
 
-  function setLimit(value) {
+  function setLimit(value, { notify = true } = {}) {
     const nextLimit = snapLimit(value);
     localStorage.setItem(recentLimitKey, String(nextLimit));
     write(read().slice(0, nextLimit));
-    onLimitChanged?.();
+    if (notify) onLimitChanged?.();
+    return nextLimit;
   }
 
   function record(path) {

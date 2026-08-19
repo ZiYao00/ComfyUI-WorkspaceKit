@@ -166,8 +166,9 @@ export function createPanelAppearance({
     const glass = isPanelGlassEnabled();
     const glassOpacity = 100 - glassTransparency();
     const alpha = glass ? `${glassOpacity}%` : `${panelOpacity()}%`;
-    // The user-facing 0–100 setting maps to 0–32px.  32px is a visibly dense
-    // frosted material while avoiding an unbounded backdrop-filter cost.
+    // The user-facing 0–100 setting maps to the former useful 20–100% range
+    // (about 6–32px).  32px is a visibly dense frosted material while avoiding
+    // an unbounded backdrop-filter cost.
     const blur = glass ? `${glassBlurPixels()}px` : "0px";
     const saturate = glass ? "1.35" : "1";
     const brightness = glass ? "1.08" : "1";

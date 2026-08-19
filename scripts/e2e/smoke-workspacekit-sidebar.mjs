@@ -117,18 +117,80 @@ async function verifyCorePanelHostSlots(page) {
       const status = slot('.workspace2-module-status-host');
       return {
         headerChildren: header?.childElementCount || 0,
+        headerHidden: Boolean(header?.hidden),
         toolbarChildren: toolbar?.childElementCount || 0,
         controlsChildren: controls?.childElementCount || 0,
         contentChildren: content?.childElementCount || 0,
         statusText: status?.textContent?.trim() || '',
-        legacyStatusDisplay: header ? getComputedStyle(header.querySelector('.workspace2-status')).display : '',
       };
     });
-    if (report.headerChildren !== 1 || report.toolbarChildren !== 1 || report.controlsChildren < 1 || report.contentChildren !== 1 || !report.statusText || report.legacyStatusDisplay !== 'none') {
+    if (report.headerChildren !== 0 || !report.headerHidden || report.toolbarChildren !== 1 || report.controlsChildren < 1 || report.contentChildren !== 1 || !report.statusText) {
       throw new Error(`${item.label} shared-slot mismatch: ${JSON.stringify(report)}`);
     }
     log('shared_slots', `${item.label}: ${JSON.stringify(report)}`);
   }
+}
+
+async function verifyWorkflowBrowseOrder(page) {
+  await page.locator('.workspace2-module-tab').nth(0).click();
+  await page.waitForSelector('.workspace2-button.is-trash-toggle', { timeout: 10_000 });
+  const trashToggle = page.locator('.workspace2-button.is-trash-toggle');
+  if (await trashToggle.evaluate((element) => element.classList.contains('is-trash-return'))) {
+    await trashToggle.click();
+    // The toolbar itself persists while its content is rerendered. Waiting only
+    // for the content selector can read the previous recycle-bin DOM.
+    await page.waitForFunction(() => {
+      const toggle = document.querySelector('.workspace2-button.is-trash-toggle');
+      return !toggle?.classList.contains('is-trash-return')
+        && Boolean(document.querySelector('.workspace2-workflow-content'));
+    }, null, { timeout: 10_000 });
+  }
+  const report = await page.locator('.workspace2-module-frame.workspace2-workflow-blueprint').evaluate((frame) => {
+    const content = frame.querySelector('.workspace2-workflow-content');
+    const open = content?.querySelector('.workspace2-workflow-section.is-open-history');
+    const browse = content?.querySelector('.workspace2-workflow-section.is-browse');
+    const browseContent = browse?.querySelector('.workspace2-workflow-browse-content');
+    return {
+      browseHeaderCount: browse?.querySelectorAll('.workspace2-workflow-section-header').length || 0,
+      browseFirstChild: browseContent?.firstElementChild?.className || '',
+      hasTree: Boolean(browseContent?.querySelector('.workspace2-tree')),
+      openBeforeBrowse: open?.nextElementSibling === browse,
+    };
+  });
+  if (!report.openBeforeBrowse || report.browseHeaderCount !== 0 || report.browseFirstChild !== 'workspace2-workflow-view-tabs' || !report.hasTree) {
+    throw new Error(`workflow browse order mismatch: ${JSON.stringify(report)}`);
+  }
+  log('workflow_browse_order', JSON.stringify(report));
+}
+
+async function verifyWorkflowScaleSlider(page) {
+  await page.locator('.workspace2-module-tab').nth(0).click();
+  const slider = page.locator('.workspace2-workflow-blueprint .workspace2-font-slider');
+  await slider.waitFor({ state: 'visible', timeout: 10_000 });
+  const before = await page.locator('.workspace2-workflow-blueprint').evaluate((panel) => {
+    const input = panel.querySelector('.workspace2-font-slider');
+    return {
+      value: input?.value || '',
+      rowHeight: panel.style.getPropertyValue('--workspace2-row-height'),
+    };
+  });
+  await slider.focus();
+  await slider.press(before.value === '100' ? 'Home' : 'End');
+  await page.waitForFunction((previous) => {
+    const panel = document.querySelector('.workspace2-workflow-blueprint');
+    const input = panel?.querySelector('.workspace2-font-slider');
+    return Boolean(input)
+      && input.value !== previous.value
+      && panel.style.getPropertyValue('--workspace2-row-height') !== previous.rowHeight;
+  }, before, { timeout: 10_000 });
+  const after = await page.locator('.workspace2-workflow-blueprint').evaluate((panel) => {
+    const input = panel.querySelector('.workspace2-font-slider');
+    return {
+      value: input?.value || '',
+      rowHeight: panel.style.getPropertyValue('--workspace2-row-height'),
+    };
+  });
+  log('workflow_scale_slider', JSON.stringify({ before, after }));
 }
 
 async function main() {
@@ -217,6 +279,16 @@ async function main() {
       await verifyCorePanelHostSlots(page);
     } catch (error) {
       failures.push(`shared-slot verification failed: ${error.message || String(error)}`);
+    }
+    try {
+      await verifyWorkflowBrowseOrder(page);
+    } catch (error) {
+      failures.push(`workflow browse-order verification failed: ${error.message || String(error)}`);
+    }
+    try {
+      await verifyWorkflowScaleSlider(page);
+    } catch (error) {
+      failures.push(`workflow scale-slider verification failed: ${error.message || String(error)}`);
     }
 
     // Report console errors, but only fail on the ones that look tied to WorkspaceKit.

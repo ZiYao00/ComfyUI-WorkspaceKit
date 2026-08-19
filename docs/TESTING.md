@@ -1,5 +1,81 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-19 - Hosted Workflows scale-slider regression repair
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-hosted-slider-fix-20260819-105207.zip`
+  (SHA-256 `A664FC7386F0F3E06CEAA66F029970B0082182C998A95783A7796E3C27F2181C`).
+- Root cause: after the core panel moved into the shared Blueprint, the
+  Workflows slider still searched for `.workspace2-panel` below the Content
+  slot. The hosted panel frame is instead the slot's ancestor, so the input
+  event updated its value but never applied the CSS scale variables.
+- The resolver now supports both valid mount shapes: it finds an ancestor panel
+  for the hosted Blueprint and retains the descendant lookup for standalone
+  compatibility. No slider range, stored preference key, or visual scale
+  formula changed.
+- Fresh read-only smoke at `http://127.0.0.1:8190/` passed with no
+  WorkspaceKit console errors. Its new real interaction assertion drove the
+  Workflows range input from `50` to `100` and observed
+  `--workspace2-row-height` change from `35px` to `42px`.
+
+## 2026-08-19 - T-056 R3 core-panel geometry and Workflows Browse order
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-core-panel-geometry-and-workflow-browse-order-20260819-103528.zip`
+  (SHA-256 `1F1C80F05005C99C048AB1934D7DD803975E93E5F6D431FAA027939C0C4454E2`).
+- Cause confirmed from the live CSS: Workflows had cleared the legacy outer
+  padding, while Nodes and Templates still retained it in addition to Blueprint
+  slot padding. All three hosted core frames now use zero outer padding/gap and
+  the same per-slot geometry: Toolbar `8px 10px 0`, Controls `8px 10px 6px`,
+  Content `0 10px 10px`.
+- Workflows now keeps Browse as its scroll/flex shell without a visible header.
+  The rendered order is Open, then the `All / Favorites` switcher, then the
+  workflow tree. No workflow data, drag/drop, file menu, or favorite operation
+  was changed.
+- Static verification passed: frontend syntax checks, panel-host contract,
+  bottom-status contract, and `git diff --check`.
+- Fresh read-only smoke at `http://127.0.0.1:8190/` passed with
+  `console_errors_workspacekit: 0`. It asserted no hosted Header children,
+  correct recycle-button states, and Browse order
+  (`browseHeaderCount: 0`, `openBeforeBrowse: true`, tree present).
+- Fresh real-page measurement at `:8190` confirmed the three core panels have
+  identical outer frame geometry (`0px` padding and gap) and identical Toolbar,
+  Controls, and Content padding. Visual inspection confirmed the Browse title
+  row is absent and the switcher sits below Open.
+- Still pending only the broader R1 visual matrix: light/transparent/frosted
+  and browser 100/125/150% zoom plus narrow Provider-overflow. This entry does
+  not claim those conditions as accepted.
+
+## 2026-08-19 - T-056 R1/R2/R3 visual-conformance repair (hosted core panels)
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-r1-r3-visual-conformance-20260819-102035.zip`
+  (SHA-256 `0EE80540C7E1E02DE8AC491773724039114C6C0FBA36B57298D9E3F4778F1A38`).
+- The earlier migration was structurally incomplete: the shared bottom Status
+  slot worked, but Workflows, Nodes, and Templates still mounted a legacy
+  top-level module-name Header. Hosted core panels now leave that compatibility
+  slot empty. Their active module tab is the only title and the bottom slot is
+  the only status/metric surface. Standalone and legacy Provider fallbacks keep
+  their Header contract.
+- The shared strip now uses the reform reference geometry: inactive tabs merge
+  into the darker strip, the active tab uses the panel surface, and 9px radial
+  shoulders provide the connection without a thick underline. The plain tab,
+  Provider-overflow wrapper, and settings utility share the same height and
+  top-corner rhythm.
+- Static verification passed: all JavaScript contracts, Python tests, version
+  check, frontend syntax checks, and `git diff --check`. The dedicated sidebar
+  smoke now asserts `headerChildren === 0`, a hidden Header slot, populated
+  Toolbar/Controls/Content slots, and a populated bottom status for every core
+  panel.
+- Real test package evidence at `http://127.0.0.1:8190/`: Workflows, Nodes,
+  and Templates each rendered an empty, hidden Header slot and retained bottom
+  statuses (`29 个项目`, `1596 个节点`, `3 个模板`). The fresh read-only smoke
+  completed with `console_errors_workspacekit: 0`.
+- **Still pending visual acceptance:** compare the revised strip in light,
+  transparent, and frosted backgrounds, plus 100/125/150% browser zoom and a
+  narrow Provider-overflow state. This record does not mark those states as
+  passed.
+
 ## 2026-08-15 - T-056 R1: Chrome-like module tab strip (partial acceptance)
 
 - Backup before the source change:

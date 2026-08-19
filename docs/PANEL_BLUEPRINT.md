@@ -8,14 +8,17 @@ Status: **stable public v1 structural contract**
 
 Every WorkspaceKit panel follows the same vertical order:
 
-1. **Tab strip** — owned by the WorkspaceKit host.
-2. **Header** — module title and short status.
-3. **Toolbar** — optional search and immediate actions.
-4. **Controls** — optional mode switches, sliders, and contextual actions.
-5. **Content** — the module's scrollable feature area.
+1. **Tab strip** — owned by the WorkspaceKit host; the active module tab is the
+   hosted core panel's title.
+2. **Toolbar** — optional search and immediate actions.
+3. **Controls** — optional mode switches, sliders, and contextual actions.
+4. **Content** — the module's scrollable feature area.
+5. **Bottom status** — short stable metrics and optional contextual help.
 
-The order is fixed. A module may omit Toolbar or Controls when it genuinely has
-no content for that slot; it must not create an empty visual placeholder.
+The order is fixed. A module may omit Toolbar, Controls, or Bottom status when
+it genuinely has no content for that slot; it must not create an empty visual
+placeholder. `Header` remains an optional compatibility slot for standalone or
+legacy Providers, not part of the hosted core-panel chrome.
 
 ## Ownership
 
@@ -41,11 +44,26 @@ cross-family evolution is recorded in
 hides empty optional slots. `contextHost` remains a Toolbar compatibility alias
 for legacy Providers.
 
+### Hosted core-panel geometry
+
+Workflows, Nodes, and Templates share one host-frame rule: the outer Blueprint
+frame has no padding or gap; its individual slots own the visible rhythm.
+Toolbar uses `8px 10px 0`, Controls uses `8px 10px 6px`, and the scrollable
+Content body uses `0 10px 10px`. This prevents a feature panel from inheriting
+both its legacy panel padding and the Blueprint slot padding.
+
+Within Workflows, the visible content order is fixed as **Open → All/Favorites
+switcher → workflow tree**. Browse remains a structural scroll container only;
+it must not render a second visible `Browse` title or collapse control.
+
 ## Guardrails
 
 - Do not migrate a feature's data, shortcuts, workflow state, or sidebar
   lifecycle in the same batch as its visual slot move.
 - Workflows is the geometry reference, not a mandate to copy its feature
   controls into unrelated panels.
+- Do not restore legacy outer padding on only one core panel. Core spacing must
+  be changed through the shared hosted-frame rule and verified across all three
+  built-in modules.
 - Layout command SVG sizing remains Layout-owned; it is not a generic
   Blueprint or third-party icon rule.

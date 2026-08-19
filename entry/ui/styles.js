@@ -196,14 +196,15 @@ export function styles() {
       z-index: 2;
       flex: 0 0 auto;
       display: flex;
-      align-items: stretch;
+      align-items: flex-end;
       flex-wrap: nowrap;
-      gap: 2px;
-      padding: 9px 10px 0;
-      /* The strip is separated from the command bar through spacing and the
-         active tab surface, not another persistent horizontal divider. */
+      gap: 0;
+      padding: 8px 10px 0;
+      /* The inactive tabs belong to this darker strip. The active tab uses
+         the panel surface below it, so the connection comes from continuous
+         surface plus the small shoulders, never from a thick underline. */
       border-bottom: 0;
-      background: transparent;
+      background: var(--workspace2-tab-bg);
       overflow: visible;
       container: workspace2-tabstrip / inline-size;
     }
@@ -214,11 +215,10 @@ export function styles() {
          on top so the third glyph is never the one that gets ellipsised. */
       min-width: calc(3em + 16px);
       max-width: 14em;
-      min-height: 31px;
+      min-height: 34px;
       padding: 0 10px;
-      border: 1px solid transparent;
-      border-bottom: 0;
-      border-radius: 9px 9px 0 0;
+      border: 0;
+      border-radius: 10px 10px 0 0;
       color: var(--p-text-muted-color, rgba(255, 255, 255, 0.68));
       background: transparent;
       font: 500 12px/1.2 var(--font-family, Arial, sans-serif);
@@ -242,14 +242,12 @@ export function styles() {
     .workspace2-module-tab:hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
       background: color-mix(in srgb, var(--workspace2-tab-hover-bg) 72%, transparent);
-      border-color: transparent;
     }
     .workspace2-module-tab.is-active,
     .workspace2-module-overflow-tab.is-active {
-      --workspace2-active-tab-surface: color-mix(in srgb, var(--workspace2-tab-active-bg) 76%, var(--workspace2-surface, var(--workspace2-tab-bg)));
-      z-index: 1;
+      --workspace2-active-tab-surface: var(--workspace2-surface, var(--workspace2-tab-active-bg));
+      z-index: 3;
       color: var(--p-text-color, var(--fg-color, #f5f8ff));
-      border-color: color-mix(in srgb, var(--workspace2-border) 52%, transparent);
       background: var(--workspace2-active-tab-surface);
     }
     /* Small shoulder geometry joins the active tab to the module frame without
@@ -261,33 +259,29 @@ export function styles() {
       content: "";
       position: absolute;
       bottom: 0;
-      width: 7px;
-      height: 7px;
+      width: 9px;
+      height: 9px;
       pointer-events: none;
-      background: var(--workspace2-active-tab-surface);
     }
     .workspace2-module-tab.is-active::before,
     .workspace2-module-overflow-tab.is-active::before {
-      left: -6px;
-      border-radius: 0 0 7px 0;
-      clip-path: polygon(100% 0, 100% 100%, 0 100%);
+      left: -9px;
+      background: radial-gradient(circle at 0 0, transparent 0 8px, var(--workspace2-active-tab-surface) 8.35px 100%);
     }
     .workspace2-module-tab.is-active::after,
     .workspace2-module-overflow-tab.is-active::after {
-      right: -6px;
-      border-radius: 0 0 0 7px;
-      clip-path: polygon(0 0, 100% 100%, 0 100%);
+      right: -9px;
+      background: radial-gradient(circle at 100% 0, transparent 0 8px, var(--workspace2-active-tab-surface) 8.35px 100%);
     }
     .workspace2-module-settings {
       min-width: 30px;
-      min-height: 31px;
+      min-height: 34px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       align-self: stretch;
-      border: 1px solid transparent;
-      border-bottom: 0;
-      border-radius: 9px 9px 0 0;
+      border: 0;
+      border-radius: 10px 10px 0 0;
       color: var(--p-text-muted-color, rgba(255, 255, 255, 0.62));
       background: transparent;
       cursor: pointer;
@@ -306,21 +300,21 @@ export function styles() {
        divider/caret. Reserving a core tab's three-glyph floor here caused the
        Chinese Workflows tab to collapse one step too early at normal sidebar
        widths. */
-    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: calc(2em + 12px + 22px); max-width: 14em; min-height:31px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:1px solid transparent; border-bottom:0; border-radius:9px 9px 0 0; background:transparent; transition: background 120ms ease, border-color 120ms ease; }
-    .workspace2-module-overflow-tab:hover, .workspace2-module-overflow-tab.is-menu-open { background: color-mix(in srgb, var(--workspace2-tab-hover-bg) 72%, transparent); border-color: transparent; }
-    .workspace2-module-overflow-tab.is-active:hover, .workspace2-module-overflow-tab.is-active.is-menu-open { background: var(--workspace2-active-tab-surface); border-color: color-mix(in srgb, var(--workspace2-border) 52%, transparent); }
+    .workspace2-module-overflow-tab { position:relative; flex: 1 1 0; min-width: calc(2em + 12px + 22px); max-width: 14em; min-height:34px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:0; border-radius:10px 10px 0 0; background:transparent; transition: background 120ms ease, border-color 120ms ease; }
+    .workspace2-module-overflow-tab:hover, .workspace2-module-overflow-tab.is-menu-open { background: color-mix(in srgb, var(--workspace2-tab-hover-bg) 72%, transparent); }
+    .workspace2-module-overflow-tab.is-active:hover, .workspace2-module-overflow-tab.is-active.is-menu-open { background: var(--workspace2-active-tab-surface); }
     /* The tab button inside the wrapper drops its own chrome: the wrapper draws
        the border and background so the label and caret read as one control.
        min-height is released to the wrapper too, otherwise the button's own
        30px plus the wrapper's border would make this tab a pixel taller than
        the plain ones. */
-    .workspace2-module-overflow-tab > .workspace2-module-tab { flex: 1 1 0; min-width: 0; min-height: 0; border:0; border-radius:8px 0 0 0; background:transparent; box-shadow:none; text-align:center; }
+    .workspace2-module-overflow-tab > .workspace2-module-tab { flex: 1 1 0; min-width: 0; min-height: 0; border:0; border-radius:10px 0 0 0; background:transparent; box-shadow:none; text-align:center; }
     .workspace2-module-overflow-tab > .workspace2-module-tab:hover { background:transparent; border-color:transparent; }
     .workspace2-module-overflow-tab > .workspace2-module-tab.is-active { background:transparent; box-shadow:none; }
     .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::before, .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::after { display:none; }
     .workspace2-module-tab-label { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
     .workspace2-module-tab-divider { flex:0 0 1px; align-self:center; width:1px; height:14px; margin:0 3px; background: color-mix(in srgb, currentColor 24%, transparent); }
-    .workspace2-module-overflow-caret { flex:0 0 22px; display:inline-flex; align-items:center; justify-content:center; min-width:22px; padding:0; background:transparent; border:0; border-radius:5px 8px 0 0; color:var(--p-text-muted-color, rgba(255,255,255,.68)); font-size:15px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease, color 120ms ease; transform-origin:center; }
+    .workspace2-module-overflow-caret { flex:0 0 22px; display:inline-flex; align-items:center; justify-content:center; min-width:22px; padding:0; background:transparent; border:0; border-radius:6px 10px 0 0; color:var(--p-text-muted-color, rgba(255,255,255,.68)); font-size:15px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease, color 120ms ease; transform-origin:center; }
     .workspace2-module-overflow-caret:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 24%, transparent); }
     .workspace2-module-overflow-tab.is-menu-open > .workspace2-module-overflow-caret { transform:rotate(180deg); color: var(--workspace2-accent); }
     /* The dropdown reuses .workspace2-context (shared with the sort/row menus),
@@ -1131,10 +1125,13 @@ export function styles() {
       padding-bottom: 0;
       border-bottom: 0;
     }
-    /* Workflow is the Blueprint reference migration. The shared slots own
-       the five visible bands; existing workflow rows and services remain
-       below this boundary, so visual consolidation cannot alter workflow I/O. */
-    .workspace2-panel.workspace2-workflow-blueprint {
+    /* The three hosted core modules have one geometry owner. Their frame must
+       not retain the generic panel padding/gap and then add slot padding again:
+       that was the source of visibly different left/right and tab-to-toolbar
+       spacing between Workflows, Nodes, and Templates. */
+    .workspace2-module-frame.workspace2-panel.workspace2-workflow-blueprint,
+    .workspace2-module-frame.workspace2-panel.workspace2-node-blueprint,
+    .workspace2-module-frame.workspace2-panel.workspace2-templates-blueprint {
       padding: 0;
       gap: 0;
     }
@@ -1180,37 +1177,19 @@ export function styles() {
       flex-direction: column;
       overflow: hidden;
     }
-    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-header-host { padding: 10px 10px 0; }
-    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-header .workspace2-status { display: none; }
-    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-context-host { padding: 8px 10px 0; }
-    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-controls-host { padding: 8px 10px; border-bottom: 1px solid color-mix(in srgb, var(--workspace2-border) 62%, transparent); }
-    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-body { padding: 8px 10px 10px; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+    /* Hosted core panels deliberately leave the Header slot empty: their
+       module tab is the title and their status is the bottom status slot. */
+    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-context-host,
+    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-context-host,
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-context-host { padding: 8px 10px 0; }
+    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-controls-host,
+    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-controls-host,
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-controls-host { padding: 8px 10px 6px; }
+    .workspace2-module-frame.workspace2-workflow-blueprint .workspace2-module-body,
+    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-body,
+    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-body { padding: 0 10px 10px; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; overflow: hidden; }
     /* Nodes is the second shared-host migration. Only placement belongs here:
        searches, favorites, preview, sorting, and node data stay in entry.js. */
-    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-header-host {
-      padding: 10px 10px 0;
-    }
-    .workspace2-module-frame.workspace2-node-blueprint .workspace2-header .workspace2-status {
-      display: none;
-    }
-    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-context-host {
-      padding: 8px 10px 0;
-    }
-    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-controls-host {
-      padding: 8px 10px 6px;
-    }
-    .workspace2-module-frame.workspace2-node-blueprint .workspace2-module-body {
-      padding: 0 10px 10px;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      flex: 1 1 auto;
-    }
-    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-header-host { padding: 10px 10px 0; }
-    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-header .workspace2-status { display: none; }
-    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-context-host { padding: 8px 10px 0; }
-    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-controls-host { padding: 8px 10px 6px; }
-    .workspace2-module-frame.workspace2-templates-blueprint .workspace2-module-body { padding: 0 10px 10px; display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
     .workspace2-workflow-content {
       flex: 1 1 auto;
       min-height: 0;
@@ -1224,6 +1203,20 @@ export function styles() {
     }
     .workspace2-workflow-section.is-browse {
       flex: 1 1 auto;
+    }
+    .workspace2-workflow-section.is-browse .workspace2-workflow-section-content,
+    .workspace2-workflow-browse-content {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .workspace2-workflow-browse-content {
+      gap: 8px;
+    }
+    .workspace2-workflow-browse-content > .workspace2-tree {
+      flex: 1 1 auto;
+      min-height: 0;
     }
     .workspace2-workflow-section.is-open-history {
       flex: 0 0 auto;

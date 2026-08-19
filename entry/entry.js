@@ -5349,7 +5349,12 @@ function fontControl(el) {
     localStorage.setItem(FONT_SCALE_KEY, String(state.fontScale));
     valueLabel.textContent = workflowScaleLabel(state.fontScale);
     showSliderValue(wrap);
-    const panel = el.querySelector(".workspace2-panel");
+    // In the hosted Blueprint, `el` is the Content slot and the panel frame is
+    // its ancestor. The legacy/standalone mount keeps the panel below `el`.
+    // Support both trees so a shared slider cannot silently stop applying its
+    // CSS variables after a slot migration.
+    const panel = el?.closest?.(".workspace2-panel")
+      || el?.querySelector?.(".workspace2-panel");
     if (panel) {
       applyWorkflowUiScale(panel);
     }
@@ -6708,7 +6713,10 @@ function renderPanel(el, panelMount = null) {
     trash.classList.add("is-active", "is-trash-return");
   }
 
-  const header = createPanelHeader(t("workflows.title"), blueprint.isHostBlueprint ? "" : state.status);
+  // The hosted WK panels use the module tab as their sole title.  Their
+  // status belongs to the shared bottom slot; only standalone/Vendor fallback
+  // keeps the legacy title-and-status header for compatibility.
+  const header = blueprint.isHostBlueprint ? null : createPanelHeader(t("workflows.title"), state.status);
   const toolbar = createSearchToolbar({
     focusKey: "workflow-search",
     placeholder: t("search.placeholder"),
@@ -6805,7 +6813,17 @@ function renderPanel(el, panelMount = null) {
     title: t("workflows.browse"),
     collapsedKey: WORKFLOW_BROWSE_SECTION_COLLAPSED_KEY,
     className: "is-browse",
-    content: tree,
+    // Browse remains the tree's flex/scroll shell, but it no longer owns a
+    // visible title or collapse affordance. The All/Favorites scope directly
+    // follows the Open section, as defined by the shared panel blueprint.
+    collapsible: false,
+    showHeader: false,
+    content: (() => {
+      const browseContent = document.createElement("div");
+      browseContent.className = "workspace2-workflow-browse-content";
+      browseContent.append(browseViewTabs, tree);
+      return browseContent;
+    })(),
   });
 
   const workflowContent = document.createElement("div");
@@ -6814,7 +6832,7 @@ function renderPanel(el, panelMount = null) {
 
   const workflowControls = document.createElement("div");
   workflowControls.className = "workspace2-workflow-controls";
-  workflowControls.append(browseViewTabs, moveRootRow);
+  workflowControls.append(moveRootRow);
   blueprint.setControls(workflowControls);
   blueprint.setContent(workflowContent);
   renderContextMenu(el, panel);
@@ -7224,10 +7242,10 @@ function renderTemplatesPanel(el, panelMount = null) {
   panel.classList.add("workspace2-panel", "workspace2-templates-blueprint");
   applyTemplateUiScale(panel);
   const templates = templatesState.library?.templates || [];
-  const header = createPanelHeader(
+  const header = blueprint.isHostBlueprint ? null : createPanelHeader(
     t("templates.title"),
-    blueprint.isHostBlueprint ? "" : t("templates.status", { count: templates.length }),
-    blueprint.isHostBlueprint ? {} : { statusDataset: "workspace2TemplatesStatus" },
+    t("templates.status", { count: templates.length }),
+    { statusDataset: "workspace2TemplatesStatus" },
   );
   const newGroup = toolbarButton("templates.groups.create", t("templates.newGroup"), async () => {
     try {
@@ -7462,10 +7480,10 @@ function renderNodesPanel(el, panelMount = null) {
   syncOfficial.disabled = nodesState.officialFavoritesLoading;
   syncOfficial.classList.add("workspace2-node-favorites-manager");
 
-  const header = createPanelHeader(
+  const header = blueprint.isHostBlueprint ? null : createPanelHeader(
     t("nodes.title"),
-    blueprint.isHostBlueprint ? "" : statusText,
-    blueprint.isHostBlueprint ? {} : { statusDataset: "workspace2NodesStatus" },
+    statusText,
+    { statusDataset: "workspace2NodesStatus" },
   );
   const toolbar = createSearchToolbar({
     focusKey: "nodes-search",

@@ -8,8 +8,8 @@
  *
  * Regression boundary: Open and Browse belong to one content container. Keep
  * them as adjacent sections with spacing, not a second inherited border from a
- * parent toolbar; this is what keeps their visual separation consistent with
- * the Nodes panel while preserving the user's collapse state after a redraw.
+ * parent toolbar. Browse may suppress its visible header while retaining this
+ * shell as the tree's scroll/flex boundary.
  */
 export function createWorkflowSectionRenderer({
   createSectionHeader,
@@ -24,24 +24,28 @@ export function createWorkflowSectionRenderer({
     storage.setItem(key, collapsed ? "1" : "0");
   }
 
-  function createSection({ title, collapsedKey, className = "", content, collapsible = true }) {
+  function createSection({ title, collapsedKey, className = "", content, collapsible = true, showHeader = true }) {
     const section = document.createElement("section");
     section.className = `workspace2-workflow-section ${className}`.trim();
-    const collapsed = collapsible && isCollapsed(collapsedKey);
+    const canCollapse = showHeader && collapsible;
+    const collapsed = canCollapse && isCollapsed(collapsedKey);
     section.classList.toggle("is-collapsed", collapsed);
 
-    const { header } = createSectionHeader({
-      titleText: title,
-      collapsible,
-      expanded: !collapsed,
-    });
-    header.classList.add("workspace2-workflow-section-header");
+    let header = null;
+    if (showHeader) {
+      ({ header } = createSectionHeader({
+        titleText: title,
+        collapsible: canCollapse,
+        expanded: !collapsed,
+      }));
+      header.classList.add("workspace2-workflow-section-header");
+    }
 
     const body = document.createElement("div");
     body.className = "workspace2-workflow-section-content";
     body.append(content);
 
-    if (collapsible) {
+    if (canCollapse) {
       header.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -52,7 +56,8 @@ export function createWorkflowSectionRenderer({
       });
     }
 
-    section.append(header, body);
+    if (header) section.append(header);
+    section.append(body);
     return section;
   }
 

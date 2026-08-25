@@ -29,7 +29,6 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
     onDropTarget,
     onReorderDrag,
     onNewSubfolder,
-    onOpenWorkflowLocation,
     onCopyWorkflow,
     // Defaults keep isolated renderer callers and an older cached entry module
     // safe while the virtual-favorites capability is rolling out.
@@ -167,13 +166,6 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
       favorite.classList.add("is-favorite-active");
     }
     actions.append(favorite);
-    actions.append(iconButton("workflows.row.openLocation", t("row.openLocation"), async () => {
-      try {
-        await onOpenWorkflowLocation(node.path);
-      } catch (error) {
-        onError(el, error);
-      }
-    }));
     actions.append(iconButton("workflows.row.copy", t("row.copy"), async () => {
       try {
         await onCopyWorkflow(el, node);

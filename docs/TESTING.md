@@ -1,5 +1,37 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-19 - Shared active-tab highlight and curved panel connection
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-active-tab-arc-20260819-212637.zip`
+  (SHA-256 `491C9A7E72894F6CB2B702CD1F9A96E2586C91E8AFC7CEA017061CB7D3C42F18`).
+- Active module tabs retain the panel surface at their bottom connection but
+  now add a restrained accent top-gradient, readable text colour and explicit
+  side/top edge. The two lower shoulders now contain an edge ring, rather than
+  an invisible fill-only gradient; the frame supplies the inactive 1px line.
+- Real `:8190` screenshots were recorded under `.dev-docs/artifacts/` before
+  and after the change. `scripts/e2e/active-tab-chrome.mjs` passed in isolated
+  transparent and frosted contexts: active gradient, edge ring and frame line
+  all resolved, with no WK page error. This does not claim the separate
+  full-glass continuous-surface task (`UI-Glass-Tab`) complete.
+
+## 2026-08-19 - Workflows Browse menu density and dismissal
+
+- Backup before the source change:
+  `.codex-backups/20-workflows/ComfyUI-WorkspaceKit-before-workflow-context-menu-dismiss-20260819-210801.zip`
+  (SHA-256 `823D6F7F4D3E6B297B34F3BBF0EC6B6E5971B9FB0FE7B474FE2C894913E353F4`).
+- Removed the always-visible file-row “Show workflow in folder” icon. The same
+  operation is now the second file context-menu action, immediately after Open;
+  it keeps the existing backend endpoint and error handling.
+- Workflow context menus now bind one capture-phase outside `pointerdown` and
+  one capture-phase Escape listener while open. Outside clicks only dismiss and
+  then continue to ComfyUI; Escape is consumed only while this menu is open.
+- Static row/menu contracts passed. Real isolated `:8190` acceptance through
+  `scripts/e2e/workflow-context-menu-dismiss.mjs` observed five file actions
+  (`Open`, `Show workflow in folder`, `Rename`, `Move to root`, `Move to
+  trash`); both Escape and a canvas-side click removed the menu, with no WK
+  page error. The test invokes no file action and writes no workflow data.
+
 ## 2026-08-19 - Open surface and frosted-blur effective range
 
 - The Workflows Open-history surface now uses `50%` of the theme control

@@ -36,6 +36,7 @@ const renderer = createWorkflowContextMenuRenderer({
   onPersonalizeFolder: () => {},
   onResetFolderStyle: () => {},
   onOpenWorkflow: () => calls.push("open"),
+  onOpenWorkflowLocation: (path) => calls.push(`location:${path}`),
   onRename: () => calls.push("rename"),
   onMoveToRoot: () => calls.push("root"),
   onMoveToTrash: (_el, _item, anchor) => calls.push(`trash:${anchor?.className}`),
@@ -46,16 +47,19 @@ renderer.render("panel", panel);
 const menu = panel.children[0];
 assert.deepEqual(menu.children.map((button) => button.children[0].icon), [
   "workflows.toolbar.open",
+  "workflows.row.openLocation",
   "workflows.row.rename",
   "workflows.row.moveToRoot",
   "workflows.row.moveToTrash",
 ]);
-assert.deepEqual(menu.children.map((button) => button.children[1].textContent), ["menu.open", "menu.rename", "menu.moveToRoot", "menu.moveToTrash"]);
+assert.deepEqual(menu.children.map((button) => button.children[1].textContent), ["menu.open", "row.openLocation", "menu.rename", "menu.moveToRoot", "menu.moveToTrash"]);
 
 await menu.children[0].listeners.get("click")({});
 assert.deepEqual(calls, ["close", "open"]);
-await menu.children[3].listeners.get("click")({});
-assert.deepEqual(calls, ["close", "open", "trash:workspace2-menu-item"]);
+await menu.children[1].listeners.get("click")({});
+assert.deepEqual(calls, ["close", "open", "close", "location:folder/example.json"]);
+await menu.children[4].listeners.get("click")({});
+assert.deepEqual(calls, ["close", "open", "close", "location:folder/example.json", "trash:workspace2-menu-item"]);
 
 // A file row must never offer Flatten: there is no structure to flatten, and
 // the callback is optional so an older host keeps working without it.
@@ -75,6 +79,7 @@ const fileRenderer = createWorkflowContextMenuRenderer({
   onPersonalizeFolder: () => {},
   onResetFolderStyle: () => {},
   onOpenWorkflow: () => {},
+  onOpenWorkflowLocation: () => fileCalls.push("location"),
   onRename: () => {},
   onMoveToRoot: () => {},
   onMoveToTrash: () => {},
@@ -84,7 +89,7 @@ const filePanel = new Element("div");
 fileRenderer.render("panel", filePanel);
 assert.deepEqual(
   filePanel.children[0].children.map((button) => button.children[0].icon),
-  ["workflows.toolbar.open", "workflows.row.rename", "workflows.row.moveToRoot", "workflows.row.moveToTrash"],
+  ["workflows.toolbar.open", "workflows.row.openLocation", "workflows.row.rename", "workflows.row.moveToRoot", "workflows.row.moveToTrash"],
 );
 
 // T-048: a folder row gains Flatten, placed directly before Move to trash so
@@ -109,6 +114,7 @@ const folderRenderer = createWorkflowContextMenuRenderer({
   onPersonalizeFolder: () => {},
   onResetFolderStyle: () => {},
   onOpenWorkflow: () => {},
+  onOpenWorkflowLocation: () => {},
   onRename: () => {},
   onMoveToRoot: () => {},
   onMoveToTrash: () => folderCalls.push("trash"),

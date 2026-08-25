@@ -12,6 +12,7 @@ export function createWorkflowContextMenuRenderer({
   onPersonalizeFolder,
   onResetFolderStyle,
   onOpenWorkflow,
+  onOpenWorkflowLocation,
   onRename,
   onMoveToRoot,
   onMoveToTrash,
@@ -63,6 +64,9 @@ export function createWorkflowContextMenuRenderer({
       addItem("workflows.folder.resetStyle", t("folder.resetStyle"), () => onResetFolderStyle(el, item));
     } else {
       addItem("workflows.toolbar.open", t("menu.open"), () => onOpenWorkflow(item.path));
+      if (typeof onOpenWorkflowLocation === "function") {
+        addItem("workflows.row.openLocation", t("row.openLocation"), () => onOpenWorkflowLocation(item.path));
+      }
     }
     addItem("workflows.row.rename", t("menu.rename"), () => onRename(el, item));
     addItem("workflows.row.moveToRoot", t("menu.moveToRoot"), () => onMoveToRoot(el, item));

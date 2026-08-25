@@ -329,6 +329,7 @@ const state = {
   officialWorkflowRenderPending: false,
   contextMenu: null,
   contextMenuElement: null,
+  contextMenuCloseHandler: null,
   sortMenuElement: null,
   sortMenuCloseHandler: null,
   fileMenuElement: null,
@@ -498,6 +499,7 @@ const workflowContextMenu = createWorkflowContextMenuRenderer({
   onPersonalizeFolder: (el, item, anchor) => personalizeWorkflowFolder(el, item, anchor),
   onResetFolderStyle: (el, item) => resetWorkflowFolderStyle(el, item),
   onOpenWorkflow: (path) => openWorkflow(path),
+  onOpenWorkflowLocation: (path) => openWorkflowLocation(path),
   onRename: (el, item) => beginWorkflowRename(el, item.path, "browse"),
   onMoveToRoot: (el, item) => moveItem(el, item.path, ""),
   onMoveToTrash: (el, item, anchor) => requestMoveWorkflowToTrash(el, item, anchor),
@@ -6429,9 +6431,30 @@ function openContextMenu(el, event, item) {
   };
   const panel = event.currentTarget?.closest?.(".workspace2-panel") || el.querySelector(".workspace2-panel");
   renderContextMenu(el, panel);
+  const dismiss = (dismissEvent) => {
+    if (dismissEvent.type === "keydown") {
+      if (dismissEvent.key !== "Escape") return;
+      dismissEvent.preventDefault();
+      dismissEvent.stopImmediatePropagation();
+      closeContextMenu();
+      return;
+    }
+    if (state.contextMenuElement?.contains?.(dismissEvent.target)) return;
+    closeContextMenu();
+  };
+  state.contextMenuCloseHandler = dismiss;
+  // Capture ensures a canvas click dismisses the menu first but then continues
+  // into ComfyUI unchanged; only Escape is consumed while this menu is open.
+  document.addEventListener("pointerdown", dismiss, true);
+  window.addEventListener("keydown", dismiss, true);
 }
 
 function closeContextMenu() {
+  if (state.contextMenuCloseHandler) {
+    document.removeEventListener("pointerdown", state.contextMenuCloseHandler, true);
+    window.removeEventListener("keydown", state.contextMenuCloseHandler, true);
+    state.contextMenuCloseHandler = null;
+  }
   state.contextMenuElement?.remove();
   state.contextMenuElement = null;
   state.contextMenu = null;
@@ -6512,7 +6535,6 @@ function renderNode(el, list, node, depth, activeTrail = null) {
     onDropTarget: makeDropTarget,
     onReorderDrag: beginWorkflowReorderDrag,
     onNewSubfolder: (target, path) => createFolder(target, path),
-    onOpenWorkflowLocation: openWorkflowLocation,
     onCopyWorkflow: copyWorkflow,
     isFavorite: (path) => workflowFavoriteStore.has(path),
     onToggleFavorite: async (target, path) => {

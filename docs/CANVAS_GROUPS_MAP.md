@@ -138,11 +138,12 @@ multi-drag so the periodic bounds scan cannot evict members mid-gesture),
 `init()` wires everything. `createOverlay()` builds the `pointer-events:none`
 overlay.
 
-**`setupBackgroundRenderer()` / `drawGroupBackgrounds()`** — the one part of a
-group already drawn on the canvas instead of in the overlay, by hooking
-`canvas.onDrawBackground` (which native fires inside `drawBackCanvas()`, before
-nodes). Groups are sorted largest-first so nested fills stack correctly. This is
-the pattern T-042 extends to borders/shadow/animation.
+**`setupBackgroundRenderer()` / `drawGroupBackgrounds()`** — group fills,
+frames, shadows and all animated frame effects are drawn on the canvas instead
+of in the overlay, by hooking `canvas.onDrawBackground` (which native fires
+inside `drawBackCanvas()`, before nodes). Groups are sorted largest-first so
+nested fills stack correctly. T-042 completed this migration for all six visual
+frame states.
 
 `_dispatchMiddleDown()` (L245) is the **event pass-through mechanism**:
 temporarily set `pointerEvents='none'`, re-dispatch to the element underneath /
@@ -329,13 +330,13 @@ accumulating it would double every motion now that two event families report the
 same movement.
 
 ### Style application & animation — L2789–2864
-`updateGroupStyle(gid)` writes border, shadow and the six animation effects —
-`rainbow`, `pulse`, `marquee`, `marqueebreathe`, `glow`, and the `default`
-(none) branch — all as **DOM** properties (`border`, `borderImage:
-conic-gradient`, `boxShadow`), phase driven by `Date.now()`. This is what T-042
-must move onto the canvas. Also sets the selection outline
-(`is-xzg-group-selected`) — keep it consistent with `refreshGroupSelection()`
-(they diverged once; see DEV_LOG T-207).
+`updateGroupStyle(gid)` now maintains the interactive DOM header state only:
+title/icon output and the selection outline (`is-xzg-group-selected`). Visual
+frames, shadows and the six effects — `rainbow`, `pulse`, `marquee`,
+`marqueebreathe`, `glow`, and `default` — are rendered by
+`drawGroupBackgrounds()` through the Canvas frame painter. Keep the selection
+outline consistent with `refreshGroupSelection()` (they diverged once; see
+DEV_LOG T-207).
 
 `rebuildAllEls` / `rebuildGroupEl`.
 

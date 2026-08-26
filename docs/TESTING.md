@@ -471,7 +471,7 @@ official sidebar tab; it also did not invoke any workflow command.
 
 | Check | Result |
 | --- | --- |
-| Test launcher | User-specified visible CMD: `G:\AIGC\ComfyUI_test\run_test_cpu_8190.bat` |
+| Test launcher | User-specified visible test-package launcher: `run_test_cpu_8190.bat` |
 | Service health | CPU test process listened on `:8190`; `/system_stats` returned HTTP 200 |
 | Runtime version | ComfyUI `0.32.0`; installed/required frontend `1.48.7` |
 | Running page | WorkspaceKit sidebar entry was present on the loaded test page |
@@ -1690,7 +1690,7 @@ Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.z
 
 - **Backup recovery point:** source-only ZIP archives were created and opened successfully for WK, Layout, and Theme before the rebuild work. Each archive was non-empty and excluded `.git`, prior backups, and internal development logs. Exact archive names and SHA-256 values are recorded in the local development log (T-602).
 - **Single-source verification:** WK `entry/ui-kit/` contains the six source modules. Both Layout `web/vendor/workspacekit-ui/` and Theme `js/vendor/workspacekit-ui/` declare `uiVersion: 1.3.0`; their copied source-file hashes match the current WK Template source.
-- **Repeatable command:** from `G:\GitHub\ComfyUI-WorkspaceKit`, `node scripts\export-panel-ui-template.mjs --all --verify` completed successfully for both consumer Vendor runtimes.
+- **Repeatable command:** from the repository root, `node scripts\export-panel-ui-template.mjs --all --verify` completed successfully for both consumer Vendor runtimes.
 - **Boundary:** this is a static baseline only. It does not yet prove the four runtime modes (merged / standalone / Vendor fallback / Theme visual states); those remain the next acceptance work before any old UI path can be removed.
 - **Live merged-path spot check:** on the running test package at `http://127.0.0.1:8190/`, the WorkspaceKit sidebar entry opened. Theme was present as a merged tab; the **Extensions** menu exposed `WorkspaceKit 排版`, and selecting it activated the `排版` tab with three rendered WK UI roots. No change was made during this observation. This is only a merged-path check, not the full runtime matrix.
 
@@ -1735,7 +1735,7 @@ Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.z
 - **Batch 2 — ordinary failure compensation:** a failed manifest save after moving an item into the plugin trash moves it back to the workflows root; a failed save after restore moves it back into the plugin trash. System recycle-bin deletion first persists `system_deleting`; if that precondition cannot be written, the irreversible system call is not made. A normal system-delete failure restores the `trashed` state.
 - **Batch 3 — interrupted-operation recovery:** each move, restore, and system-recycle action now creates a single atomic `trash_operation.json` journal before it changes the filesystem. The next trash action or list request resolves that record from the actual workflow/trash paths: complete a moved-but-unlisted deletion, finalize a restored item, or finalize/reset a system-delete intermediate state. Ambiguous or malformed journal data fails explicitly; it never guesses a file move. The journal clears only after the corresponding manifest state is durable.
 - **Verification:** `python -m py_compile service/trash_service.py __init__.py scripts/test-trash-service.py`; `python scripts/test-trash-service.py`; `python scripts/test-workflow-copy.py`; and `python scripts/test-workspace-data-bundle.py` all passed. The new service contract covers atomic primary/backup generations, corrupt-primary backup read, injected promotion failure, concurrent moves, delete compensation, restore compensation, the system-delete precondition, move/restore/system-delete crash recovery, and corrupt-journal rejection.
-- **Real test-package acceptance:** restarted `G:\AIGC\ComfyUI_test` on port `8190` after the service changes. Through the live Workflows panel, a newly created test workflow moved into WorkspaceKit trash, appeared there, restored back to the workflow list, then a separate newly created test workflow moved from WorkspaceKit trash to the Windows system Recycle Bin after its danger confirmation. Finally, the real “Move All to System Trash” confirmation cleared all 16 remaining test-package trash entries. The asynchronous list refresh completed with `0` `.workspace2-trash-item` elements; no `trash_operation.json` remained under the test-package user data. No WorkspaceKit console error appeared during this flow.
+- **Real test-package acceptance:** restarted the test package on port `8190` after the service changes. Through the live Workflows panel, a newly created test workflow moved into WorkspaceKit trash, appeared there, restored back to the workflow list, then a separate newly created test workflow moved from WorkspaceKit trash to the Windows system Recycle Bin after its danger confirmation. Finally, the real “Move All to System Trash” confirmation cleared all 16 remaining test-package trash entries. The asynchronous list refresh completed with `0` `.workspace2-trash-item` elements; no `trash_operation.json` remained under the test-package user data. No WorkspaceKit console error appeared during this flow.
 - **Boundary:** this validates normal real-page operation, not a forced process crash between filesystem and manifest writes. The Python service contract remains the evidence for those deliberate fault-injection and recovery paths.
 
 ## 2026-08-01 - WK naming + current Layout host-path recheck
@@ -1777,7 +1777,7 @@ Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.z
 - **Why tests missed it**: `node --check` only checks syntax; the 64 mjs contracts import individual sibling modules, never evaluating entry.js as a whole in a browser. This is a module-top-level execution-order fault that ONLY surfaces when a real browser evaluates the module. **Lesson: converting a hoisted `function` to a non-hoisted `const` factory binding requires checking every reference site is textually after the binding — or placing the binding above all consumers.**
 - **Fix** (`0372c8c`): moved the `createWorkspace2Dialogs(...)` binding above its earliest consumer (before `createWorkflowTrashRenderer`, ~L453). Injected deps (`t`, `isolateComfyKeys`, `closeWorkspace2OverlaysForConfirm`) are function declarations and stay hoisted; the factory body only defines closures and does not call the deps at creation time, so early evaluation is safe. Split #4's `createNodeSearch` factory was audited and is safe (its outputs are used only after its binding).
 - **Verified**: 64/64 contracts green; real-page reload confirmed the 🧩 tab is restored and clickable.
-- **Deployment note**: the test package at `G:\AIGC\ComfyUI_test\ComfyUI\custom_nodes\ComfyUI-WorkspaceKit` is a **symlink to `G:\GitHub\ComfyUI-WorkspaceKit`** — edits to the repo are live in the test package immediately (a hard browser reload is enough; no file copy needed). The earlier "sync to `G:\AIGC\ComfyUI\...`" copies targeted a *different, non-test* ComfyUI and were never what the user was running.
+- **Deployment note**: the test package plugin directory is a **directory link to the repository root** — edits to the repo are live in the test package immediately (a hard browser reload is enough; no file copy needed). Earlier copies to a different, non-test ComfyUI did not affect the active test package.
 
 ## 2026-07-29 - entry.js split #4: extract search/scoring to `core/search-scoring.js` + `nodes/search.js`
 
@@ -1890,7 +1890,7 @@ Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.z
 ## 2026-07-27 - Group conversion hardening C5: mixed-groups fixture (T-001)
 
 - Pre-change full backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-c5-mixed-groups-fixture-20260727-233300.zip`.
-- **Fixture**: `G:\AIGC\ComfyUI_test\ComfyUI\user\default\workflows\_wk-c5-mixed.json`, generated deterministically by `scripts/e2e/fixtures/build-c5-mixed.mjs` from `New Workflow.json`. Initial state: 7 nodes, 1 native ComfyUI group titled `native-keep-me`, 1 WorkspaceKit overlay group titled `wk-convert-me`, `extra.workspacekit.groupRepresentation = 'workspacekit'`, no pre-existing `groupConversion` archive.
+- **Fixture**: test-package workflow `_wk-c5-mixed.json`, generated deterministically by `scripts/e2e/fixtures/build-c5-mixed.mjs` from `New Workflow.json`. Initial state: 7 nodes, 1 native ComfyUI group titled `native-keep-me`, 1 WorkspaceKit overlay group titled `wk-convert-me`, `extra.workspacekit.groupRepresentation = 'workspacekit'`, no pre-existing `groupConversion` archive.
 - **Test**: `scripts/e2e/c5-mixed-forward-conversion.mjs` (Playwright headless Chromium against the test package). The script asserts the fixture on disk, opens it through `app.loadGraphData(workflowData, true, true, target, {...})` — the same signature WorkspaceKit's `openWorkflowFromOfficialStore` uses — then dynamic-imports the served `workspace2_canvas_groups.js` module and invokes `convertCurrentWorkflowToNative()`.
 - **Result**: **passed on real page**. Pre-conversion state exactly matched the fixture. `convertCurrentWorkflowToNative()` returned `{converted: 1, representation: 'native', archive: {schemaVersion: 1, source: 'workspacekit', groups: {g_test_c5_mixed_wk_…: {title: 'wk-convert-me', bounds: {x: 400, y: 50, w: 300, h: 200}, …}}}, nativeGroupIds: {g_test_c5_mixed_wk_…: 2}}`. Post state: 2 native groups (`native-keep-me` preserved unchanged and `wk-convert-me` newly created), 0 WorkspaceKit overlays in `graph.extra.xzgGroups`, 0 `.xzg-group-box` DOM overlays, `groupRepresentation === 'native'`, one-entry archive under `extra.workspacekit.groupConversion`.
 - **What this closes and does not close**: closes `.dev-docs/GROUP_CONVERSION_HARDENING.zh-CN.md` validation matrix item 3 (mixed representation). Empty workflow, boundary/overlapping nodes, and failure injection remain their own C5 fixtures (T-002/T-003/T-004).
@@ -1912,7 +1912,7 @@ Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.z
 - **Recorded failure and isolated root cause:** the first real execution on `New Workflow.json` reported `Cannot restore WorkspaceKit groups: native group 1 has invalid bounds`. The saved native workflow proved that group `1` had a valid `bounding: [843.5, 434.63802083333337, 300, 200]`. Source review of the installed LiteGraph typings and existing plugin code confirmed that runtime `_bounding` is a `Vector4` iterable, not necessarily a JavaScript `Array`. The snapshot code incorrectly used `Array.isArray()` and discarded valid coordinates. It now copies any iterable vector into a plain array; the reverse-conversion contract covers that guard.
 - Focused static checks passed: `test-settings-dialog-sections.mjs`, `test-group-reverse-conversion-plan.mjs`, `test-group-native-conversion-contract.mjs`, JavaScript syntax checks and `git diff --check`.
 - **Real retry, test package `http://127.0.0.1:8190/`:** opened the C5 fixture `New Workflow.json` after its previous WorkspaceKit-to-native save. The Groups page showed one native group and an enabled reverse action. Confirmation succeeded; the page reported one converted group, the action became **Convert to ComfyUI native groups**, and the visible save action appeared without an error.
-- Saved through WorkspaceKit, then inspected `G:\AIGC\ComfyUI_test\ComfyUI\user\default\workflows\New Workflow.json`: `groupRepresentation=workspacekit`, persisted WorkspaceKit group count `1`, native `groups` count `0`, and the native conversion archive retained one group. Switched to `002`, reopened `New Workflow`, and the Groups page still reported one WorkspaceKit group with the forward action available and no dirty/save action.
+- Saved through WorkspaceKit, then inspected the test-package `New Workflow.json`: `groupRepresentation=workspacekit`, persisted WorkspaceKit group count `1`, native `groups` count `0`, and the native conversion archive retained one group. Switched to `002`, reopened `New Workflow`, and the Groups page still reported one WorkspaceKit group with the forward action available and no dirty/save action.
 - **C6.4 pure round-trip:** from that reopened WorkspaceKit state, converted the same fixture back to one ComfyUI native group, saved, reopened the native state, then converted back to WorkspaceKit and saved again. The final browser refresh restored `New Workflow` with one `.xzg-group-box` and no dirty/save action. The final file has `groupRepresentation=workspacekit`, one `xzgGroups` record, zero native `groups`, and a `nativeGroupConversion` snapshot containing the one native group with its valid `bounding` vector.
 - This closes the pure native reverse path and pure round-trip only. Native groups added/deleted after forward conversion, mixed groups, boundary membership and rollback injection remain C6.4 fixtures; they are not claimed as passed.
 
@@ -1937,7 +1937,7 @@ Backlog IDs referenced in entries below map to the internal `.dev-docs/DEV_LOG.z
 - Before conversion, the Groups Settings page reported one convertible WorkspaceKit group, an enabled action and one `.xzg-group-box` overlay. The real confirmation dialog showed the expected one-group warning.
 - After confirmation, the page reported one converted group and the required save notice; the action became disabled and the WorkspaceKit overlay count became zero. Used WorkspaceKit's visible “保存当前工作流” action; its dirty marker and save action both disappeared.
 - Reload acceptance: opened `002`, then reopened `New Workflow`. The Groups Settings page reported one ComfyUI native group, the conversion action remained disabled with the native-state explanation, WorkspaceKit overlay count was zero, and the reopened workflow had no dirty marker or save action.
-- Read-only saved-file verification at `G:\AIGC\ComfyUI_test\ComfyUI\user\default\workflows\New Workflow.json`: `groupRepresentation=native`, archive schema `1`, archive source `workspacekit`, archive group count `1`, persisted WorkspaceKit group count `0`, native group count `1`.
+- Read-only saved-file verification in the test-package `New Workflow.json`: `groupRepresentation=native`, archive schema `1`, archive source `workspacekit`, archive group count `1`, persisted WorkspaceKit group count `0`, native group count `1`.
 - C5 is partially complete: the positive conversion/save/reload and pure-native path are now real-page evidence. Mixed groups, empty workflow, boundary-node geometry and injected runtime rollback remain separate fixtures; no claim is made for those cases yet.
 
 ## 2026-07-27 - Group conversion hardening C4
@@ -3075,6 +3075,79 @@ Last verified in the main package on 2026-07-30 (T-009 through T-012): all items
 - Isolated regression check passed: changing only `extra.ds` plus node order remains clean; changing a node title becomes dirty.
 - **2026-07-18 live test-package acceptance:** the clean `小红书 → 99 → 小红书` sequence passed with no dirty dot or Save button on either Open row. The separate dirty-tab reactivation regression is repaired and passed the real-node-move test above; main-package release acceptance remains outstanding.
 # Current release baseline
+
+## 2026-08-25 - T-042 B1 regular canvas-frame acceptance (test package)
+
+- Backup: `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-t042-canvas-rendering-20260825-210415.zip`
+  (SHA-256 `203B06783B19506FDBB897382414C2647863BF00F9400CDB21F20E36F2A50E59`).
+- Added `canvas-groups/canvas-frame-paint.js` as a pure Canvas renderer for the
+  normal (`none`) frame and its user shadow. The DOM overlay intentionally keeps
+  only the header, controls, rename field and hit targets.
+- Static evidence passed: module syntax, `test-canvas-group-frame-paint.mjs`,
+  existing action-icon/native-conversion contracts, and `git diff --check`.
+- Real `:8190` acceptance `scripts/e2e/t042-canvas-frame-layer.mjs` created two
+  temporary nodes and one WK group, enabled fill plus a 4px border/12px shadow,
+  then confirmed the official sidebar registry contains `workspace2`, computed
+  DOM border `0px`, DOM shadow `none`, and the active Canvas background hook.
+  Its `finally` cleanup removed the temporary graph data.
+- The first browser run found a real duplicate lexical declaration in the new
+  draw path. Browser module loading, not `node --check`, caught it; it was fixed
+  before this acceptance. Animated effects remain deliberately outside B1 and
+  need their own canvas drawing plus visual acceptance.
+
+## 2026-08-25 - T-042 B2 pulse canvas-frame acceptance (test package)
+
+- `pulse` now uses the same Canvas background layer as the regular frame when
+  the group is in its normal execution state. The existing DOM title and action
+  colour feedback is retained, while the DOM frame/shadow remains absent.
+- The extended `:8190` fixture first confirms the `workspace2` sidebar entry is
+  registered, then changes its temporary group to pulse. It observed DOM border
+  `0px`, DOM shadow `none`, and four Canvas background draws over 120ms.
+- `entry.js` advances the canvas-groups module query key for this batch so a
+  refreshed browser cannot retain the preceding module evaluation result.
+- This accepts timing and layer ownership. Rainbow, glow, and retained legacy
+  effects still require separate migration and visual comparison.
+
+## 2026-08-25 - T-042 B3 rainbow canvas-frame acceptance (test package)
+
+- `rainbow` now uses Canvas with the existing 4.5-second hue cycle and the
+  existing speed multiplier. Its title and action controls keep their original
+  DOM colour updates, but its frame and user shadow no longer cover nodes.
+- The same real `:8190` fixture observed no DOM border/shadow and 7 background
+  draws in 120ms for rainbow. It also reran pulse in the same page and observed
+  5 background draws, with no loss of the `workspace2` sidebar registration.
+- The canvas-groups module query key was advanced again for normal browser
+  refreshes. Glow and retained legacy effects remain intentionally unmodified.
+
+## 2026-08-25 - T-042 B4 glow canvas-frame acceptance (test package)
+
+- The Canvas frame painter now accepts independent glow layers. Glow preserves
+  the legacy sequence: 35px at half animated strength, 12px at animated
+  strength, 3px at full strength, then a sharp border with no extra user shadow.
+- The pure contract asserts four strokes and the blur sequence `35, 12, 3, 0`.
+  The `:8190` fixture observed DOM border `0px`, DOM shadow `none`, and six
+  Canvas background draws in 120ms for glow; pulse and rainbow regressions
+  remained Canvas-owned in the same page.
+- The module query key was advanced for a normal browser refresh. Only legacy
+  marquee compatibility effects remain on the DOM path.
+
+## 2026-08-25 - T-042 B5 legacy marquee canvas-frame acceptance (test package)
+
+- Archived `marquee` and `marqueebreathe` effects now use a Canvas conic
+  gradient with the original 30-degree colour stops. The breathing variant
+  retains its original 5–65% lightness cycle. The animated gradient title text
+  remains on its existing DOM path; only visual frame ownership moved.
+- `createCanvasMarqueeGradient()` has a solid-colour fallback for a canvas that
+  lacks `createConicGradient`, so an old saved workflow cannot abort the entire
+  background pass. Its pure contract verifies the gradient centre, 13 stops,
+  and fallback.
+- The real `:8190` fixture observed no DOM border/shadow and seven background
+  draws in 120ms for each legacy effect. It also rechecked regular, pulse,
+  rainbow and glow in the same page, with the sidebar entry registered.
+- This completes code migration and layer/timing evidence for all six effects.
+- On 2026-08-26, the user completed the visible test-package comparison and
+  reported no issue. This accepts the archived marquee direction and breathe
+  rhythm as visually non-regressed; T-042 is complete.
 
 ## 2026-08-19 - T-102-R1 Canvas-group conversion real disk persistence (test package)
 

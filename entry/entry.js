@@ -1,6 +1,10 @@
 import { app } from "../../scripts/app.js";
 import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
-import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260805_native_group_color_persistence_r2";
+// Bump this module URL with every canvas-group syntax-affecting release. A
+// browser can retain a failed ES-module evaluation for the old query key; a
+// fresh key lets a normal page refresh fetch the repaired module and preserves
+// the independent sidebar-registration boundary in this entry module.
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260825_t042_canvas_frame_r6";
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260804_native_group_color_r1";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { publishWorkspaceKitPanelUiTemplate } from "./integrations/panel-ui-template-api.js";

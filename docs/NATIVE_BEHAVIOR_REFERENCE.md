@@ -58,9 +58,9 @@ drawBackCanvas(){ ... this.graph._groups.length&&this.drawGroups(bgcanvas,ctx),
 | `onDrawForeground` | in `drawFrontCanvas`, after nodes | above |
 | `onDrawOverlay` | after everything, outside the graph transform | above |
 
-So **`onDrawBackground` is the only hook that renders beneath nodes** — which is
-why WK's group body fill hooks it (`setupBackgroundRenderer()`), and why
-borders/shadow/animation must move there too (T-042).
+So **`onDrawBackground` is the only hook that renders beneath nodes** — WK's
+group body fill, frames, shadows and animations now hook it through
+`setupBackgroundRenderer()` / T-042.
 
 A native group's title being covered by a node is therefore **native behaviour**,
 not a defect.

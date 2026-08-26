@@ -62,6 +62,7 @@ import {
     isNodes2Enabled,
     setNodeGraphPositionFromStart,
 } from "./canvas-groups/node-position-sync.js?v=20260818_nodes2_group_layout_bridge_r1";
+import { createCanvasMarqueeGradient, drawCanvasGroupFrame } from "./canvas-groups/canvas-frame-paint.js?v=20260825_t042_frame_r2";
 
 const MODE_ALWAYS = 0;
 const MODE_BYPASS = 4;
@@ -414,9 +415,10 @@ const Workspace2CanvasGroups = {
     },
 
     /*
-     * Draw optional group fills in LiteGraph's background pass. The DOM
-     * overlay remains above the canvas for title-bar actions; putting the body
-     * fill in that overlay would paint it over node pixels.
+     * Draw group fills and non-animated frames in LiteGraph's background pass.
+     * The DOM overlay remains above the canvas only for the title bar and hit
+     * targets; keeping visual frames out of that overlay prevents them from
+     * covering node pixels.
      */
     setupBackgroundRenderer() {
         const canvas = app?.canvas;
@@ -439,7 +441,7 @@ const Workspace2CanvasGroups = {
     drawGroupBackgrounds(ctx, visibleArea = null) {
         if (!ctx) return;
         const groups = Object.values(this.groups)
-            .filter(group => group?.backgroundFillEnabled && (group._previewBounds || group.bounds))
+            .filter(group => group && (group._previewBounds || group.bounds))
             .sort((a, b) => {
                 const ab = a._previewBounds || a.bounds;
                 const bb = b._previewBounds || b.bounds;
@@ -466,20 +468,68 @@ const Workspace2CanvasGroups = {
             const bw = finiteNumber(group.borderWidth, 2);
             const radius = Math.min(Math.max(0, finiteNumber(group.cornerRadius, 8) - bw), w / 2, h / 2);
             const ix = x + bw, iy = y + bw, iw = Math.max(0, w - bw * 2), ih = Math.max(0, h - bw * 2);
-            if (!iw || !ih) continue;
-            ctx.fillStyle = groupBodyBackground(group, groupModeVisuals(group));
-            ctx.beginPath();
-            ctx.moveTo(ix + radius, iy);
-            ctx.lineTo(ix + iw - radius, iy);
-            ctx.quadraticCurveTo(ix + iw, iy, ix + iw, iy + radius);
-            ctx.lineTo(ix + iw, iy + ih - radius);
-            ctx.quadraticCurveTo(ix + iw, iy + ih, ix + iw - radius, iy + ih);
-            ctx.lineTo(ix + radius, iy + ih);
-            ctx.quadraticCurveTo(ix, iy + ih, ix, iy + ih - radius);
-            ctx.lineTo(ix, iy + radius);
-            ctx.quadraticCurveTo(ix, iy, ix + radius, iy);
-            ctx.closePath();
-            ctx.fill();
+            if (group.backgroundFillEnabled && iw && ih) {
+                ctx.fillStyle = groupBodyBackground(group, groupModeVisuals(group));
+                ctx.beginPath();
+                ctx.moveTo(ix + radius, iy);
+                ctx.lineTo(ix + iw - radius, iy);
+                ctx.quadraticCurveTo(ix + iw, iy, ix + iw, iy + radius);
+                ctx.lineTo(ix + iw, iy + ih - radius);
+                ctx.quadraticCurveTo(ix + iw, iy + ih, ix + iw - radius, iy + ih);
+                ctx.lineTo(ix + radius, iy + ih);
+                ctx.quadraticCurveTo(ix, iy + ih, ix, iy + ih - radius);
+                ctx.lineTo(ix, iy + radius);
+                ctx.quadraticCurveTo(ix, iy, ix + radius, iy);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // T-042 B1-B5: every persisted frame effect is painted beneath nodes.
+            // The DOM overlay remains only for the interactive header and its
+            // text animation, never for a visual frame or shadow.
+            const effect = group.effect || 'none';
+            const visuals = groupModeVisuals(group);
+            const canPaintPulse = effect === 'pulse' && !group.bypassed && visuals.state === GROUP_MODE_STATE.NORMAL;
+            const canPaintRainbow = effect === 'rainbow' && !group.bypassed && visuals.state === GROUP_MODE_STATE.NORMAL;
+            const canPaintGlow = effect === 'glow' && !group.bypassed && visuals.state === GROUP_MODE_STATE.NORMAL;
+            const canPaintMarquee = effect === 'marquee' && !group.bypassed && visuals.state === GROUP_MODE_STATE.NORMAL;
+            const canPaintMarqueeBreathe = effect === 'marqueebreathe' && !group.bypassed && visuals.state === GROUP_MODE_STATE.NORMAL;
+            if (effect !== 'none' && !canPaintPulse && !canPaintRainbow && !canPaintGlow && !canPaintMarquee && !canPaintMarqueeBreathe) continue;
+            const hue = group.colorHue ?? 48;
+            const s = group.colorSat ?? 100;
+            const l = group.colorLit ?? 55;
+            const pulseAlpha = Math.abs(Math.sin((Date.now() / 2000) * ((group.effectSpeed || 3) / 3)));
+            const rainbowHue = ((Date.now() / 4500) * ((group.effectSpeed || 3) / 3) * 360) % 360;
+            const glowAlpha = 0.4 + Math.abs(Math.sin((Date.now() / 2500) * ((group.effectSpeed || 3) / 3))) * 0.6;
+            const marqueePhase = (Date.now() / 2500) * ((group.effectSpeed || 3) / 3);
+            const marqueeLightness = canPaintMarqueeBreathe ? 5 + Math.abs(Math.sin(marqueePhase * 2)) * 60 : 65;
+            const borderColor = canPaintRainbow
+                ? `hsla(${rainbowHue},80%,55%,${group.borderOpacity ?? 0.65})`
+                : (canPaintMarquee || canPaintMarqueeBreathe)
+                ? createCanvasMarqueeGradient(ctx, { bounds: b, angleDegrees: (marqueePhase * 360) % 360, lightness: marqueeLightness })
+                : canPaintPulse
+                ? `hsla(${hue},${s}%,${l}%,${pulseAlpha.toFixed(2)})`
+                : visuals.tintColor || `hsla(${hue},${s}%,${l}%,${group.borderOpacity ?? 0.65})`;
+            drawCanvasGroupFrame(ctx, {
+                bounds: b,
+                scale: app?.canvas?.ds?.scale || 1,
+                borderWidth: bw,
+                cornerRadius: finiteNumber(group.cornerRadius, 8),
+                borderColor,
+                // Legacy glow ignores the user's ordinary shadow setting and
+                // owns its three fixed glow layers, so the final sharp border
+                // must not add a fourth user-shadow pass.
+                shadowSize: canPaintGlow ? 0 : Math.max(0, finiteNumber(group.shadowSize, 0)),
+                shadowColor: group.shadowColor || DEFAULT_SHADOW_COLOR,
+                opacity: visuals.alpha,
+                // Match the existing DOM glow stack exactly: bright tight core,
+                // animated middle haze, then a softer wide outer glow.
+                glowLayers: canPaintGlow ? [
+                    { color: `hsla(${hue},${s}%,${l}%,${(glowAlpha * 0.5).toFixed(2)})`, blur: 35 },
+                    { color: `hsla(${hue},${s}%,${l}%,${glowAlpha.toFixed(2)})`, blur: 12 },
+                    { color: `hsla(${hue},${s}%,${l}%,1)`, blur: 3 },
+                ] : [],
+            });
         }
         ctx.restore();
     },
@@ -906,6 +956,7 @@ const Workspace2CanvasGroups = {
             : null;
         const pointerHeld = Number(pointerClient?.buttons) > 0;
 
+        let hasCanvasAnimation = false;
         for (const [gid, g] of Object.entries(this.groups)) {
             const el = this.groupEls[gid];
             if (!el) continue;
@@ -1066,11 +1117,37 @@ const Workspace2CanvasGroups = {
 
             const e = g.effect;
             if (!e || e === 'none') {
-                this.applyUserShadow(el, g, scale);
+                // T-042: the regular frame and user shadow are now painted by
+                // onDrawBackground beneath nodes.  Leaving this legacy call in
+                // the per-frame overlay loop would immediately recreate a DOM
+                // shadow over the node pixels after updateGroupStyle cleared it.
+                el.style.border = 'none';
+                el.style.boxShadow = 'none';
                 el.style.borderImage = 'none';
                 el.style.background = 'transparent';
                 continue;
             }
+
+            // T-042 B2: pulse is now rendered in onDrawBackground. Mark that
+            // layer dirty from the existing requestAnimationFrame loop so its
+            // Date.now()-based opacity keeps moving. Its DOM title/icon colour
+            // feedback remains below in this same branch.
+            const canvasPulse = e === 'pulse'
+                && !g.bypassed
+                && groupModeVisuals(g).state === GROUP_MODE_STATE.NORMAL;
+            const canvasRainbow = e === 'rainbow'
+                && !g.bypassed
+                && groupModeVisuals(g).state === GROUP_MODE_STATE.NORMAL;
+            const canvasGlow = e === 'glow'
+                && !g.bypassed
+                && groupModeVisuals(g).state === GROUP_MODE_STATE.NORMAL;
+            const canvasMarquee = e === 'marquee'
+                && !g.bypassed
+                && groupModeVisuals(g).state === GROUP_MODE_STATE.NORMAL;
+            const canvasMarqueeBreathe = e === 'marqueebreathe'
+                && !g.bypassed
+                && groupModeVisuals(g).state === GROUP_MODE_STATE.NORMAL;
+            if (canvasPulse || canvasRainbow || canvasGlow || canvasMarquee || canvasMarqueeBreathe) hasCanvasAnimation = true;
 
             const refs = this._ensureRefs(el);
             const spd = (g.effectSpeed || 3) / 3;
@@ -1094,9 +1171,15 @@ const Workspace2CanvasGroups = {
             case 'rainbow': {
                 const t = (Date.now() / 4500) * spd;
                 const h = (t * 360) % 360;
-                el.style.borderImage = 'none';
-                el.style.border = `${bw}px solid hsla(${h},80%,55%,${bo})`;
-                this.applyUserShadow(el, g, scale);
+                if (canvasRainbow) {
+                    el.style.borderImage = 'none';
+                    el.style.border = 'none';
+                    el.style.boxShadow = 'none';
+                } else {
+                    el.style.borderImage = 'none';
+                    el.style.border = `${bw}px solid hsla(${h},80%,55%,${bo})`;
+                    this.applyUserShadow(el, g, scale);
+                }
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h},80%,55%,${Math.min(bo + 0.1, 1)})`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h},80%,55%,${bo})`);
                 if (refs.title) refs.title.style.color = `hsla(${h},80%,55%,0.85)`;
@@ -1106,9 +1189,17 @@ const Workspace2CanvasGroups = {
                 const t = (Date.now() / 2000) * spd;
                 const a = Math.abs(Math.sin(t));
                 const h = g.colorHue ?? 48;
-                el.style.borderImage = 'none';
-                el.style.border = `${bw}px solid hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${a.toFixed(2)})`;
-                this.applyUserShadow(el, g, scale);
+                if (canvasPulse) {
+                    // The frame lives below nodes now; only the existing title
+                    // and action feedback remains in the DOM overlay.
+                    el.style.borderImage = 'none';
+                    el.style.border = 'none';
+                    el.style.boxShadow = 'none';
+                } else {
+                    el.style.borderImage = 'none';
+                    el.style.border = `${bw}px solid hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${a.toFixed(2)})`;
+                    this.applyUserShadow(el, g, scale);
+                }
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${a.toFixed(2)})`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${(0.3+a*0.7).toFixed(2)})`);
                 if (refs.title) refs.title.style.color = `hsla(${h},${g.colorSat||100}%,${g.colorLit||55}%,${a.toFixed(2)})`;
@@ -1118,11 +1209,16 @@ const Workspace2CanvasGroups = {
                 const t = (Date.now() / 2500) * spd;
                 const angle = (t * 360) % 360;
                 const h0 = (t * 360) % 360;
-                el.style.border = `${Math.max(0, bw)}px solid transparent`;
+                el.style.border = canvasMarquee ? 'none' : `${Math.max(0, bw)}px solid transparent`;
                 el.style.borderRadius = `${cr}px`;
                 el.style.overflow = 'hidden';
-                el.style.borderImage = `conic-gradient(from ${angle}deg, hsl(0,100%,65%), hsl(30,100%,65%), hsl(60,100%,65%), hsl(90,100%,65%), hsl(120,100%,65%), hsl(150,100%,65%), hsl(180,100%,65%), hsl(210,100%,65%), hsl(240,100%,65%), hsl(270,100%,65%), hsl(300,100%,65%), hsl(330,100%,65%), hsl(360,100%,65%)) 1`;
-                this.applyUserShadow(el, g, scale);
+                if (canvasMarquee) {
+                    el.style.borderImage = 'none';
+                    el.style.boxShadow = 'none';
+                } else {
+                    el.style.borderImage = `conic-gradient(from ${angle}deg, hsl(0,100%,65%), hsl(30,100%,65%), hsl(60,100%,65%), hsl(90,100%,65%), hsl(120,100%,65%), hsl(150,100%,65%), hsl(180,100%,65%), hsl(210,100%,65%), hsl(240,100%,65%), hsl(270,100%,65%), hsl(300,100%,65%), hsl(330,100%,65%), hsl(360,100%,65%)) 1`;
+                    this.applyUserShadow(el, g, scale);
+                }
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h0},100%,65%,0.6)`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h0},100%,65%,0.7)`);
                 if (refs.title) {
@@ -1140,10 +1236,15 @@ const Workspace2CanvasGroups = {
                 const angle = (t * 360) % 360;
                 const h0 = (t * 360) % 360;
                 el.style.overflow = 'hidden';
-                el.style.border = `${Math.max(0, bw)}px solid transparent`;
+                el.style.border = canvasMarqueeBreathe ? 'none' : `${Math.max(0, bw)}px solid transparent`;
                 el.style.borderRadius = `${cr}px`;
-                el.style.borderImage = `conic-gradient(from ${angle}deg, hsl(0,100%,${5+wave*60}%), hsl(30,100%,${5+wave*60}%), hsl(60,100%,${5+wave*60}%), hsl(90,100%,${5+wave*60}%), hsl(120,100%,${5+wave*60}%), hsl(150,100%,${5+wave*60}%), hsl(180,100%,${5+wave*60}%), hsl(210,100%,${5+wave*60}%), hsl(240,100%,${5+wave*60}%), hsl(270,100%,${5+wave*60}%), hsl(300,100%,${5+wave*60}%), hsl(330,100%,${5+wave*60}%), hsl(360,100%,${5+wave*60}%)) 1`;
-                this.applyUserShadow(el, g, scale);
+                if (canvasMarqueeBreathe) {
+                    el.style.borderImage = 'none';
+                    el.style.boxShadow = 'none';
+                } else {
+                    el.style.borderImage = `conic-gradient(from ${angle}deg, hsl(0,100%,${5+wave*60}%), hsl(30,100%,${5+wave*60}%), hsl(60,100%,${5+wave*60}%), hsl(90,100%,${5+wave*60}%), hsl(120,100%,${5+wave*60}%), hsl(150,100%,${5+wave*60}%), hsl(180,100%,${5+wave*60}%), hsl(210,100%,${5+wave*60}%), hsl(240,100%,${5+wave*60}%), hsl(270,100%,${5+wave*60}%), hsl(300,100%,${5+wave*60}%), hsl(330,100%,${5+wave*60}%), hsl(360,100%,${5+wave*60}%)) 1`;
+                    this.applyUserShadow(el, g, scale);
+                }
                 const lv = 5 + wave * 60;
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h0},100%,${lv}%,0.6)`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h0},100%,${lv}%,0.7)`);
@@ -1162,9 +1263,15 @@ const Workspace2CanvasGroups = {
                 const h = g.colorHue ?? 48;
                 const s = g.colorSat ?? 100;
                 const l = g.colorLit ?? 55;
-                el.style.borderImage = 'none';
-                el.style.border = `${bw}px solid hsla(${h},${s}%,${l}%,${bo})`;
-                el.style.boxShadow = `0 0 3px hsla(${h},${s}%,${l}%,1), 0 0 12px hsla(${h},${s}%,${l}%,${a.toFixed(2)}), 0 0 35px hsla(${h},${s}%,${l}%,${(a*0.5).toFixed(2)})`;
+                if (canvasGlow) {
+                    el.style.borderImage = 'none';
+                    el.style.border = 'none';
+                    el.style.boxShadow = 'none';
+                } else {
+                    el.style.borderImage = 'none';
+                    el.style.border = `${bw}px solid hsla(${h},${s}%,${l}%,${bo})`;
+                    el.style.boxShadow = `0 0 3px hsla(${h},${s}%,${l}%,1), 0 0 12px hsla(${h},${s}%,${l}%,${a.toFixed(2)}), 0 0 35px hsla(${h},${s}%,${l}%,${(a*0.5).toFixed(2)})`;
+                }
                 if (refs.delBtn) refs.delBtn.style.color = `hsla(${h},${s}%,${l}%,${Math.min(bo + 0.1, 1)})`;
                 if (refs.rpath) refs.rpath.setAttribute('stroke', `hsla(${h},${s}%,${l}%,${bo})`);
                 if (refs.title) refs.title.style.color = `hsla(${h},${s}%,${l}%,0.85)`;
@@ -1176,6 +1283,10 @@ const Workspace2CanvasGroups = {
                 el.style.background = 'transparent';
             }
         }
+        // LiteGraph's background canvas is only redrawn when marked dirty.
+        // Static group frames redraw on normal graph changes; a Canvas-native
+        // pulse must explicitly request one background frame per animation tick.
+        if (hasCanvasAnimation) app.graph?.setDirtyCanvas?.(true, true);
     },
 
     /* ── 清理节点上的冗余编组数据 ── */
@@ -3311,8 +3422,8 @@ const Workspace2CanvasGroups = {
             const s = g.colorSat ?? 100;
             const l = g.colorLit ?? 55;
             const borderColor = tint || `hsla(${h},${s}%,${l}%,${bo})`;
-            if (!hasEffect) el.style.border = `${bw}px solid ${borderColor}`;
-            if (!hasEffect) this.applyUserShadow(el, g, scale);
+            if (!hasEffect) el.style.border = 'none';
+            if (!hasEffect) el.style.boxShadow = 'none';
             if (!hasEffect) el.style.borderImage = 'none';
             el.style.background = 'transparent';
             if (refs.title && !hasEffect) refs.title.style.color = g.titleColor || '#FFD700';
@@ -3322,8 +3433,8 @@ const Workspace2CanvasGroups = {
             const h = g.colorHue ?? 48;
             const s = g.colorSat ?? 100;
             const l = g.colorLit ?? 55;
-            if (!hasEffect) el.style.border = `${bw}px solid hsla(${h},${s}%,${l}%,${bo})`;
-            if (!hasEffect) this.applyUserShadow(el, g, scale);
+            if (!hasEffect) el.style.border = 'none';
+            if (!hasEffect) el.style.boxShadow = 'none';
             el.style.background = 'transparent';
             if (refs.title) {
                 if (!hasEffect) {

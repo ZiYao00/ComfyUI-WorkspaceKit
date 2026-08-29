@@ -13,12 +13,14 @@ ComfyUI-WorkspaceKit
 ├── Panel registry
 ├── Workspace state store
 ├── Workspace shell
-├── Built-in panels
+├── Built-in feature modules
 │   ├── Workflows
 │   ├── Nodes and favorites
 │   ├── Templates
-│   └── Groups and trash
-└── Compatibility migrations
+│   ├── Groups and trash
+│   ├── Appearance / Theme
+│   └── Layout
+└── Compatibility and data migrations
 ```
 
 ## Boundaries
@@ -76,7 +78,7 @@ Do not store workflows, model paths, credentials, private account data, or large
 
 Hosts built-in and external panels. The first implementation may remain inside the official sidebar. Floating, docking, tab grouping, and split regions are later capabilities built on top of the same registry.
 
-### Built-in panels
+### Built-in feature modules
 
 Existing features should be migrated into the registry incrementally. Business services remain independent of panel lifecycle so hiding a panel does not destroy data or start unnecessary polling.
 
@@ -94,6 +96,7 @@ map in sync when a module boundary changes.
 | --- | --- | --- |
 | Core | `core/api.js`, `core/i18n.js`, `core/performance.js` | HTTP helpers, translation, timing. |
 | Shared UI | `ui/personalization-panel.js`, `ui/tree-expansion.js`, `ui/preview-positioner.js`, `ui/panel-chrome.js` | Shared icon/color personalization dialog DOM/callback delivery, generic expanded-key Set helper, bounded preview placement, and panel header/search DOM; callers retain data, visibility, content, query state, and mutation ownership. |
+| Appearance | `appearance/color-utils.js`, `appearance/field-meta.js`, `appearance/theme-document.js`, `appearance/theme-runtime-adapter.js` | B03 unification foundation: theme document/domain helpers and the narrow current-ComfyUI runtime theme adapter. Editor UI, server storage, reference palette, bundled themes, and settings integration remain later batches. |
 | Nodes | `nodes/cache-coordinator.js`, `nodes/object-info-cache.js`, `nodes/object-info-refresh.js`, `nodes/favorite-store.js`, `nodes/favorite-group-store.js`, `nodes/official-tree.js`, `nodes/official-tree-renderer.js`, `nodes/row-renderer.js`, `nodes/top-section-renderer.js`, `nodes/category-projection.js`, `nodes/panel-state.js`, `nodes/library-normalizer.js`, `nodes/library-loader.js`, `nodes/object-info-state.js` | Cross-tab refresh coordination, browser snapshot persistence, deferred refresh/upload coordination, local favorite and favorite-group mutations, official category-tree and category-result projection, category-folder, ordinary-row, and top-section rendering, pure local preferences, node-library/server-cache response normalization, initial-library loading, and object-info state transitions. |
 | Templates | `templates/library.js`, `templates/search.js`, `templates/results-projection.js`, `templates/root-renderer.js`, `templates/body-state-renderer.js`, `templates/group-contents-renderer.js`, `templates/group-context-menu.js`, `templates/context-menu-renderer.js`, `templates/drag-drop.js`, `templates/group-header-renderer.js`, `templates/row-renderer.js`, `templates/minimap.js` | Template-library loading/persistence plus read-only search/order/results, root result DOM, loading/error notice DOM, expanded-group contents DOM, template group/template context-menu DOM and callback delegation, template/group drag-drop event wiring, group-header and template-row DOM/callback delegation, and saved-template canvas thumbnails. |
 | Settings | `settings/controls.js`, `settings/dialog-sections.js`, `settings/dialog-shell.js` | Settings control DOM, content-section composition, and dialog-shell DOM; settings behavior remains injected from the entry. |
@@ -142,11 +145,58 @@ It must not become the permanent owner of workflow file operations, node-library
 
 Runtime identifiers containing `workspace2` must be inventoried before changes. Migration code should support old and new identifiers, log once, preserve source data, and provide a rollback path.
 
-## Optional Layout integration
+## Built-in Appearance and Layout unification
 
-`ComfyUI-WorkspaceKit-Layout` is a separate repository. It must first attempt to register with a compatible `window.WorkspaceKit` API. When the API is not ready, it listens for `workspacekit:ready`. When integration is unavailable or incompatible, it uses its standalone host.
+As of the 2026-08-29 unification program, Appearance/Theme and Layout are **built-in WorkspaceKit feature modules**, not long-term external Provider plugins. Their former repositories remain migration/provenance sources only until the unified implementation reaches its release gates.
 
-WorkspaceKit never imports Layout implementation code. Layout never accesses WorkspaceKit private stores.
+Internal modules use explicit module interfaces and the shared `entry/ui-kit/` directly. They must not carry a private Vendor copy of WorkspaceKit UI or a cross-repository discovery/Standalone compatibility shell. During the B05/B10 migration window, same-package Appearance/Layout may reuse the existing Provider host as a bounded mounting surface so the 338 KB composition root is not blindly expanded; these internal providers import the main API directly and are not external compatibility consumers. B12 decides whether they should become fixed built-in tabs after full regression evidence.
+
+The public Panel / UI Template APIs remain supported for genuinely external third-party extensions. External providers must not depend on private WorkspaceKit feature stores.
+
+Layout and Canvas Groups remain separate internal owners: Groups expose a bounded LayoutTarget adapter; the Layout Engine consumes normalized targets and returns change sets without reading Group private DOM/state. Appearance owns theme documents/editor/runtime adaptation but does not become a second UI Kit.
+
+### Unified Layout execution chain
+
+The post-unification Layout path is intentionally independent of the former NodeAligner DOM-button bridge:
+
+```text
+Panel / topbar
+    ↓
+Layout Controller
+    ↓
+Selection Service
+    ├── selected ComfyUI Nodes → Node LayoutTarget
+    └── selected WK Groups    → Group LayoutTarget
+    ↓
+Command Registry
+    ↓
+Pure Layout Engine
+    ↓
+Immutable ChangeSet
+    ↓
+Transaction pre-validation
+    ↓
+one ChangeTracker beforeChange
+    ↓
+Node mutation + prepared Group translation plan
+    ↓
+redraw / graph.change
+    ↓
+one ChangeTracker afterChange
+```
+
+If any apply step throws, direct-node snapshots and the prepared Group/member-node plan are restored before the transaction closes. Layout never uses `#alignment-buttons`, Shadow DOM command forwarding, or a permanent `setInterval` canvas bridge.
+
+Current product semantics are explicit:
+
+- align: 2+ movable LayoutTargets, using visual bounds;
+- distribute: 3+ movable LayoutTargets, keeping first/last visible extents fixed in geometric order;
+- fixed spacing: 2+ movable LayoutTargets, non-negative spacing including zero;
+- node sizing: 2+ resizable Node targets, using stored logical size;
+- WorkspaceKit Groups participate in movement/alignment/distribution/spacing, but are **not resizable through Layout** until Group resize semantics are separately defined;
+- a node already controlled by a selected WorkspaceKit Group is omitted as a direct target so the same geometry cannot move twice.
+
+The former `ComfyUI-WorkspaceKit-Layout` repository remains the GPL provenance and regression/behavior reference during the migration window; its standalone/Vendor/provider/legacy-toolbar runtime is not imported as the new execution architecture.
 
 ## Failure policy
 

@@ -1,10 +1,9 @@
 /**
  * WorkspaceKit sidebar shell and stable module slots.
  *
- * This module owns only the tab strip and DOM allocation.  Module content stays
- * with its current owner (Workflows, Nodes, Templates, or a future registered
- * provider).  Keeping those boundaries here avoids repeating the old failure
- * mode where moving a visual wrapper also changed a panel's render lifecycle.
+ * This module owns only the tab strip and DOM allocation. Module content stays
+ * with its current owner. Built-in family modules use the same visual tab as
+ * Workflows/Nodes/Templates; only true external Providers use the overflow UI.
  */
 export function createWorkspacePanelHost({
   document = globalThis.document,
@@ -23,19 +22,12 @@ export function createWorkspacePanelHost({
     throw new TypeError("A DOM document is required to create the WorkspaceKit panel host.");
   }
   const shell = document.createElement("div");
-  // The shell is also the typography-token root so tabs (which sit above the
-  // panel frame) and all hosted Slots inherit the same UI Kit type scale.
   shell.className = "workspace2-shell workspacekit-ui-root";
 
   const tabStrip = document.createElement("div");
   tabStrip.className = "workspace2-module-tabs";
 
   const tabButtons = new Map();
-  // Overflow tabs render as `<button>` + a separate caret `<button>` inside a
-  // wrapper. The caret opens a `workspace2-context` menu — the same primitive
-  // the Workflows sort menu and the row context menus already use — so the
-  // dropdown matches the rest of WorkspaceKit and inherits its z-index above
-  // the frosted-glass shell. A single close handler is shared by every tab.
   let openMenu = null;
   let openMenuAnchor = null;
 
@@ -47,9 +39,6 @@ export function createWorkspacePanelHost({
     openMenuAnchor = null;
   };
 
-  // Registered once per host, not once per tab: re-registering per tab leaked a
-  // handler on every panel re-render and the stale copies fought over the same
-  // menu state.
   const onDocumentPointerDown = (event) => {
     if (!openMenu) return;
     if (openMenu.contains(event.target)) return;
@@ -57,8 +46,6 @@ export function createWorkspacePanelHost({
     closeOverflowMenu();
   };
   const onDocumentKeyDown = (event) => {
-    // Escape is checked before any containment guard: the focused element is
-    // usually inside the menu, so an inside-first guard would swallow it.
     if (openMenu && event.key === "Escape") {
       event.preventDefault();
       closeOverflowMenu();
@@ -106,8 +93,6 @@ export function createWorkspacePanelHost({
       menu.append(open);
     });
 
-    // `workspace2-context` is position: fixed, so viewport coordinates from the
-    // anchor are the correct basis and the frosted-glass shell cannot clip it.
     const rect = anchor.getBoundingClientRect();
     menu.style.visibility = "hidden";
     document.body.append(menu);
@@ -121,8 +106,86 @@ export function createWorkspacePanelHost({
     anchor.classList.add("is-menu-open");
   };
 
-  for (const tab of tabs) {
+  const appendPlainTab = ({ id, label, tooltip = "", onPress }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `workspace2-module-tab ${activeTabId === id ? "is-active" : ""}`;
+    if (tooltip) {
+      button.title = tooltip;
+      button.setAttribute("aria-label", tooltip);
+    }
+    button.dataset.workspace2ModuleId = id;
+    button.setAttribute("aria-current", activeTabId === id ? "page" : "false");
+    button.textContent = label;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeOverflowMenu();
+      onPress?.();
+    });
+    tabButtons.set(id, button);
+    tabStrip.append(button);
+    return button;
+  };
+
+  // The unified package treats Layout and Appearance as first-party modules.
+  // Their former Provider transport remains an internal composition detail; it
+  // must not make the two tabs look like third-party dropdown extensions.
+  const builtinProviderOrder = new Map([
+    ["workspacekit.layout", 0],
+    ["workspacekit.theme", 1],
+  ]);
+  const renderedBuiltinProviders = new Set();
+  const appendBuiltinProviderTab = (provider, pinnedProviderId) => {
+    if (!provider?.id || renderedBuiltinProviders.has(provider.id)) return;
+    renderedBuiltinProviders.add(provider.id);
+    const label = providerLabel(provider);
+    appendPlainTab({
+      id: provider.id,
+      label,
+      tooltip: label,
+      onPress: () => {
+        if (provider.id === pinnedProviderId || activeTabId === provider.id) onActivate(provider.id);
+        else if (typeof onPinProvider === "function") onPinProvider(provider.id);
+        else onActivate(provider.id);
+      },
+    });
+  };
+
+  for (const sourceTab of tabs) {
+    let tab = sourceTab;
+    const providers = Array.isArray(tab.overflow) ? tab.overflow.filter(Boolean) : [];
+    const builtinProviders = providers
+      .filter((provider) => provider?.builtin === true)
+      .sort((left, right) => (builtinProviderOrder.get(left.id) ?? 99) - (builtinProviderOrder.get(right.id) ?? 99));
+
+    if (builtinProviders.length) {
+      for (const provider of builtinProviders) appendBuiltinProviderTab(provider, tab.id);
+      const externalProviders = providers.filter((provider) => provider?.builtin !== true);
+      if (!externalProviders.length) continue;
+      const activeExternal = externalProviders.find((provider) => provider.id === tab.id) ?? null;
+      tab = {
+        ...tab,
+        id: activeExternal?.id ?? "workspacekit.external-providers",
+        label: activeExternal ? providerLabel(activeExternal) : overflowLabel,
+        tooltip: activeExternal ? providerLabel(activeExternal) : overflowLabel,
+        overflow: externalProviders,
+        externalOverflowOnly: !activeExternal,
+      };
+    }
+
     const hasOverflow = Array.isArray(tab.overflow) && tab.overflow.length > 0;
+    if (!hasOverflow) {
+      appendPlainTab({
+        id: tab.id,
+        label: tab.label,
+        tooltip: tab.tooltip,
+        onPress: () => onActivate(tab.id),
+      });
+      continue;
+    }
+
+    let wrap = null;
     const button = document.createElement("button");
     button.type = "button";
     button.className = `workspace2-module-tab ${activeTabId === tab.id ? "is-active" : ""}`;
@@ -135,29 +198,22 @@ export function createWorkspacePanelHost({
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
+      if (tab.externalOverflowOnly) {
+        if (openMenuAnchor === wrap) closeOverflowMenu();
+        else openOverflowMenu(wrap, "", tab.overflow);
+        return;
+      }
       closeOverflowMenu();
       onActivate(tab.id);
     });
     tabButtons.set(tab.id, button);
 
-    if (!hasOverflow) {
-      button.textContent = tab.label;
-      tabStrip.append(button);
-      continue;
-    }
-
-    // Label and caret are separate hit targets: the label opens the pinned
-    // provider, while the caret lists every merged provider.
     const label = document.createElement("span");
     label.className = "workspace2-module-tab-label";
     label.textContent = tab.label;
     button.append(label);
 
-    const wrap = document.createElement("div");
-    // The wrapper owns the shared Chrome-like tab surface because it contains
-    // both the label action and the Provider selector caret. Keeping the active
-    // state here prevents the overflow tab from drifting into a second visual
-    // language as the plain module tabs evolve.
+    wrap = document.createElement("div");
     wrap.className = `workspace2-module-overflow-tab ${activeTabId === tab.id ? "is-active" : ""}`;
     wrap.dataset.workspace2ModuleId = tab.id;
 
@@ -179,7 +235,7 @@ export function createWorkspacePanelHost({
         closeOverflowMenu();
         return;
       }
-      openOverflowMenu(wrap, tab.id, tab.overflow);
+      openOverflowMenu(wrap, tab.externalOverflowOnly ? "" : tab.id, tab.overflow);
     });
 
     wrap.append(button, divider, caret);
@@ -201,14 +257,7 @@ export function createWorkspacePanelHost({
   tabStrip.append(settingsButton);
 
   const moduleFrame = document.createElement("div");
-  // The Host itself is the UI Kit root. This gives built-in panels and merged
-  // family Providers one token source instead of relying on Provider-created
-  // template roots to inject or scope the shared geometry.
   moduleFrame.className = "workspace2-module-frame workspacekit-ui-root workspacekit-ui-panel-blueprint";
-  // The legacy host names remain valid while the Blueprint exposes the
-  // product-wide header / toolbar / controls / content anatomy.  Built-in
-  // renderers still mount into contentHost in this batch, so merely adding
-  // the slots cannot change their render lifecycle or visual layout.
   const headerHost = document.createElement("div");
   headerHost.className = "workspace2-module-header-host workspacekit-ui-panel-header-slot";
   headerHost.dataset.workspacekitPanelSlot = "header";
@@ -222,13 +271,9 @@ export function createWorkspacePanelHost({
   controlsHost.dataset.workspacekitPanelSlot = "controls";
   controlsHost.hidden = true;
   const contentHost = document.createElement("div");
-  // Existing panel renderers intentionally continue to receive this exact
-  // class. prepareWorkspaceModuleMount() depends on it during the migration.
   contentHost.className = "workspace2-module-body workspacekit-ui-panel-content-slot";
   contentHost.dataset.workspace2ModuleMount = "true";
   contentHost.dataset.workspacekitPanelSlot = "content";
-  // Bottom status is an opt-in slot. It must remain after the scrollable
-  // content host so a later status migration cannot alter content ownership.
   const statusHost = document.createElement("div");
   statusHost.className = "workspace2-module-status-host workspacekit-ui-panel-status-slot";
   statusHost.dataset.workspacekitPanelSlot = "status";
@@ -245,14 +290,10 @@ export function createWorkspacePanelHost({
     moduleFrame,
     headerHost,
     toolbarHost,
-    // Kept for pre-Blueprint Providers. New modules should use toolbarHost.
     contextHost: toolbarHost,
     controlsHost,
     contentHost,
     statusHost,
-    // Removes the document-level overflow-menu listeners and any open menu.
-    // renderWorkspace2Panel() builds a fresh host on every tab switch, so
-    // without this the listeners accumulate across re-renders.
     dispose() {
       closeOverflowMenu();
       document.removeEventListener("pointerdown", onDocumentPointerDown, true);

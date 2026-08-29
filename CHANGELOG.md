@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Integrated the former WK Theme product into the main plugin as **Appearance / Theme**: WorkspaceKit-UI-Kit-based theme editing, live preview, undo/redo/reset, JSON import/export, safe local save with backup, five bundled themes, and local reference-image palette suggestions.
+- Added an explicit non-destructive legacy Theme migration path that copies valid custom WK theme JSON from the former sibling plugin while preserving the source files.
+- Integrated **Layout V2** into the main plugin with one pure Layout Engine, stable `workspacekit.layout.*` commands, visual-bound alignment, three-item distribution, non-negative fixed spacing, logical node-size matching, one-transaction apply/rollback, a WorkspaceKit-UI-Kit panel, and a compact eight-command topbar.
+- Added WorkspaceKit Group LayoutTargets so Groups can participate in alignment, distribution, and fixed spacing together with normal/collapsed Nodes; group-controlled nodes are de-duplicated and Group/member movement shares one rollbackable transaction plan.
+
+### Changed
+
+- Relicensed ComfyUI WorkspaceKit from MIT to **GNU GPL version 3 only (GPL-3.0-only)** as the foundation for merging WK Layout and WK Theme into the main plugin. Existing third-party components retain their original compatible license notices and attribution.
+- The unified Appearance module no longer carries the old Theme Standalone/WorkspaceKit-discovery/Vendor-UI stack or Color Thief runtime dependency; it uses the main UI Kit and WorkspaceKit-owned reference-palette extraction.
+- Unified Layout no longer uses the former NodeAligner Shadow-DOM command bridge, standalone/Vendor UI, legacy floating toolbar modes, or permanent canvas polling. Old presentation preferences are mapped non-destructively to the new topbar preference, and old standalone Layout/Theme sidebar registrations are suppressed at runtime without deleting their plugin files.
+
 ## 0.2.6 - 2026-08-08
 
 ### Added

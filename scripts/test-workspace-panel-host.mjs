@@ -152,4 +152,44 @@ assert.deepEqual(providerEvents, ["open:layout", "pin:provider.other"]);
 overflowHost.dispose();
 assert.equal(overflowDocument.listeners.size, 0, "dispose must release document-level overflow listeners");
 
+// First-party Layout/Appearance use ordinary WK tabs even though their current
+// transport still shares the Provider contract. The dropdown is reserved for
+// true external extensions.
+const builtinEvents = [];
+const builtinDocument = makeDocument();
+const builtinHost = createWorkspacePanelHost({
+  document: builtinDocument,
+  tabs: [
+    { id: "workflows", label: "工作流" },
+    { id: "nodes", label: "节点" },
+    { id: "templates", label: "模板" },
+    {
+      id: "workspacekit.layout",
+      label: "Layout",
+      overflow: [
+        { id: "workspacekit.layout", title: "Layout", builtin: true },
+        { id: "workspacekit.theme", title: "Appearance", builtin: true },
+      ],
+    },
+  ],
+  activeTabId: "workspacekit.layout",
+  onActivate: (id) => builtinEvents.push(`open:${id}`),
+  settingsTitle: "设置",
+  onOpenSettings() {},
+  providerLabel: (provider) => provider.id === "workspacekit.layout" ? "排版" : "外观",
+  onPinProvider: (id) => builtinEvents.push(`pin:${id}`),
+});
+assert.equal(builtinHost.tabButtons.size, 5);
+assert.equal(builtinHost.tabButtons.get("workspacekit.layout").textContent, "排版");
+assert.equal(builtinHost.tabButtons.get("workspacekit.theme").textContent, "外观");
+assert.match(builtinHost.tabButtons.get("workspacekit.layout").className, /is-active/);
+assert.equal(
+  builtinHost.tabStrip.children.some((child) => /workspace2-module-overflow-tab/.test(child.className)),
+  false,
+  "built-in modules must not be rendered as an extension dropdown",
+);
+builtinHost.tabButtons.get("workspacekit.theme").click();
+assert.deepEqual(builtinEvents, ["pin:workspacekit.theme"]);
+builtinHost.dispose();
+
 console.log("WorkspaceKit panel host contract passed.");

@@ -12,7 +12,7 @@ authors = [
 keywords = ["comfyui", "workspace", "sidebar", "workflow", "nodes"]
 classifiers = [
   "Development Status :: 4 - Beta",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Programming Language :: Python :: 3",
 ]
 

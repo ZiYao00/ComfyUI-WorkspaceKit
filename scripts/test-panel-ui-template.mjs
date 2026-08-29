@@ -97,6 +97,8 @@ blueprint.setToolbar(document.createElement("div"));
 assert.equal(blueprint.toolbar.hidden, false);
 blueprint.setToolbar();
 assert.equal(blueprint.toolbar.hidden, true);
+assert.equal(typeof blueprint.setStatus, "function");
+assert.doesNotThrow(() => blueprint.setStatus({ text: "ready", tone: "neutral" }));
 
 // The Vendor must receive this one product-theme bridge rather than a
 // separately maintained Layout palette. These assertions protect transparent

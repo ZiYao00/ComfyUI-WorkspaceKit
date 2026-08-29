@@ -26,7 +26,7 @@ const factory = createSettingsDialogSections({
   },
   toolbarButton: (icon, label, onClick) => ({ icon, label, onClick }),
   settingsActionButton: (icon, label, onClick, options) => ({ kind: "action", icon, label, onClick, options }),
-  settingsCheckbox: (label, checked, onChange) => ({ kind: "checkbox", label, checked, onChange }),
+  settingsCheckbox: (label, checked, onChange, options = {}) => ({ kind: "checkbox", label, checked, onChange, options, disabled: Boolean(options.disabled) }),
   settingsSelect: (label, value, options, onChange) => ({ kind: "select", label, value, options, onChange }),
   settingsSection: (title, children) => ({ kind: "section", title, children }),
   settingsHelp: (text) => ({ kind: "help", text }),
@@ -44,6 +44,14 @@ const factory = createSettingsDialogSections({
   setAltCOpenTemplatesEnabled: (value) => actions.push(["altC", value]),
   isPanelIntegrationsEnabled: () => true,
   setPanelIntegrationsEnabled: (value) => actions.push(["panelIntegrations", value]),
+  sidebarTabVisibilityOptions: () => [
+    { id: "workflows", label: "show workflows", checked: true, onChange: (value) => actions.push(["showWorkflows", value]) },
+    { id: "nodes", label: "show nodes", checked: true, onChange: (value) => actions.push(["showNodes", value]) },
+    { id: "templates", label: "show templates", checked: true, onChange: (value) => actions.push(["showTemplates", value]) },
+    { id: "workspacekit.layout", label: "show layout", checked: true, onChange: (value) => actions.push(["showLayout", value]) },
+    { id: "workspacekit.theme", label: "show theme", checked: false, disabled: true, title: "sealed", onChange: (value) => actions.push(["showTheme", value]) },
+    { id: "external", label: "show external", checked: true, onChange: (value) => actions.push(["panelIntegrations", value]) },
+  ],
   isStatusHelpEnabled: () => true,
   setStatusHelpEnabled: (value) => actions.push(["statusHelp", value]),
   moduleShortcutOptions: () => [
@@ -90,7 +98,7 @@ const factory = createSettingsDialogSections({
 });
 
 const sections = factory.buildSettingsDialogSections();
-assert.deepEqual(Object.keys(sections), ["shortcuts", "groupPointerShortcuts", "workflowSettings", "templateSettings", "groupSettings", "backgroundEffect", "nodeCache", "dataManagement", "integrations", "about", "versionInfo"]);
+assert.deepEqual(Object.keys(sections), ["shortcuts", "groupPointerShortcuts", "workflowSettings", "templateSettings", "groupSettings", "sidebarTabs", "panelDisplay", "backgroundEffect", "nodeCache", "dataManagement", "integrations", "about", "versionInfo"]);
 assert.equal(sections.shortcuts.children[2].checked, true);
 assert.equal(sections.shortcuts.children[3].checked, false);
 sections.shortcuts.children[2].onChange(false);
@@ -134,12 +142,17 @@ await sections.nodeCache.children[0].children[1].children[0].onClick();
 assert.deepEqual(actions.shift(), ["clearCache"]);
 assert.equal(sections.nodeCache.children[0].children[0].textContent, "settings.nodeCacheCleared");
 assert.equal(sections.dataManagement.kind, "data-management");
-assert.equal(sections.integrations.children[0].checked, true);
-sections.integrations.children[0].onChange(false);
+assert.equal(sections.panelDisplay.children[0].checked, true);
+sections.panelDisplay.children[0].onChange(false);
 assert.deepEqual(actions.shift(), ["statusHelp", false]);
-assert.equal(sections.integrations.children[1].checked, true);
-sections.integrations.children[1].onChange(false);
+assert.equal(sections.sidebarTabs.children.length, 7, "help + five built-in tabs + external extensions");
+assert.equal(sections.sidebarTabs.children[5].checked, false);
+assert.equal(sections.sidebarTabs.children[5].disabled, true);
+assert.equal(sections.sidebarTabs.children[5].options.title, "sealed");
+assert.equal(sections.sidebarTabs.children[6].checked, true);
+sections.sidebarTabs.children[6].onChange(false);
 assert.deepEqual(actions.shift(), ["panelIntegrations", false]);
+assert.equal(sections.integrations, sections.panelDisplay, "legacy integrations alias remains panel-display compatible");
 assert.equal(sections.versionInfo.text, "settings.versionLoading");
 
 const nativeSections = factory.buildSettingsDialogSections();

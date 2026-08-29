@@ -2,14 +2,19 @@
 // dialog lifecycle, and global keyboard handling stay in entry.js because they
 // coordinate with the WorkspaceKit sidebar and glass overlay.
 export function createSettingsControls({ document, t, isolateComfyKeys }) {
-  const settingsCheckbox = (label, checked, onChange) => {
+  const settingsCheckbox = (label, checked, onChange, { disabled = false, title = "" } = {}) => {
     const row = document.createElement("div");
     row.className = "workspace2-settings-row";
+    row.classList.toggle("is-disabled", disabled);
+    if (title) row.title = title;
     const wrapper = document.createElement("label");
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = checked;
-    input.addEventListener("change", () => onChange(input.checked));
+    input.disabled = Boolean(disabled);
+    input.addEventListener("change", () => {
+      if (!input.disabled) onChange?.(input.checked);
+    });
     wrapper.append(input, document.createTextNode(label));
     row.append(wrapper);
     return row;

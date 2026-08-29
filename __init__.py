@@ -32,6 +32,7 @@ from .service.official_favorites_probe import probe_official_favorites
 from .service.official_favorites_sync import write_workspace2_favorites_to_official
 from .service.safe_path import safe_join, safe_relative_path
 from .service.template_library_service import read_template_library, write_template_library
+from .service.theme_storage import MAX_REQUEST_BYTES, ThemeStorage, ThemeStorageError
 from .service.workflow_favorites_service import read_workflow_favorites, write_workflow_favorites
 from .service.workflow_copy_service import copy_workflow_file
 from .service.workspace_data_bundle import build_workspace_data_bundle, import_workspace_data_bundle
@@ -100,6 +101,7 @@ VERSION = _read_package_version()
 PLUGIN_NAME = "comfyui-workspacekit"
 
 workspace_path = Path(__file__).resolve().parent
+theme_storage = ThemeStorage(workspace_path)
 
 
 def _runtime_comfy_path():
@@ -294,6 +296,43 @@ def scan_workflow_subtree(relative_path):
 
 def _json_error(message, status=400):
     return _json_response({"ok": False, "error": message}, status=status)
+
+
+@server.PromptServer.instance.routes.post("/workspacekit-theme/save")
+async def workspacekit_theme_save(request):
+    if request.content_length is not None and request.content_length > MAX_REQUEST_BYTES:
+        return _json_error("Request body exceeds the 1 MB theme limit.", status=413)
+    try:
+        payload = await request.json()
+        result = await asyncio.to_thread(theme_storage.save, payload)
+        return _json_response({"ok": True, **result})
+    except ThemeStorageError as exc:
+        return _json_error(str(exc), status=exc.status)
+    except (json.JSONDecodeError, web.HTTPBadRequest):
+        return _json_error("Request body must be valid JSON.", status=400)
+    except Exception as exc:
+        print(f"[WorkspaceKit Appearance] Theme save failed: {exc}")
+        return _json_error("Theme save failed.", status=500)
+
+
+@server.PromptServer.instance.routes.get("/workspacekit-theme/legacy-status")
+async def workspacekit_theme_legacy_status(_request):
+    try:
+        result = await asyncio.to_thread(theme_storage.legacy_status)
+        return _json_response({"ok": True, **result})
+    except Exception as exc:
+        print(f"[WorkspaceKit Appearance] Legacy theme scan failed: {exc}")
+        return _json_error("Legacy theme scan failed.", status=500)
+
+
+@server.PromptServer.instance.routes.post("/workspacekit-theme/migrate-legacy")
+async def workspacekit_theme_migrate_legacy(_request):
+    try:
+        result = await asyncio.to_thread(theme_storage.migrate_legacy)
+        return _json_response({"ok": True, **result})
+    except Exception as exc:
+        print(f"[WorkspaceKit Appearance] Legacy theme migration failed: {exc}")
+        return _json_error("Legacy theme migration failed.", status=500)
 
 
 def _require_name(name):

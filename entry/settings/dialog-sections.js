@@ -20,6 +20,7 @@ export function createSettingsDialogSections({
   setAltCOpenTemplatesEnabled,
   isPanelIntegrationsEnabled,
   setPanelIntegrationsEnabled,
+  sidebarTabVisibilityOptions = null,
   // Optional defaults preserve compatibility with an older entry.js or
   // isolated contract caller while the status-help setting is rolling out.
   isStatusHelpEnabled = () => true,
@@ -157,15 +158,34 @@ export function createSettingsDialogSections({
     const nodeCache = settingsSection(t("settings.nodeCache"), [cacheRow]);
     const dataManagement = buildDataManagementSection();
 
-    const integrations = settingsSection(t("settings.panelIntegrations"), [
-      settingsCheckbox(t("settings.statusHelp"), isStatusHelpEnabled(), setStatusHelpEnabled),
-      settingsCheckbox(
-        t("settings.panelIntegrationsEnabled"),
-        isPanelIntegrationsEnabled(),
-        setPanelIntegrationsEnabled,
-      ),
-      settingsHelp(t("settings.panelIntegrationsHelp")),
+    const sidebarOptions = typeof sidebarTabVisibilityOptions === "function"
+      ? sidebarTabVisibilityOptions()
+      : [{
+        id: "external",
+        label: t("settings.panelIntegrationsEnabled"),
+        checked: isPanelIntegrationsEnabled(),
+        disabled: false,
+        title: t("settings.panelIntegrationsHelp"),
+        onChange: setPanelIntegrationsEnabled,
+      }];
+    const sidebarTabs = settingsSection(t("settings.sidebarTabs"), [
+      settingsHelp(t("settings.sidebarTabsHelp")),
+      ...sidebarOptions.map((option) => {
+        const row = settingsCheckbox(
+          option.label,
+          option.checked,
+          option.onChange,
+          { disabled: option.disabled, title: option.title },
+        );
+        if (row?.dataset) row.dataset.workspace2SidebarTabVisibility = option.id || "";
+        return row;
+      }),
     ]);
+    const panelDisplay = settingsSection(t("settings.panelDisplay"), [
+      settingsCheckbox(t("settings.statusHelp"), isStatusHelpEnabled(), setStatusHelpEnabled),
+    ]);
+    // Compatibility alias for a stale entry.js that still expects `integrations`.
+    const integrations = panelDisplay;
 
     const groupRepresentation = typeof getGroupRepresentationInfo === "function"
       && typeof convertGroupsToNative === "function"
@@ -329,7 +349,7 @@ export function createSettingsDialogSections({
       settingsHelp(t("settings.github")),
     ]);
 
-    const sections = { shortcuts, groupPointerShortcuts, workflowSettings, templateSettings, groupSettings, backgroundEffect, nodeCache, dataManagement, integrations, about, versionInfo };
+    const sections = { shortcuts, groupPointerShortcuts, workflowSettings, templateSettings, groupSettings, sidebarTabs, panelDisplay, backgroundEffect, nodeCache, dataManagement, integrations, about, versionInfo };
     return sections;
   };
 

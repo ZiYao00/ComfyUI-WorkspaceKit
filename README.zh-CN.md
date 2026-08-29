@@ -8,7 +8,7 @@
 
 ![Version](https://img.shields.io/badge/version-0.2.5-blue)
 ![Status](https://img.shields.io/badge/status-public%20beta-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-GPL--3.0--only-blue)
 
 ComfyUI WorkspaceKit（WK）的中文正式名是 **WK 面板**。它把工作流管理、节点收藏、模板复用和画布整理放进同一个侧边栏入口。
 
@@ -401,6 +401,6 @@ WorkspaceKit 参考、迁移或改造了这些项目中的部分思路和实现�
 
 ## 许可证
 
-本项目使用 MIT License。
+ComfyUI WorkspaceKit 使用 **GNU GPL version 3 only（GPL-3.0-only）**。
 
-第三方项目代码、思路和改造部分仍遵循其原始许可证，详见 [LICENSE](LICENSE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+第三方项目代码、参考实现和改造部分仍遵循各自兼容的原始许可证与署名要求，详见 [LICENSE](LICENSE) 和 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

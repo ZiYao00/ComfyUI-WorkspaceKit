@@ -8,7 +8,7 @@
 
 ![Version](https://img.shields.io/badge/version-0.2.5-blue)
 ![Status](https://img.shields.io/badge/status-public%20beta-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-GPL--3.0--only-blue)
 
 ComfyUI WorkspaceKit (WK) brings workflow management, node favorites, template reuse, and canvas organization into one focused sidebar entry. Its Chinese product name is **WK 面板**.
 
@@ -405,6 +405,6 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
 
 ## License
 
-This project uses the MIT License.
+ComfyUI WorkspaceKit is licensed under **GNU GPL version 3 only (GPL-3.0-only)**.
 
-Third-party code, references, and adapted implementations remain subject to their original licenses. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Third-party code, references, and adapted implementations remain subject to their original compatible license terms and attribution requirements. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

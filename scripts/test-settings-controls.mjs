@@ -48,6 +48,16 @@ assert.equal(grid.children[0].children[1].textContent, "t:settings.shortcuts.wor
 assert.equal(grid.children[3].children[0].textContent, "Shift + 4");
 assert.equal(grid.children[3].children[1].textContent, "t:settings.shortcuts.extension");
 
+let checkboxChanged = false;
+const sealedCheckbox = controls.settingsCheckbox("Theme", false, () => { checkboxChanged = true; }, { disabled: true, title: "sealed" });
+const sealedInput = sealedCheckbox.children[0].children[0];
+assert.equal(sealedInput.disabled, true);
+assert.equal(sealedCheckbox.classList.values.has("is-disabled"), true);
+assert.equal(sealedCheckbox.title, "sealed");
+sealedInput.checked = true;
+sealedInput.listeners.get("change")();
+assert.equal(checkboxChanged, false);
+
 let changed = null;
 const range = controls.settingsRange("Opacity", 20, {
   min: 5, max: 100, snap: () => 25, onChange: (value) => { changed = value; }, disabled: true,

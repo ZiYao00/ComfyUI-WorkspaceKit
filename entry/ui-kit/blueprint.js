@@ -34,5 +34,9 @@ export function createPanelBlueprint({ document = globalThis.document } = {}) {
     setToolbar: (value) => setSlot(toolbar, value),
     setControls: (value) => setSlot(controls, value),
     setContent: (value) => setSlot(content, value),
+    // Hosted panels route status through the host-owned bottom-status controller.
+    // Standalone/non-host blueprints keep a no-op compatibility method so shared
+    // panel renderers never fail merely because the optional status slot is absent.
+    setStatus: () => {},
   });
 }

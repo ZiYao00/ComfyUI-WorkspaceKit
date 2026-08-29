@@ -7,6 +7,7 @@ import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
 import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260825_t042_canvas_frame_r6";
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260804_native_group_color_r1";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
+import { getBuiltinWorkspaceKitProviders } from "./integrations/builtin-provider-registration.js";
 import { publishWorkspaceKitPanelUiTemplate } from "./integrations/panel-ui-template-api.js";
 import { installPanelUiTemplateStyles } from "./ui-kit/styles.js";
 import { createWorkspaceKitIcon } from "./ui-kit/icons.js";
@@ -91,16 +92,17 @@ import { createWorkspacePanelHost } from "./ui/workspace-panel-host.js";
 import { createWorkspacePanelStatusController } from "./ui/panel-status.js";
 import { resolveWorkspacePanelProviderLabel } from "./ui/provider-label.js";
 import { PINNED_PROVIDER_KEY, createWorkspaceTabPlan } from "./ui/provider-tabs.js";
+import { WORKSPACE_MODULE_ID, isWorkspaceModuleSealed, isWorkspaceModuleVisible, setWorkspaceModuleVisible, visibleWorkspaceModuleIds } from "./ui/module-visibility.js";
 import { MODULE_SHORTCUTS, isModuleShortcutEnabled, moduleShortcutStorageKey, resolveModuleShortcut } from "./ui/module-shortcuts.js";
 import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, GROUP_POINTER_MODIFIER, normalizeGroupPointerBindings, swapGroupPointerBinding } from "./canvas-groups/pointer-actions.js?v=20260804_group_gesture_disable_r1";
 // Settings controls and sections change their return contracts independently.
 // Keep their cache keys aligned with entry.js to avoid a refreshed entry using
 // an older child module from a long-lived ComfyUI browser session.
-import { createSettingsControls } from "./settings/controls.js?v=20260727_group_settings_r1";
+import { createSettingsControls } from "./settings/controls.js?v=20260829_l0_sidebar_tabs_r1";
 // Bump this query when the section return contract changes. ComfyUI browser
 // sessions can retain an imported child module after entry.js has refreshed;
 // an old section factory would otherwise omit a newly added section.
-import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260804_group_gesture_disable_r1";
+import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260829_l0_sidebar_tabs_r1";
 import { createSettingsDialogShell } from "./settings/dialog-shell.js";
 import { configureI18n, getLocale, t as translate } from "./core/i18n.js";
 import { FALLBACK_STRINGS } from "./core/fallback-strings.js";
@@ -1080,7 +1082,12 @@ function workspacePanelProviders() {
   // This helper also runs while workspaceState is being initialized to repair
   // a persisted provider tab id, so it must not read workspaceState itself.
   const api = globalThis.WorkspaceKitPanelAPI;
-  return typeof api?.getProviders === "function" ? api.getProviders() : [];
+  const publicProviders = typeof api?.getProviders === "function" ? api.getProviders() : [];
+  const providersById = new Map(publicProviders.filter((provider) => provider?.id).map((provider) => [provider.id, provider]));
+  for (const provider of getBuiltinWorkspaceKitProviders(globalThis)) {
+    if (provider?.id) providersById.set(provider.id, provider);
+  }
+  return [...providersById.values()];
 }
 
 function findWorkspacePanelProvider(moduleId) {
@@ -1125,11 +1132,11 @@ function setupWorkspacePanelProviderLifecycle(api) {
     if (event.type === "availability-changed" && event.enabled) claimRegisteredWorkspacePanelProviders();
     if (event.type === "availability-changed"
       && !event.enabled
-      && !WORKSPACE2_MODULES.includes(workspaceState.activeModule)) {
-      // A hidden Provider cannot remain the active tab. Keep its pinned id in
-      // storage so enabling integrations later can restore the user's choice.
-      workspaceState.activeModule = "workflows";
-      localStorage.setItem(WORKSPACE2_MODULE_KEY, workspaceState.activeModule);
+      && !WORKSPACE2_MODULES.includes(workspaceState.activeModule)
+      && findWorkspacePanelProvider(workspaceState.activeModule)?.builtin !== true) {
+      // A hidden external Provider cannot remain active. Keep its pinned id in
+      // storage, but move the live panel to the first still-visible WK module.
+      reconcileWorkspaceActiveModule(workspaceTabPlan());
     }
     if (workspaceState.renderTarget?.isConnected) renderWorkspace2Panel(workspaceState.renderTarget);
   });
@@ -1462,6 +1469,8 @@ function closeWorkspace2Sidebar() {
 
 function openWorkspace2Module(moduleId, { closeIfActive = false } = {}) {
   const nextModule = normalizeWorkspaceModule(moduleId);
+  const plan = workspaceTabPlan();
+  if (!workspacePlanModuleIds(plan).includes(nextModule)) return false;
   const panelIsOpen = isWorkspace2PanelOpen();
   if (shouldCloseWorkspaceModule({
     closeIfActive,
@@ -1498,6 +1507,42 @@ function notifyCtrlGConflict() {
 
 function isWorkspace2AltCOpenTemplatesEnabled() {
   return localStorage.getItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY) !== "0";
+}
+
+function setWorkspaceSidebarModuleVisible(moduleId, checked) {
+  const visible = setWorkspaceModuleVisible(moduleId, checked, localStorage);
+  const plan = workspaceTabPlan();
+  reconcileWorkspaceActiveModule(plan);
+  if (workspaceState.renderTarget?.isConnected) renderWorkspace2Panel(workspaceState.renderTarget);
+  return visible;
+}
+
+function sidebarTabVisibilityOptions() {
+  const builtins = [
+    [WORKSPACE_MODULE_ID.workflows, "settings.sidebarTab.workflows"],
+    [WORKSPACE_MODULE_ID.nodes, "settings.sidebarTab.nodes"],
+    [WORKSPACE_MODULE_ID.templates, "settings.sidebarTab.templates"],
+    [WORKSPACE_MODULE_ID.layout, "settings.sidebarTab.layout"],
+    [WORKSPACE_MODULE_ID.theme, "settings.sidebarTab.theme"],
+  ];
+  return [
+    ...builtins.map(([id, labelKey]) => ({
+      id,
+      label: t(labelKey),
+      checked: isWorkspaceModuleVisible(id, localStorage),
+      disabled: isWorkspaceModuleSealed(id),
+      title: isWorkspaceModuleSealed(id) ? t("settings.sidebarTab.themeSealedHelp") : "",
+      onChange: (checked) => setWorkspaceSidebarModuleVisible(id, checked),
+    })),
+    {
+      id: "external",
+      label: t("settings.sidebarTab.external"),
+      checked: isWorkspacePanelIntegrationsEnabled(),
+      disabled: false,
+      title: t("settings.panelIntegrationsHelp"),
+      onChange: setWorkspacePanelIntegrationsEnabled,
+    },
+  ];
 }
 
 function isWorkspacePanelIntegrationsEnabled() {
@@ -1708,6 +1753,7 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
   setAltCOpenTemplatesEnabled: (checked) => localStorage.setItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY, checked ? "1" : "0"),
   isPanelIntegrationsEnabled: isWorkspacePanelIntegrationsEnabled,
   setPanelIntegrationsEnabled: setWorkspacePanelIntegrationsEnabled,
+  sidebarTabVisibilityOptions,
   isStatusHelpEnabled: isWorkspaceStatusHelpEnabled,
   setStatusHelpEnabled: setWorkspaceStatusHelpEnabled,
   isTopbarSaveEnabled: isWorkspaceTopbarSaveEnabled,
@@ -1781,10 +1827,11 @@ function openWorkspaceSettings() {
     workflowSettings,
     templateSettings,
     groupSettings,
+    sidebarTabs,
+    panelDisplay,
     backgroundEffect,
     nodeCache,
     dataManagement,
-    integrations,
     groupRepresentation,
     about,
     versionInfo,
@@ -1800,12 +1847,12 @@ function openWorkspaceSettings() {
   // the feature group (Groups/Workflows/Templates), then Shortcuts/Advanced.
   // `dividerBefore` renders a separator line above that entry.
   const settingPages = [
-    { id: "appearance", label: t("settings.nav.appearance"), icon: "settings.nav.appearance", sections: [backgroundEffect] },
+    { id: "appearance", label: t("settings.nav.appearance"), icon: "settings.nav.appearance", sections: [sidebarTabs, panelDisplay, backgroundEffect].filter(Boolean) },
     { id: "groups", label: t("settings.nav.groups"), icon: "settings.nav.groups", dividerBefore: true, sections: [groupSettings] },
     { id: "workflows", label: t("settings.nav.workflows"), icon: "settings.nav.workflows", sections: [workflowSettings] },
     { id: "templates", label: t("settings.nav.templates"), icon: "settings.nav.templates", sections: [templateSettings] },
     { id: "shortcuts", label: t("settings.nav.shortcuts"), icon: "settings.nav.shortcuts", dividerBefore: true, sections: [shortcuts].filter(Boolean) },
-    { id: "advanced", label: t("settings.nav.advanced"), icon: "settings.nav.advanced", sections: [integrations, providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
+    { id: "advanced", label: t("settings.nav.advanced"), icon: "settings.nav.advanced", sections: [providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
   ];
   const settingsLayout = document.createElement("div");
   settingsLayout.className = "workspace2-settings-layout";
@@ -5995,7 +6042,35 @@ function workspaceModuleTab(moduleId) {
 }
 
 function workspaceTabPlan() {
-  return createWorkspaceTabPlan(WORKSPACE2_MODULES, workspacePanelProviders(), localStorage.getItem(PINNED_PROVIDER_KEY) || "");
+  const coreIds = visibleWorkspaceModuleIds(WORKSPACE2_MODULES, localStorage);
+  return createWorkspaceTabPlan(
+    coreIds,
+    workspacePanelProviders(),
+    localStorage.getItem(PINNED_PROVIDER_KEY) || "",
+    globalThis,
+    {
+      providerFilter: (provider) => provider?.builtin !== true || isWorkspaceModuleVisible(provider.id, localStorage),
+    },
+  );
+}
+
+function workspacePlanModuleIds(plan = workspaceTabPlan()) {
+  return [...plan.coreIds, ...plan.mergedProviders.map((provider) => provider.id)];
+}
+
+function resolveVisibleWorkspaceModule(moduleId, plan = workspaceTabPlan()) {
+  const requested = String(moduleId || "");
+  const visibleIds = workspacePlanModuleIds(plan);
+  if (visibleIds.includes(requested)) return requested;
+  return plan.coreIds[0] ?? plan.pinned?.id ?? plan.mergedProviders[0]?.id ?? "";
+}
+
+function reconcileWorkspaceActiveModule(plan = workspaceTabPlan()) {
+  const next = resolveVisibleWorkspaceModule(workspaceState.activeModule, plan);
+  if (next === workspaceState.activeModule) return next;
+  workspaceState.activeModule = next;
+  localStorage.setItem(WORKSPACE2_MODULE_KEY, next);
+  return next;
 }
 
 function renderWorkspace2Panel(el) {
@@ -6012,6 +6087,7 @@ function renderWorkspace2Panel(el) {
   prepareWorkspaceSidebarHost(el);
 
   const plan = workspaceTabPlan();
+  reconcileWorkspaceActiveModule(plan);
   const visibleIds = [...plan.coreIds, ...(plan.pinned ? [plan.pinned.id] : [])];
   const tabsWithOverflow = visibleIds.map((id) => ({
     ...workspaceModuleTab(id),
@@ -6070,16 +6146,29 @@ function renderWorkspace2Panel(el) {
       workspaceState.providerDispose = typeof dispose === "function" ? dispose : null;
     } catch (error) {
       console.error("[WorkspaceKit] Provider render failed", provider.id, error);
-      workspaceState.activeModule = "workflows";
-      localStorage.setItem(WORKSPACE2_MODULE_KEY, "workflows");
-      renderPanel(panelHost.contentHost, workflowPanelMount);
+      const fallbackModule = plan.coreIds[0] ?? "";
+      workspaceState.activeModule = fallbackModule;
+      localStorage.setItem(WORKSPACE2_MODULE_KEY, fallbackModule);
+      if (fallbackModule === "nodes") renderNodesPanel(panelHost.contentHost, nodesPanelMount);
+      else if (fallbackModule === "templates") renderTemplatesPanel(panelHost.contentHost, templatesPanelMount);
+      else if (fallbackModule === "workflows") renderPanel(panelHost.contentHost, workflowPanelMount);
+      else {
+        panelHost.contentHost.replaceChildren();
+        panelStatus.show({ text: error?.message || t("workspace.noVisibleModules"), tone: "error" });
+      }
     }
   } else if (workspaceState.activeModule === "nodes") {
     renderNodesPanel(panelHost.contentHost, nodesPanelMount);
   } else if (workspaceState.activeModule === "templates") {
     renderTemplatesPanel(panelHost.contentHost, templatesPanelMount);
-  } else {
+  } else if (workspaceState.activeModule === "workflows") {
     renderPanel(panelHost.contentHost, workflowPanelMount);
+  } else {
+    panelHost.headerHost.replaceChildren();
+    panelHost.toolbarHost.replaceChildren();
+    panelHost.controlsHost.replaceChildren();
+    panelHost.contentHost.replaceChildren();
+    panelStatus.show({ text: t("workspace.noVisibleModules"), tone: "neutral" });
   }
   window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 0);
   window.setTimeout(refreshWorkspacePanelAncestorsIfVisible, 180);

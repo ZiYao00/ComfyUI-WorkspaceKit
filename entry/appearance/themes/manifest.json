@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "groups": [
+    {
+      "id": "comfyui-default",
+      "name": "ComfyUI Defaults",
+      "items": [
+        {
+          "id": "comfyui-dark",
+          "name": "Dark (Default)",
+          "file": "themes/comfyui-default/dark.json"
+        },
+        {
+          "id": "comfyui-light",
+          "name": "Light (Default)",
+          "file": "themes/comfyui-default/light.json"
+        }
+      ]
+    },
+    {
+      "id": "wk",
+      "name": "WorkspaceKit",
+      "items": [
+        {
+          "id": "wk-dark-zy",
+          "name": "WK Dark ZY",
+          "file": "themes/wk/wk-dark-zy.json"
+        },
+        {
+          "id": "wk-catppuccin-macchiato",
+          "name": "WK · Catppuccin Macchiato",
+          "file": "themes/wk/zy-catppuccin-macchiato.json"
+        },
+        {
+          "id": "wk-catppuccin-mocha",
+          "name": "WK · Catppuccin Mocha",
+          "file": "themes/wk/zy-catppuccin-mocha.json"
+        }
+      ]
+    }
+  ]
+}

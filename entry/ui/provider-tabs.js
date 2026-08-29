@@ -1,4 +1,18 @@
+import { getBuiltinWorkspaceKitProviders } from "../integrations/builtin-provider-registration.js";
+
 export const PINNED_PROVIDER_KEY = "workspacekit.pinnedProviderId";
+
+function uniqueProviders(providers) {
+  const byId = new Map();
+  for (const provider of providers) {
+    if (!provider?.id) continue;
+    // The built-in registry is appended after the external list and therefore
+    // wins an accidental id collision. WorkspaceKit's own module identity must
+    // never be shadowed by a third-party provider with the same id.
+    byId.set(provider.id, provider);
+  }
+  return [...byId.values()];
+}
 
 export function resolvePinnedProvider(providers, storedId = "") {
   const usable = providers.filter((provider) => provider?.id);
@@ -8,14 +22,22 @@ export function resolvePinnedProvider(providers, storedId = "") {
     ?? null;
 }
 
-export function createWorkspaceTabPlan(coreIds, providers, storedId = "") {
-  const mergedProviders = providers.filter((provider) => provider?.id);
+export function createWorkspaceTabPlan(
+  coreIds,
+  providers,
+  storedId = "",
+  target = globalThis,
+  { providerFilter = () => true } = {},
+) {
+  const externalProviders = providers.filter((provider) => provider?.id && providerFilter(provider));
+  const builtinProviders = getBuiltinWorkspaceKitProviders(target).filter(providerFilter);
+  const mergedProviders = uniqueProviders([...externalProviders, ...builtinProviders]);
   const pinned = resolvePinnedProvider(mergedProviders, storedId);
   return Object.freeze({
     coreIds: Object.freeze([...coreIds]),
     pinned,
-    // The overflow selector is also the provider switcher, so it must retain
-    // the current pinned provider instead of hiding it from the menu.
+    // Built-in module identity is independent from the public Provider API, but
+    // the host may still hide a first-party tab through its own visibility policy.
     mergedProviders: Object.freeze([...mergedProviders]),
   });
 }

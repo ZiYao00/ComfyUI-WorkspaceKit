@@ -1,7 +1,8 @@
 import { DEFAULT_LOCALE } from "./constants.js";
+import { FALLBACK_STRINGS } from "./fallback-strings.js";
 
 let appRef = null;
-let fallbackStrings = {};
+let fallbackStrings = FALLBACK_STRINGS;
 let locale = DEFAULT_LOCALE;
 let strings = {};
 const missingKeys = new Set();

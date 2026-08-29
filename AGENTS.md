@@ -2,7 +2,7 @@
 
 ## Scope
 
-This repository is the main `ComfyUI-WorkspaceKit` plugin. It provides workflow, node, favorite, template, group, trash, workspace, and panel-host capabilities. Node alignment and distribution belong in the separate `ComfyUI-WorkspaceKit-Layout` repository.
+This repository is the single long-term `ComfyUI-WorkspaceKit` plugin. It owns workflow, node, favorite, template, group, trash, workspace, panel-host, appearance/theme, and layout capabilities. `ComfyUI-WorkspaceKit-Theme` and `ComfyUI-WorkspaceKit-Layout` are migration-source repositories only during the 2026-08-29 unification program; new product work for those capabilities belongs here.
 
 ## Before editing
 

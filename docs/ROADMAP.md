@@ -4,6 +4,53 @@ This document records planned product work. A listed item is a design intent, no
 
 > **Scope**: internal feature-level requirements and acceptance criteria. For the public-facing status list see [`../ROADMAP.md`](../ROADMAP.md). Outstanding-work tracking (backlog, tech debt, per-batch dashboard) is maintained in the internal `.dev-docs/` tree, which is not published to Git.
 
+## Post-unification product-line order
+
+The 2026-08-29 repository unification changes the execution model from three parallel plugins to one product with three deliberate product lines. After the remaining shared-shell acceptance gate, normal product development proceeds in this strict order:
+
+```text
+Shared UI / first-party module shell
+→ Layout
+→ Theme / Appearance
+→ WorkspaceKit Core
+→ Whole-product regression / Release Candidate
+```
+
+Work should not bounce between product lines merely because a nearby issue is convenient. Cross-line changes are allowed only when they unblock the active product line, fix a regression, or satisfy a release gate.
+
+Shared-shell L0 now defines six user-facing visibility controls: Workflows, Nodes, Templates, Layout, Theme, and external extensions. Workflows/Nodes/Templates/Layout default visible; Theme is deliberately sealed (hidden by default and represented by a disabled Settings switch) until the Theme product line begins; external Provider visibility remains independent from first-party module identity. Real-page acceptance remains required after the local `:8190` test service is available again.
+
+### Layout — current product line
+
+The Layout product line keeps the professional Photoshop/Illustrator-inspired interaction goals from the former `ComfyUI-WorkspaceKit-Layout` planning documents while dropping standalone-plugin maintenance work that no longer creates product value.
+
+Current / near-term priorities:
+
+- L1 restores the former Layout interaction baseline before adding features: keep the eight high-frequency alignment/distribution commands in a fixed two-row matrix, keep numeric spacing separate from that position memory, and keep size commands in their own compact area.
+- Reuse/adapt the already-audited NodeAligner GPL-3.0 SVG command icons where they are the established visual baseline, while preserving provenance; use Adobe Photoshop/Illustrator as interaction/visual-language references rather than copying proprietary Adobe icon assets. The full panel and canvas top bar must share the same command/icon vocabulary.
+- Finish real-page acceptance for normal nodes, collapsed nodes, WorkspaceKit groups, and mixed Node + Group selections.
+- Verify one-command/one-transaction Undo/Redo, save/reload behavior, zero fixed spacing, and resize limits.
+- Add Reference Mode and Key Object/Key Node behavior only after the current selection-bounds semantics are stable.
+- Then consider Reroute support, smart guides, equal-gap/distance hints, snapping, selection toolbox/radial entry surfaces, and previewable Auto Layout.
+
+Retired from the product roadmap: Layout-only Vendor UI, standalone sidebar hosting, dual-host lifecycle, and long-term WorkspaceKit Adapter compatibility. Historical source/provenance material remains preserved for audit and migration purposes.
+
+### Theme / Appearance — second product line
+
+After Layout is stable, Appearance resumes as one concentrated product line. Retained priorities from the former Theme roadmap are:
+
+- Finish field/group metadata bilingual coverage and visual-density/interaction polish.
+- Revalidate the complete theme session lifecycle: load/import → live edit → undo/redo/reset → save/copy → restart/reload.
+- Improve reference-image color workflow, recent/favorite palettes, contrast/readability feedback, and affected-area preview/highlighting where useful.
+- Mature Theme Manager operations such as copy/rename/update/comparison only through the controlled storage service with rollback/conflict handling.
+- Add Frontend-version/field compatibility diagnostics and migration reporting before a stable 1.0 theme format is claimed.
+
+Retired from the product roadmap: Theme standalone host, Vendor UI, dual-host visual matrix, and WorkspaceKit Adapter maintenance. Existing local Theme JSON migration remains non-destructive.
+
+### WorkspaceKit Core — third product line
+
+After Layout and Appearance have their own stable product passes, return to the existing Core backlog: Workflows, Nodes, Templates, Groups, Settings, performance/cache behavior, shortcut editing, Browse improvements, group interactions, sidebar resilience, and incremental `entry.js` modularization. Existing requirements below remain valid unless explicitly superseded by a later product decision.
+
 ## P0 — WorkspaceKit Panel UI Template v1
 
 Status: **implemented and contract-tested; compatibility and visual regression remain ongoing release checks.**

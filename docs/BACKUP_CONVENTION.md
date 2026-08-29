@@ -16,15 +16,14 @@ All rollback archives live under the repository-local `.codex-backups/` director
 
 The sibling `ComfyUI-WorkspaceKit-Layout` repository shares this classification and additionally documents the same seven categories in its own `.codex-backups/README.md`. The `create-project-backup.ps1` script accepts all seven names in `-Category`; empty categories do not create their target directory until first use.
 
-## Local root and legacy imports
+## Local root and legacy references
 
 `.codex-backups/` is the single local backup root for this repository. The
 former root `.backup/` was consolidated into
 `.codex-backups/legacy-file-snapshots/` on 2026-08-14; those entries are
-partial file-level references, not complete rollback archives. The former root
-`node.zip` was retained at
-`.codex-backups/legacy-source-snapshots/node-20260720.zip` as an older
-standalone source snapshot.
+partial file-level references, not complete rollback archives. The former
+standalone `node.zip` snapshot is no longer retained and must not be cited as a
+current rollback point.
 
 The root-local `.codex-backups/README.md` is the short operational guide for
 this machine. This tracked document remains the contributor-facing convention.
@@ -60,6 +59,7 @@ The following categories stay under `docs/` because external readers or the Regi
 - Record archive size for every snapshot and SHA-256 for important ones (test log entries or commit messages should cite the archive path).
 - A backup is not a release: after modifying, still run syntax checks, contract tests, and any real-page acceptance the batch requires.
 - Restore by extracting to a temporary location and comparing diffs; do not overwrite the current working tree directly.
+- For a cleanup approved by the user, first verify the retained baseline, then move each confirmed candidate to a dated local staging directory such as `_delete-candidates-YYYYMMDD/`. The user may then permanently remove that staging directory from the Windows Recycle Bin.
 
 ## Git and layout
 

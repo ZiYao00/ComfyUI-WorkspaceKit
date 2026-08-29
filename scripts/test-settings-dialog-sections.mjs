@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import {
+  LAYOUT_COMMAND_ICON_SIZE_KEY,
+  LAYOUT_FLOATING_POSITION_KEY,
+  LAYOUT_PRESENTATION_MODE_KEY,
+} from "../entry/layout/preferences.js";
 import { createSettingsDialogSections } from "../entry/settings/dialog-sections.js";
 
 class FakeElement {
@@ -10,6 +15,11 @@ class FakeElement {
 const updates = [];
 const actions = [];
 const modeRows = [];
+const layoutSettingsValues = new Map();
+const layoutSettingsStorage = {
+  getItem(key) { return layoutSettingsValues.has(key) ? layoutSettingsValues.get(key) : null; },
+  setItem(key, value) { layoutSettingsValues.set(key, String(value)); },
+};
 let conversionInfo = { representation: "workspacekit", workspaceKitGroupCount: 2, nativeGroupCount: 0, isReady: true };
 let conversionCalls = 0;
 let reverseConversionCalls = 0;
@@ -54,6 +64,7 @@ const factory = createSettingsDialogSections({
   ],
   isStatusHelpEnabled: () => true,
   setStatusHelpEnabled: (value) => actions.push(["statusHelp", value]),
+  layoutSettingsStorage,
   moduleShortcutOptions: () => [
     { label: "Shift + 1", checked: true, onChange: (value) => actions.push(["workflowShortcut", value]) },
     { label: "Shift + 4", checked: false, onChange: (value) => actions.push(["extensionShortcut", value]) },
@@ -145,6 +156,20 @@ assert.equal(sections.dataManagement.kind, "data-management");
 assert.equal(sections.panelDisplay.children[0].checked, true);
 sections.panelDisplay.children[0].onChange(false);
 assert.deepEqual(actions.shift(), ["statusHelp", false]);
+assert.equal(sections.panelDisplay.children[1].text, "settings.layoutPresentationTitle");
+assert.equal(sections.panelDisplay.children[2].text, "settings.layoutPresentationHelp");
+assert.equal(sections.panelDisplay.children[3].kind, "select");
+assert.equal(sections.panelDisplay.children[3].value, "top");
+assert.equal(sections.panelDisplay.children[3].options.length, 4);
+sections.panelDisplay.children[3].onChange("selection");
+assert.equal(layoutSettingsStorage.getItem(LAYOUT_PRESENTATION_MODE_KEY), "selection");
+assert.equal(sections.panelDisplay.children[4].kind, "range");
+assert.equal(sections.panelDisplay.children[4].value, 22);
+sections.panelDisplay.children[4].options.onChange(24);
+assert.equal(layoutSettingsStorage.getItem(LAYOUT_COMMAND_ICON_SIZE_KEY), "24");
+assert.equal(sections.panelDisplay.children[5].children[0].kind, "action");
+sections.panelDisplay.children[5].children[0].onClick();
+assert.match(layoutSettingsStorage.getItem(LAYOUT_FLOATING_POSITION_KEY), /"default":true/);
 assert.equal(sections.sidebarTabs.children.length, 7, "help + five built-in tabs + external extensions");
 assert.equal(sections.sidebarTabs.children[5].checked, false);
 assert.equal(sections.sidebarTabs.children[5].disabled, true);

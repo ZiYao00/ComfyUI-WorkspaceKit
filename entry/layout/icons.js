@@ -10,17 +10,17 @@ function line(document, x1, y1, x2, y2) {
   return element(document, "line", { x1, y1, x2, y2, "vector-effect": "non-scaling-stroke" });
 }
 
-function rect(document, x, y, width, height, rx = 0.8) {
-  return element(document, "rect", { x, y, width, height, rx, "vector-effect": "non-scaling-stroke" });
+function path(document, d, attributes = {}) {
+  return element(document, "path", { d, "vector-effect": "non-scaling-stroke", ...attributes });
 }
 
-function path(document, d) {
-  return element(document, "path", { d, "vector-effect": "non-scaling-stroke" });
+function filledRect(document, x, y, width, height, rx = 0.8) {
+  return element(document, "rect", { x, y, width, height, rx, fill: "currentColor", stroke: "none" });
 }
 
-function createSvg(document) {
+function createSvg(document, viewBox = "0 0 24 24") {
   const svg = element(document, "svg", {
-    viewBox: "0 0 24 24",
+    viewBox,
     "aria-hidden": "true",
     focusable: "false",
   });
@@ -28,126 +28,146 @@ function createSvg(document) {
   return svg;
 }
 
-function addBadge(svg, document, kind) {
-  if (kind === "plus") {
-    svg.append(line(document, 18, 16, 18, 22), line(document, 15, 19, 21, 19));
-  } else if (kind === "minus") {
-    svg.append(line(document, 15, 19, 21, 19));
+// The former Layout plugin audited ComfyUI-NodeAligner at this fixed GPL-3.0
+// commit. L1 keeps the twelve command SVG shapes that users already learned.
+// Only visual paths are retained: command execution, selection and geometry stay
+// in the unified WorkspaceKit Layout engine.
+// Source commit: 321ec9dcb859404f4b89cbd359ebc2c25ac59146
+const NODEALIGNER_ICON_SPECS = Object.freeze({
+  "workspacekit.layout.align.left": Object.freeze({
+    viewBox: "0 0 1024 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M96 0a32 32 0 0 1 32 32v960a32 32 0 0 1-64 0V32A32 32 0 0 1 96 0z m128 192h448a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32h-448a32 32 0 0 1-32-32v-192a32 32 0 0 1 32-32z m0 384h704a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32h-704a32 32 0 0 1-32-32v-192a32 32 0 0 1 32-32z" }),
+    ]),
+  }),
+  "workspacekit.layout.align.horizontal-center": Object.freeze({
+    viewBox: "0 0 1024 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M477.312 576V448H266.688a32 32 0 0 1-32-32v-192a32 32 0 0 1 32-32h210.624V34.688a34.688 34.688 0 0 1 69.376 0V192h210.624a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32H546.688v128H896a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32H546.688v157.312a34.688 34.688 0 1 1-69.376 0V832H128a32 32 0 0 1-32-32v-192A32 32 0 0 1 128 576h349.312z" }),
+    ]),
+  }),
+  "workspacekit.layout.align.right": Object.freeze({
+    viewBox: "0 0 1024 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M928 0a32 32 0 0 1 32 32v960a32 32 0 0 1-64 0V32a32 32 0 0 1 32-32z m-576 192h448a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32h-448a32 32 0 0 1-32-32v-192a32 32 0 0 1 32-32z m-256 384h704a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32H96a32 32 0 0 1-32-32v-192A32 32 0 0 1 96 576z" }),
+    ]),
+  }),
+  "workspacekit.layout.align.top": Object.freeze({
+    viewBox: "0 0 1170 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M1170.285714 36.571429a36.571429 36.571429 0 0 1-36.571428 36.571428H36.571429a36.571429 36.571429 0 0 1 0-73.142857h1097.142857a36.571429 36.571429 0 0 1 36.571428 36.571429z m-219.428571 146.285714v512a36.571429 36.571429 0 0 1-36.571429 36.571428h-219.428571a36.571429 36.571429 0 0 1-36.571429-36.571428v-512a36.571429 36.571429 0 0 1 36.571429-36.571429h219.428571a36.571429 36.571429 0 0 1 36.571429 36.571429z m-438.857143 0v804.571428a36.571429 36.571429 0 0 1-36.571429 36.571429h-219.428571a36.571429 36.571429 0 0 1-36.571429-36.571428v-804.571428a36.571429 36.571429 0 0 1 36.571429-36.571428h219.428571a36.571429 36.571429 0 0 1 36.571429 36.571429z" }),
+    ]),
+  }),
+  "workspacekit.layout.align.vertical-center": Object.freeze({
+    viewBox: "0 0 1243 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M548.571429 472.356571h146.285714V231.643429a36.571429 36.571429 0 0 1 36.571428-36.571429h219.428572a36.571429 36.571429 0 0 1 36.571428 36.571429v240.713142h179.785143a39.643429 39.643429 0 0 1 0 79.286858H987.428571v240.713142a36.571429 36.571429 0 0 1-36.571428 36.571429h-219.428572a36.571429 36.571429 0 0 1-36.571428-36.571429V551.643429h-146.285714V950.857143a36.571429 36.571429 0 0 1-36.571429 36.571428H292.571429a36.571429 36.571429 0 0 1-36.571429-36.571428V551.643429H76.214857a39.643429 39.643429 0 1 1 0-79.286858H256V73.142857A36.571429 36.571429 0 0 1 292.571429 36.571428h219.428571a36.571429 36.571429 0 0 1 36.571429 36.571428v399.213714z" }),
+    ]),
+  }),
+  "workspacekit.layout.align.bottom": Object.freeze({
+    viewBox: "0 0 1170 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M1170.285714 987.428571a36.571429 36.571429 0 0 0-36.571428-36.571428H36.571429a36.571429 36.571429 0 0 0 0 73.142857h1097.142857a36.571429 36.571429 0 0 0 36.571428-36.571429z m-219.428571-146.285714v-512a36.571429 36.571429 0 0 0-36.571429-36.571428h-219.428571a36.571429 36.571429 0 0 0-36.571429 36.571428v512a36.571429 36.571429 0 0 0 36.571429 36.571429h219.428571a36.571429 36.571429 0 0 0 36.571429-36.571429z m-438.857143 0V36.571429a36.571429 36.571429 0 0 0-36.571429-36.571428h-219.428571a36.571429 36.571429 0 0 0-36.571429 36.571428v804.571428a36.571429 36.571429 0 0 0 36.571429 36.571429h219.428571a36.571429 36.571429 0 0 0 36.571429-36.571429z" }),
+    ]),
+  }),
+  "workspacekit.layout.distribute.horizontal": Object.freeze({
+    viewBox: "0 0 1024 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M96 0a32 32 0 0 1 32 32v960a32 32 0 0 1-64 0V32A32 32 0 0 1 96 0z m832 0a32 32 0 0 1 32 32v960a32 32 0 0 1-64 0V32a32 32 0 0 1 32-32zM384 800v-576a32 32 0 0 1 32-32h192a32 32 0 0 1 32 32v576a32 32 0 0 1-32 32h-192a32 32 0 0 1-32-32z" }),
+    ]),
+  }),
+  "workspacekit.layout.distribute.vertical": Object.freeze({
+    viewBox: "0 0 1170 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M1170.285714 36.571429a36.571429 36.571429 0 0 1-36.571428 36.571428H36.571429a36.571429 36.571429 0 0 1 0-73.142857h1097.142857a36.571429 36.571429 0 0 1 36.571428 36.571429z m0 950.857142a36.571429 36.571429 0 0 1-36.571428 36.571429H36.571429a36.571429 36.571429 0 0 1 0-73.142857h1097.142857a36.571429 36.571429 0 0 1 36.571428 36.571429zM256 365.714286h658.285714a36.571429 36.571429 0 0 1 36.571429 36.571428v219.428572a36.571429 36.571429 0 0 1-36.571429 36.571428h-658.285714a36.571429 36.571429 0 0 1-36.571429-36.571428v-219.428572a36.571429 36.571429 0 0 1 36.571429-36.571428z" }),
+    ]),
+  }),
+  "workspacekit.layout.size.equal-width": Object.freeze({
+    viewBox: "0 0 1088 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M978.24 480a42.688 42.688 0 0 1-42.688 42.688H172.928A42.688 42.688 0 0 1 130.24 480V213.312c0-23.552 19.072-42.624 42.688-42.624h762.624c23.552 0 42.688 19.072 42.688 42.624V480z" }),
+      Object.freeze({ d: "M256.96 734.144c0-14.08 11.456-25.6 25.6-25.6h543.36a25.6 25.6 0 0 1 0 51.2h-543.36a25.6 25.6 0 0 1-25.6-25.6z" }),
+      Object.freeze({ d: "M136.64 745.216a12.8 12.8 0 0 1 0-22.144l184.192-106.368a12.8 12.8 0 0 1 19.2 11.072v212.736a12.8 12.8 0 0 1-19.2 11.072L136.64 745.216zM971.84 745.216a12.8 12.8 0 0 0 0-22.144L787.584 616.704a12.8 12.8 0 0 0-19.2 11.072v212.736a12.8 12.8 0 0 0 19.2 11.072l184.256-106.368z" }),
+    ]),
+  }),
+  "workspacekit.layout.size.equal-min-width": Object.freeze({
+    viewBox: "0 0 280 264",
+    paths: Object.freeze([
+      Object.freeze({ d: "M251.7527001953125 123.7499931640625C251.7527001953125 129.8281931640625 246.8347001953125 134.7554931640625 240.7667001953125 134.7554931640625H44.5036001953125C38.436250195312496 134.7554931640625 33.5177001953125 129.8281931640625 33.5177001953125 123.7499931640625V54.994493164062504C33.5177001953125 48.9224931640625 38.4259401953125 44.0054931640625 44.5036001953125 44.0054931640625H240.7667001953125C246.8287001953125 44.0054931640625 251.7527001953125 48.9224931640625 251.7527001953125 54.994493164062504V123.7499931640625Z" }),
+      Object.freeze({ d: "M66 188.59999C66 184.96999 68.94823 182 72.58824 182H212.424C216.062 181.9999842644 219.012 184.95491 219.012 188.59999C219.012 192.2451 216.062 195.2 212.424 195.2H72.58824C68.94966 195.2 66.00000785379 192.2451 66 188.59999Z" }),
+      Object.freeze({ d: "M33.67635708496094 219.00163010253905C32.344027084960935 219.76823010253906 30.681137084960938 218.80783010253907 30.681137084960938 217.27173010253907V159.53892010253907C30.681137084960938 158.00075510253907 32.34226708496094 157.03627810253906 33.67635708496094 157.79985010253907L83.97753708496094 186.58973010253905C85.31673708496093 187.35623010253906 85.31673708496093 189.28813010253907 83.97753708496094 190.05873010253907L33.67635708496094 219.00163010253905ZM246.32413708496094 157.99836010253907C247.65613708496093 157.23174310253907 249.31913708496094 158.19217710253906 249.31913708496094 159.72832010253907V217.46113010253907C249.31913708496094 218.99923010253906 247.65813708496094 219.96373010253905 246.32413708496094 219.20013010253905L196.02213708496095 190.41023010253906C194.68313708496095 189.64373010253905 194.68313708496095 187.71183010253907 196.02213708496095 186.94123010253907L246.32413708496094 157.99836010253907Z" }),
+    ]),
+  }),
+  "workspacekit.layout.size.equal-height": Object.freeze({
+    viewBox: "0 0 1088 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M572.16 936a42.688 42.688 0 0 1-42.688-42.688V130.688c0-23.616 19.136-42.688 42.688-42.688h266.688c23.552 0 42.624 19.072 42.624 42.688v762.624A42.688 42.688 0 0 1 838.848 936H572.16z" }),
+      Object.freeze({ d: "M318.016 214.72c14.08 0 25.6 11.456 25.6 25.6v543.36a25.6 25.6 0 1 1-51.2 0v-543.36c0-14.144 11.456-25.6 25.6-25.6z" }),
+      Object.freeze({ d: "M306.944 94.4a12.8 12.8 0 0 1 22.144 0l106.368 184.192a12.8 12.8 0 0 1-11.072 19.2H211.648a12.8 12.8 0 0 1-11.072-19.2L306.944 94.4zM306.944 929.6a12.8 12.8 0 0 0 22.144 0l106.368-184.192a12.8 12.8 0 0 0-11.072-19.2H211.648a12.8 12.8 0 0 0-11.072 19.2L306.944 929.6z" }),
+    ]),
+  }),
+  "workspacekit.layout.size.equal-min-height": Object.freeze({
+    viewBox: "0 0 1088 1024",
+    paths: Object.freeze([
+      Object.freeze({ d: "M572.1599848632812 936C548.5840848632813 936 529.4719848632812 916.888 529.4719848632812 893.312V130.688C529.4719848632812 107.072 548.6079848632812 88 572.1599848632812 88H838.8479848632812C862.3999848632812 88 881.4719848632812 107.072 881.4719848632812 130.688V893.312C881.4719848632812 916.863 862.3989848632813 935.965 838.8479848632812 936H572.1599848632812Z" }),
+      Object.freeze({ d: "M318.0159851074219 214.72000122070312C332.0959851074219 214.72000122070312 343.61598510742186 226.1760012207031 343.61598510742186 240.32000122070312V783.6800012207032C343.61598510742186 797.8190012207032 332.15448510742186 809.2800012207031 318.0159851074219 809.2800012207031C303.8774851074219 809.2800012207031 292.41595458982187 797.8190012207032 292.4159851074219 783.6800012207032V240.32000122070312C292.4159851074219 226.1760012207031 303.8719851074219 214.72000122070312 318.0159851074219 214.72000122070312Z" }),
+      Object.freeze({ d: "M447.5076 327.211C442.38877 330.15700000000004 436 326.466 436 320.563V98.70931C436 92.79851 442.38203 89.09225 447.5076 92.02648L640.763 202.659C645.909 205.60500000000002 645.909 213.029 640.763 215.99L447.5076 327.211ZM1264.492 92.78931C1269.6109999999999 89.84338 1276 93.5341 1276 99.43713V321.291C1276 327.201 1269.618 330.908 1264.492 327.974L1071.237 217.341C1066.091 214.39499999999998 1066.091 206.971 1071.237 204.01L1264.492 92.78931Z", transform: "matrix(0 0.999941349029541 -0.999941349029541 0 526.9946627616882 -344.9744281768799)" }),
+    ]),
+  }),
+});
+
+function createNodeAlignerIcon(document, spec) {
+  const svg = createSvg(document, spec.viewBox);
+  svg.classList.add("is-nodealigner-legacy");
+  for (const item of spec.paths) {
+    svg.append(path(document, item.d, {
+      fill: "currentColor",
+      stroke: "none",
+      ...(item.transform ? { transform: item.transform } : {}),
+    }));
   }
+  return svg;
 }
 
-/**
- * Compact alignment icons use the same visual grammar as professional Adobe-like
- * layout tools: a guide/axis plus differently-sized objects. The SVGs are an
- * independent WorkspaceKit implementation; they are not copied Adobe assets.
- */
-export function createLayoutCommandIcon(document = globalThis.document, commandId) {
-  if (!document?.createElementNS) return null;
+function createWorkspaceKitSupplementalIcon(document, commandId) {
   const svg = createSvg(document);
-
+  svg.classList.add("is-workspacekit-supplemental");
   switch (commandId) {
-    case "workspacekit.layout.align.left":
-      svg.append(
-        line(document, 3, 3, 3, 21),
-        rect(document, 6, 5, 11, 4),
-        rect(document, 6, 13, 15, 4),
-      );
-      break;
-    case "workspacekit.layout.align.horizontal-center":
-      svg.append(
-        line(document, 12, 3, 12, 21),
-        rect(document, 6, 5, 12, 4),
-        rect(document, 4, 13, 16, 4),
-      );
-      break;
-    case "workspacekit.layout.align.right":
-      svg.append(
-        line(document, 21, 3, 21, 21),
-        rect(document, 7, 5, 11, 4),
-        rect(document, 3, 13, 15, 4),
-      );
-      break;
-    case "workspacekit.layout.align.top":
-      svg.append(
-        line(document, 3, 3, 21, 3),
-        rect(document, 5, 6, 4, 11),
-        rect(document, 13, 6, 4, 15),
-      );
-      break;
-    case "workspacekit.layout.align.vertical-center":
-      svg.append(
-        line(document, 3, 12, 21, 12),
-        rect(document, 5, 6, 4, 12),
-        rect(document, 13, 4, 4, 16),
-      );
-      break;
-    case "workspacekit.layout.align.bottom":
-      svg.append(
-        line(document, 3, 21, 21, 21),
-        rect(document, 5, 7, 4, 11),
-        rect(document, 13, 3, 4, 15),
-      );
-      break;
-    case "workspacekit.layout.distribute.horizontal":
-      svg.append(
-        line(document, 3, 3, 3, 21),
-        line(document, 21, 3, 21, 21),
-        rect(document, 6, 7, 3, 10),
-        rect(document, 10.5, 5, 3, 14),
-        rect(document, 15, 7, 3, 10),
-      );
-      break;
-    case "workspacekit.layout.distribute.vertical":
-      svg.append(
-        line(document, 3, 3, 21, 3),
-        line(document, 3, 21, 21, 21),
-        rect(document, 7, 6, 10, 3),
-        rect(document, 5, 10.5, 14, 3),
-        rect(document, 7, 15, 10, 3),
-      );
-      break;
     case "workspacekit.layout.spacing.horizontal":
       svg.append(
-        rect(document, 3, 5, 5, 14),
-        rect(document, 16, 5, 5, 14),
-        line(document, 9.5, 12, 14.5, 12),
-        path(document, "M11.5 9.7 9.2 12l2.3 2.3M12.5 9.7l2.3 2.3-2.3 2.3"),
+        filledRect(document, 2, 5, 5, 14, 1),
+        filledRect(document, 17, 5, 5, 14, 1),
+        line(document, 9, 12, 15, 12),
+        path(document, "M11 9.5 8.5 12 11 14.5M13 9.5l2.5 2.5-2.5 2.5", { fill: "none" }),
       );
       break;
     case "workspacekit.layout.spacing.vertical":
       svg.append(
-        rect(document, 5, 3, 14, 5),
-        rect(document, 5, 16, 14, 5),
-        line(document, 12, 9.5, 12, 14.5),
-        path(document, "M9.7 11.5 12 9.2l2.3 2.3M9.7 12.5l2.3 2.3 2.3-2.3"),
+        filledRect(document, 5, 2, 14, 5, 1),
+        filledRect(document, 5, 17, 14, 5, 1),
+        line(document, 12, 9, 12, 15),
+        path(document, "M9.5 11 12 8.5l2.5 2.5M9.5 13l2.5 2.5 2.5-2.5", { fill: "none" }),
       );
-      break;
-    case "workspacekit.layout.size.equal-width":
-      svg.append(rect(document, 3, 5, 15, 5), rect(document, 3, 14, 15, 5));
-      addBadge(svg, document, "plus");
-      break;
-    case "workspacekit.layout.size.equal-min-width":
-      svg.append(rect(document, 3, 5, 15, 5), rect(document, 6, 14, 12, 5));
-      addBadge(svg, document, "minus");
-      break;
-    case "workspacekit.layout.size.equal-height":
-      svg.append(rect(document, 5, 3, 5, 15), rect(document, 14, 3, 5, 15));
-      addBadge(svg, document, "plus");
-      break;
-    case "workspacekit.layout.size.equal-min-height":
-      svg.append(rect(document, 5, 3, 5, 15), rect(document, 14, 6, 5, 12));
-      addBadge(svg, document, "minus");
       break;
     case "workspacekit.layout.size.equal-both":
       svg.append(
-        rect(document, 4, 4, 12, 12),
-        rect(document, 8, 8, 12, 12),
-        path(document, "M4 20h16M20 4v16"),
+        path(document, "M4 4h12v12H4zM7 7v6h6V7z", { fill: "currentColor", "fill-rule": "evenodd", stroke: "none" }),
+        line(document, 5, 20, 19, 20),
+        path(document, "M7.5 17.5 5 20l2.5 2.5M16.5 17.5 19 20l-2.5 2.5", { fill: "none" }),
+        line(document, 20, 5, 20, 15),
+        path(document, "M17.5 7.5 20 5l2.5 2.5M17.5 12.5 20 15l2.5-2.5", { fill: "none" }),
       );
       break;
     default:
-      svg.append(rect(document, 6, 6, 12, 12));
+      svg.append(filledRect(document, 6, 6, 12, 12, 1.5));
   }
-
   return svg;
+}
+
+export function createLayoutCommandIcon(document = globalThis.document, commandId) {
+  if (!document?.createElementNS) return null;
+  const legacySpec = NODEALIGNER_ICON_SPECS[commandId];
+  return legacySpec
+    ? createNodeAlignerIcon(document, legacySpec)
+    : createWorkspaceKitSupplementalIcon(document, commandId);
 }

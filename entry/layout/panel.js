@@ -1,30 +1,15 @@
 import { LAYOUT_COMMANDS } from "./command-registry.js";
 import { createLayoutCommandIcon } from "./icons.js";
 import {
-  isLayoutTopbarEnabled,
+  readLayoutCommandIconSize,
   readLayoutSpacing,
   setLayoutSpacing,
-  setLayoutTopbarEnabled,
 } from "./preferences.js";
+import { PRIMARY_COMMAND_ROWS } from "./presentation-commands.js";
 import { ensureLayoutStyles } from "./styles.js";
 import { t } from "../core/i18n.js";
 
-const PRIMARY_GROUPS = Object.freeze([
-  Object.freeze([
-    "workspacekit.layout.align.left",
-    "workspacekit.layout.align.horizontal-center",
-    "workspacekit.layout.align.right",
-  ]),
-  Object.freeze([
-    "workspacekit.layout.align.top",
-    "workspacekit.layout.align.vertical-center",
-    "workspacekit.layout.align.bottom",
-  ]),
-  Object.freeze([
-    "workspacekit.layout.distribute.horizontal",
-    "workspacekit.layout.distribute.vertical",
-  ]),
-]);
+export { PRIMARY_COMMAND_ROWS } from "./presentation-commands.js";
 
 const SPACING_COMMANDS = Object.freeze([
   "workspacekit.layout.spacing.horizontal",
@@ -78,11 +63,21 @@ function createCommandButton(document, commandId, onPress) {
   return button;
 }
 
-function createDivider(document) {
-  const divider = document.createElement("span");
-  divider.className = "workspacekit-layout-v2-divider";
-  divider.setAttribute("aria-hidden", "true");
-  return divider;
+function focusLayoutDisplaySettings(document) {
+  const reveal = () => {
+    const section = document.querySelector?.('[data-workspacekit-layout-display-settings="true"]');
+    if (!section) return false;
+    section.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    section.classList?.add("workspacekit-layout-settings-focus");
+    globalThis.setTimeout?.(() => section.classList?.remove("workspacekit-layout-settings-focus"), 900);
+    return true;
+  };
+
+  const settingsButton = document.querySelector?.(".workspace2-module-settings");
+  settingsButton?.click?.();
+  queueMicrotask(() => {
+    if (!reveal()) globalThis.setTimeout?.(reveal, 80);
+  });
 }
 
 export function renderLayoutPanel({
@@ -116,29 +111,24 @@ export function renderLayoutPanel({
   const header = ui.createModuleHeader({ title: t("layout.headerTitle") });
   headerHost.append(header.element);
 
-  // Keep the persistent presentation preference out of the command surface.
-  // This row is intentionally quiet; the main panel below behaves like a
-  // professional alignment palette rather than a Settings page.
-  const controls = document.createElement("div");
-  controls.className = "workspacekit-layout-v2-options";
-  const topbarLabel = document.createElement("label");
-  topbarLabel.className = "workspacekit-layout-v2-toggle";
-  const topbarInput = document.createElement("input");
-  topbarInput.type = "checkbox";
-  topbarInput.checked = isLayoutTopbarEnabled(storage);
-  topbarInput.addEventListener("change", () => {
-    setLayoutTopbarEnabled(topbarInput.checked, storage);
-    document.dispatchEvent(new CustomEvent("workspacekit-layout:topbar-enabled", {
-      detail: { enabled: topbarInput.checked },
-    }));
-  });
-  topbarLabel.append(topbarInput, document.createTextNode(t("layout.topbar.enabled")));
-  controls.append(topbarLabel);
-  controlHost.append(controls);
-
   const content = document.createElement("div");
   content.className = "workspacekit-layout-v2 workspacekit-layout-v2-palette";
   const buttons = new Map();
+
+  const spacingInput = document.createElement("input");
+  spacingInput.className = "workspacekit-layout-v2-number workspacekit-layout-v2-spacing-number";
+  spacingInput.type = "number";
+  spacingInput.min = "0";
+  spacingInput.max = "2000";
+  spacingInput.step = "1";
+  spacingInput.value = String(readLayoutSpacing(storage));
+  spacingInput.title = t("layout.spacing.value");
+  spacingInput.setAttribute("aria-label", t("layout.spacing.value"));
+  spacingInput.addEventListener("change", () => {
+    const value = Math.max(0, Math.min(2000, Number(spacingInput.value) || 0));
+    spacingInput.value = String(value);
+    setLayoutSpacing(value, storage);
+  });
 
   const execute = (commandId) => {
     const definition = LAYOUT_COMMANDS[commandId];
@@ -154,67 +144,64 @@ export function renderLayoutPanel({
     queueMicrotask(refresh);
   };
 
-  // Adobe-like primary strip:
-  // [left][center][right] | [top][middle][bottom] | [distribute H][distribute V]
-  const primaryStrip = document.createElement("div");
-  primaryStrip.className = "workspacekit-layout-v2-toolstrip";
-  PRIMARY_GROUPS.forEach((group, index) => {
-    if (index > 0) primaryStrip.append(createDivider(document));
-    const cluster = document.createElement("div");
-    cluster.className = "workspacekit-layout-v2-cluster";
-    for (const id of group) {
-      const button = createCommandButton(document, id, execute);
-      buttons.set(id, button);
-      cluster.append(button);
-    }
-    primaryStrip.append(cluster);
+  // Presentation mode is a persistent preference, not a layout command. Keep a
+  // single discoverable entry here; the full top/selection/pinned configuration
+  // lives in Settings so future Layout commands do not compete for this space.
+  const controls = document.createElement("div");
+  controls.className = "workspacekit-layout-v2-options";
+  const displayModeButton = document.createElement("button");
+  displayModeButton.type = "button";
+  displayModeButton.className = "workspacekit-layout-v2-display-mode";
+  displayModeButton.textContent = t("layout.displayMode");
+  displayModeButton.title = t("layout.displayMode.tooltip");
+  displayModeButton.setAttribute("aria-label", t("layout.displayMode.tooltip"));
+  displayModeButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    focusLayoutDisplaySettings(document);
   });
-  content.append(primaryStrip);
 
-  // Numeric spacing stays visible because it changes command semantics, but the
-  // two actions remain icon-first and adjacent to the value like Adobe panels.
-  const spacingRow = document.createElement("div");
-  spacingRow.className = "workspacekit-layout-v2-row";
-  const spacingLabel = document.createElement("label");
-  spacingLabel.className = "workspacekit-layout-v2-row-label";
-  spacingLabel.textContent = t("layout.spacing.value");
-  const spacingInput = document.createElement("input");
-  spacingInput.className = "workspacekit-layout-v2-number";
-  spacingInput.type = "number";
-  spacingInput.min = "0";
-  spacingInput.max = "2000";
-  spacingInput.step = "1";
-  spacingInput.value = String(readLayoutSpacing(storage));
-  spacingInput.setAttribute("aria-label", t("layout.spacing.value"));
-  spacingInput.addEventListener("change", () => {
-    const value = Math.max(0, Math.min(2000, Number(spacingInput.value) || 0));
-    spacingInput.value = String(value);
-    setLayoutSpacing(value, storage);
-  });
-  const spacingActions = document.createElement("div");
-  spacingActions.className = "workspacekit-layout-v2-cluster";
+  // Fixed spacing is parameterized, so keep its value and two commands together
+  // as one colored control group instead of a third command block below.
+  const spacingGroup = document.createElement("div");
+  spacingGroup.className = "workspacekit-layout-v2-spacing-accent";
+  spacingGroup.dataset.layoutSpacingGroup = "true";
+  spacingGroup.append(spacingInput);
   for (const id of SPACING_COMMANDS) {
     const button = createCommandButton(document, id, execute);
+    button.classList.add("workspacekit-layout-v2-spacing-command");
     buttons.set(id, button);
-    spacingActions.append(button);
+    spacingGroup.append(button);
   }
-  spacingRow.append(spacingLabel, spacingInput, spacingActions);
-  content.append(spacingRow);
+  controls.append(displayModeButton, spacingGroup);
+  controlHost.append(controls);
 
-  const sizeRow = document.createElement("div");
-  sizeRow.className = "workspacekit-layout-v2-row workspacekit-layout-v2-size-row";
-  const sizeLabel = document.createElement("span");
-  sizeLabel.className = "workspacekit-layout-v2-row-label";
-  sizeLabel.textContent = t("layout.section.size");
-  const sizeActions = document.createElement("div");
-  sizeActions.className = "workspacekit-layout-v2-cluster workspacekit-layout-v2-size-actions";
+  // The first eight commands are a permanent 4x2 position-memory matrix.
+  const primaryGrid = document.createElement("div");
+  primaryGrid.className = "workspacekit-layout-v2-primary-grid";
+  PRIMARY_COMMAND_ROWS.forEach((commandIds, rowIndex) => {
+    const row = document.createElement("div");
+    row.className = "workspacekit-layout-v2-primary-row";
+    row.dataset.layoutPrimaryRow = String(rowIndex + 1);
+    for (const id of commandIds) {
+      const button = createCommandButton(document, id, execute);
+      buttons.set(id, button);
+      row.append(button);
+    }
+    primaryGrid.append(row);
+  });
+  content.append(primaryGrid);
+
+  // Size commands form one regular five-column row. Four historical commands use
+  // their original NodeAligner SVG vocabulary; equal-both is a WK supplemental.
+  const sizeGrid = document.createElement("div");
+  sizeGrid.className = "workspacekit-layout-v2-size-grid";
+  sizeGrid.dataset.layoutSizeGrid = "true";
   for (const id of SIZE_COMMANDS) {
     const button = createCommandButton(document, id, execute);
     buttons.set(id, button);
-    sizeActions.append(button);
+    sizeGrid.append(button);
   }
-  sizeRow.append(sizeLabel, sizeActions);
-  content.append(sizeRow);
+  content.append(sizeGrid);
   contentHost.append(content);
 
   function refresh() {
@@ -224,27 +211,30 @@ export function renderLayoutPanel({
       nodes: selection.nodeTargets.length,
       groups: selection.groupTargets.length,
     }));
+    content.style.setProperty(
+      "--workspacekit-layout-command-icon-size",
+      `${readLayoutCommandIconSize(storage)}px`,
+    );
     for (const [id, button] of buttons) {
       const state = controller.state(id);
       button.disabled = !state.enabled;
       button.dataset.commandState = state.enabled ? "available" : "disabled";
       button.setAttribute("aria-disabled", String(!state.enabled));
     }
-    topbarInput.checked = isLayoutTopbarEnabled(storage);
   }
 
   const queueRefresh = () => queueMicrotask(refresh);
   document.addEventListener("click", queueRefresh);
   document.addEventListener("keyup", queueRefresh, true);
   document.addEventListener("pointerup", queueRefresh, true);
-  document.addEventListener("workspacekit-layout:topbar-enabled", queueRefresh);
+  document.addEventListener("workspacekit-layout:presentation-changed", queueRefresh);
   refresh();
 
   return () => {
     document.removeEventListener("click", queueRefresh);
     document.removeEventListener("keyup", queueRefresh, true);
     document.removeEventListener("pointerup", queueRefresh, true);
-    document.removeEventListener("workspacekit-layout:topbar-enabled", queueRefresh);
+    document.removeEventListener("workspacekit-layout:presentation-changed", queueRefresh);
     headerHost.replaceChildren();
     controlHost.replaceChildren();
     contentHost.replaceChildren();

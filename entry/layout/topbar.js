@@ -1,21 +1,16 @@
 import { LAYOUT_COMMANDS } from "./command-registry.js";
 import { createLayoutCommandIcon } from "./icons.js";
-import { isLayoutTopbarEnabled } from "./preferences.js";
+import {
+  isLayoutTopbarEnabled,
+  readLayoutCommandIconSize,
+} from "./preferences.js";
+import { PRIMARY_COMMAND_GROUPS } from "./presentation-commands.js";
 import { ensureLayoutStyles } from "./styles.js";
 import { t } from "../core/i18n.js";
 
-const TOPBAR_COMMANDS = Object.freeze([
-  "workspacekit.layout.align.left",
-  "workspacekit.layout.align.horizontal-center",
-  "workspacekit.layout.align.right",
-  "divider",
-  "workspacekit.layout.align.top",
-  "workspacekit.layout.align.vertical-center",
-  "workspacekit.layout.align.bottom",
-  "divider",
-  "workspacekit.layout.distribute.horizontal",
-  "workspacekit.layout.distribute.vertical",
-]);
+const TOPBAR_ITEMS = Object.freeze(PRIMARY_COMMAND_GROUPS.flatMap((group, index) => (
+  index === 0 ? [...group] : ["divider", ...group]
+)));
 
 function commandLabel(commandId) {
   const definition = LAYOUT_COMMANDS[commandId];
@@ -47,7 +42,7 @@ export function createLayoutTopbar({
     slot.setAttribute("role", "group");
     slot.setAttribute("aria-label", t("layout.title"));
 
-    for (const item of TOPBAR_COMMANDS) {
+    for (const item of TOPBAR_ITEMS) {
       if (item === "divider") {
         const divider = document.createElement("span");
         divider.className = "workspacekit-layout-topbar-divider";
@@ -104,8 +99,13 @@ export function createLayoutTopbar({
 
   function refresh() {
     if (!slot) return;
-    slot.hidden = !isLayoutTopbarEnabled(storage);
-    if (slot.hidden) return;
+    const enabled = isLayoutTopbarEnabled(storage);
+    slot.hidden = !enabled;
+    if (!enabled) return;
+    slot.style.setProperty(
+      "--workspacekit-layout-topbar-icon-size",
+      `${Math.min(20, readLayoutCommandIconSize(storage))}px`,
+    );
     for (const [id, button] of buttons) {
       const state = controller.state(id);
       button.disabled = !state.enabled;
@@ -138,6 +138,16 @@ export function createLayoutTopbar({
     queueMicrotask(refresh);
   }
 
+  function onPresentationChanged() {
+    if (!isLayoutTopbarEnabled(storage)) {
+      slot?.remove();
+      refresh();
+      return;
+    }
+    installWhenReady();
+  }
+
+  // Compatibility for an older unified Layout panel that emitted the v2 event.
   function onEnabled(event) {
     const enabled = event?.detail?.enabled !== false;
     if (!enabled) {
@@ -151,6 +161,7 @@ export function createLayoutTopbar({
   document.addEventListener("click", onRefreshIntent);
   document.addEventListener("keyup", onRefreshIntent, true);
   document.addEventListener("pointerup", onRefreshIntent, true);
+  document.addEventListener("workspacekit-layout:presentation-changed", onPresentationChanged);
   document.addEventListener("workspacekit-layout:topbar-enabled", onEnabled);
 
   function dispose() {
@@ -162,6 +173,7 @@ export function createLayoutTopbar({
     document.removeEventListener("click", onRefreshIntent);
     document.removeEventListener("keyup", onRefreshIntent, true);
     document.removeEventListener("pointerup", onRefreshIntent, true);
+    document.removeEventListener("workspacekit-layout:presentation-changed", onPresentationChanged);
     document.removeEventListener("workspacekit-layout:topbar-enabled", onEnabled);
   }
 

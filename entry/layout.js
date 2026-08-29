@@ -1,6 +1,7 @@
 import { app } from "../../scripts/app.js";
 import { registerOrQueueBuiltinProvider } from "./integrations/builtin-provider-registration.js";
 import { createLayoutController } from "./layout/controller.js";
+import { createLayoutFloatingToolbar } from "./layout/floating-toolbar.js";
 import { migrateLegacyLayoutPreferences } from "./layout/preferences.js";
 import { createLayoutProvider } from "./layout/provider.js";
 import { createLayoutTopbar } from "./layout/topbar.js";
@@ -11,6 +12,7 @@ const LEGACY_STANDALONE_PANEL_ID = "workspacekit-layout-panel";
 let controller = null;
 let provider = null;
 let topbar = null;
+let floatingToolbar = null;
 
 function suppressLegacyStandalonePanel() {
   try { app.extensionManager?.unregisterSidebarTab?.(LEGACY_STANDALONE_PANEL_ID); } catch {}
@@ -48,6 +50,12 @@ app.registerExtension({
       controller,
     });
     topbar.installWhenReady();
+    floatingToolbar ??= createLayoutFloatingToolbar({
+      document,
+      storage: globalThis.localStorage,
+      controller,
+    });
+    floatingToolbar.install();
 
     provider ??= createLayoutProvider({ controller });
     const result = registerOrQueueBuiltinProvider(provider);

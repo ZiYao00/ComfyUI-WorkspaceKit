@@ -1,6 +1,9 @@
+import { createLayoutSettingsRows } from "../layout/settings-section.js";
+
 // Builds the Settings dialog's content sections.  It receives all values
 // and mutations from entry.js, so it cannot own localStorage, node-cache,
-// glass-overlay, or sidebar lifecycle behavior.
+// glass-overlay, or sidebar lifecycle behavior. Feature-owned settings rows may
+// encapsulate their own persistence inside that feature domain.
 export function createSettingsDialogSections({
   document,
   t,
@@ -28,6 +31,7 @@ export function createSettingsDialogSections({
   // Same rolling-out guard: an older entry.js must still build this dialog.
   isTopbarSaveEnabled = null,
   setTopbarSaveEnabled = () => {},
+  layoutSettingsStorage = globalThis.localStorage,
   moduleShortcutOptions,
   groupPointerShortcutOptions,
   workflowRecentLimit,
@@ -181,9 +185,21 @@ export function createSettingsDialogSections({
         return row;
       }),
     ]);
+    const layoutSettingsRows = createLayoutSettingsRows({
+      document,
+      storage: layoutSettingsStorage,
+      t,
+      settingsHelp,
+      settingsSelect,
+      settingsRange,
+      settingsActionButton,
+    });
     const panelDisplay = settingsSection(t("settings.panelDisplay"), [
       settingsCheckbox(t("settings.statusHelp"), isStatusHelpEnabled(), setStatusHelpEnabled),
+      settingsHelp(t("settings.layoutPresentationTitle")),
+      ...layoutSettingsRows,
     ]);
+    if (panelDisplay?.dataset) panelDisplay.dataset.workspacekitLayoutDisplaySettings = "true";
     // Compatibility alias for a stale entry.js that still expects `integrations`.
     const integrations = panelDisplay;
 

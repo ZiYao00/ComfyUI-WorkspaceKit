@@ -27,7 +27,7 @@ WorkspaceKit migration scope:
 - `node_info.js` was the approved GPL baseline copied into the former `ComfyUI-WorkspaceKit-Layout` repository on 2026-07-22.
 - The former Layout path `web/legacy/nodealigner/node_info.js` is a modified GPL-derived compatibility implementation covering the legacy toolbar/selection shell, six alignment actions, horizontal/vertical distribution, and equal-size behavior.
 - On 2026-07-24, Layout delegated the six alignment and two distribution geometry calculations to its own `web/core/geometry-service.js` while the legacy compatibility layer continued applying mutations.
-- During single-plugin migration, any retained derivative moves under `entry/layout/legacy/nodealigner/`; it remains GPL-derived and must keep this fixed commit/source record until that responsibility is independently replaced and verified.
+- During single-plugin migration, behavioral legacy compatibility code is not reintroduced into the active Layout engine. L1-A1/A1.1 retain the twelve familiar command SVG path shapes from the audited baseline in `entry/layout/icons.js`: six alignment, two distribution, and four max/min width/height commands. Those paths remain GPL-derived from the fixed commit above, are recolored through `currentColor`, and share the unified WorkspaceKit command implementation. Fixed-spacing and equal-both icons did not exist in that historical set and are WorkspaceKit-owned supplemental SVGs.
 
 Required preservation: upstream copyright notice, GPL-3.0 terms, fixed commit, copied/adapted source scope, local destination, and dated modification record.
 

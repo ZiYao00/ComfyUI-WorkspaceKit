@@ -24,6 +24,9 @@ export function createSettingsDialogSections({
   // isolated contract caller while the status-help setting is rolling out.
   isStatusHelpEnabled = () => true,
   setStatusHelpEnabled = () => {},
+  // Same rolling-out guard: an older entry.js must still build this dialog.
+  isTopbarSaveEnabled = null,
+  setTopbarSaveEnabled = () => {},
   moduleShortcutOptions,
   groupPointerShortcutOptions,
   workflowRecentLimit,
@@ -82,7 +85,13 @@ export function createSettingsDialogSections({
         onChange: setWorkflowRecentLimit,
       }),
       settingsHelp(t("settings.recentWorkflowsHelp")),
-    ]);
+      // Omitted entirely rather than shown unchecked when entry.js has not wired
+      // the control yet: a dead switch is worse than an absent one.
+      typeof isTopbarSaveEnabled === "function"
+        ? settingsCheckbox(t("settings.topbarSaveButton"), isTopbarSaveEnabled(), setTopbarSaveEnabled)
+        : null,
+      typeof isTopbarSaveEnabled === "function" ? settingsHelp(t("settings.topbarSaveButtonHelp")) : null,
+    ].filter(Boolean));
     const templateSettings = settingsSection(t("settings.templateSettings"), [
       settingsCheckbox(t("settings.altCOpenTemplates"), isAltCOpenTemplatesEnabled(), setAltCOpenTemplatesEnabled),
       settingsHelp(t("settings.altCOpenTemplatesHelp")),

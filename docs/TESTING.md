@@ -1,5 +1,86 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-28 - Top-bar Save button
+
+- Backup before the source change:
+  `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-topbar-save-button-20260828-222728.zip`
+  (22.1 MB, SHA-256 `B43B6EE6267D58099A265CD91047B636CF78E8C5EA65D84E5E76E5AD90CFBC84`).
+- Frontend surveyed at `comfyui-frontend-package==1.51.9`. The top bar mounts
+  `app.menu.element` into `[data-testid="legacy-topbar-container"]` and reveals
+  that container once it finds a non-empty grandchild, so a slot appended to
+  `app.menu.element` both shows up and travels with a remount. The only
+  extension field for the top bar, `topbarBadges`, renders a static text badge
+  (`{text, label, variant, tooltip}`) with no command, which is why the button
+  joins the legacy row instead. `Comfy.SaveWorkflow` exists as a command with
+  `icon: "pi pi-save"` and is reachable from the menubar, the workflow-tab
+  context menu and Ctrl+S, but the top bar carries no Save button of its own.
+- `ComfyButtonGroup.update()` calls `replaceChildren()` over its own element, so
+  the slot is deliberately a sibling of the three native groups rather than a
+  child of one. The sibling `ComfyUI-WorkspaceKit-Layout` plugin inserts before
+  the settings group, which cannot displace a last child.
+- Contracts: `scripts/test-topbar-save-button.mjs` (new) covers placement,
+  the re-assert budget, enabled/dirty state, the default-on preference, entry.js
+  wiring, the Settings row, locale parity and the stylesheet. It also drives the
+  real controller over `scripts/lib/topbar-dom-stub.mjs`, a dependency-free DOM
+  stub whose MutationObserver delivers synchronously so re-entrancy shows up as
+  a stack overflow rather than a hang.
+- **Bug found by that stubbed run, before any live test:** removing the slot is
+  itself a `childList` mutation, so the last-place observer immediately put the
+  button back and the Settings switch looked broken. Fixed by gating `placeSlot`
+  on the preference and by disconnecting the observer on disable; the test now
+  pins it by appending a neighbour after switching off.
+- Suite: 102 JavaScript contracts, 8 Python contracts, release-version check
+  `0.2.6`, and the module-goal syntax guard over 126 frontend files, all green.
+
+### Real-page acceptance (`http://127.0.0.1:8188/`)
+
+`:8190` was down, so acceptance ran against the main install, whose
+`custom_nodes/ComfyUI-WorkspaceKit` is a symlink to this repository. That turned
+out to be stronger evidence than the isolated package: its top bar carries
+rgthree, Crystools' monitors and the Layout plugin's ten buttons, so the row was
+genuinely crowded. Screenshots: `.dev-docs/artifacts/topbar-save-button-20260828-*.png`.
+
+- Placement: our slot is child **8 of 8** in `app.menu.element`, to the right of
+  `rgthree-comfybar-top-button-group`, the Crystools monitor container and
+  `workspacekit-layout-top-toolbar-group`, and outside every native group.
+- Defence, measured with a 60 ms settle because a real MutationObserver is a
+  microtask (a synchronous check reported false negatives): one foreign
+  `append` → still last; twelve appends in one burst (21 children) → still last;
+  an `insertBefore` like the Layout plugin's → still last, no rewrite. The probe
+  removed all 14 elements it added and the row returned to 8 children.
+- Button: 30x30, identical to the Layout plugin's buttons, transparent
+  background, colour inherited from the theme (`rgb(127,132,156)`).
+- Glyph: `pi pi-save` resolved through the `primeicons` font family; a
+  pixel-level render of the element screenshot shows the floppy-disk outline.
+
+#### Two defects found only by the live run
+
+1. **The button was clipped to 22px of its 30px.** ComfyUI's legacy
+   `comfyui-button-group` contributes `overflow:hidden` and `comfyui-button`
+   contributes `flex:1`, so in a top bar already at capacity the flex row shrank
+   the slot and cut the glyph. Fixed by dropping both legacy classes and pinning
+   `flex: 0 0 auto` plus `overflow: visible`; the container-visibility check keys
+   off a non-empty grandchild, not a class name, so nothing was lost. Re-measured
+   at 30x30 with `clipped: false`.
+2. **The dot stayed dark on a workflow that had never been saved.** The active
+   workflow reported `isModified: false` while ComfyUI marked the browser title
+   `*Unsaved Workflow`, because the real signal there is
+   `isTemporary: true` / `isPersisted: false`. Reading only `isModified` left the
+   indicator off for exactly the workflow that most needed saving. Fixed by
+   adding `isOfficialWorkflowTemporary()` to the workflow adapter and folding it
+   into the dirty rule; the dot and the `保存工作流（有未保存的改动）` tooltip
+   now both appear on that workflow.
+
+- Preference: with `workspace2.topbar.save.enabled = "0"` a reload produced
+  seven children, no slot and no injected stylesheet — nothing is built at all —
+  while the extension and its sidebar entry stayed healthy. Removing the key
+  restored the button on the next reload, confirming default-on.
+- **Deliberately not exercised:** the click itself. The live page held a real
+  unsaved workflow, and firing `Comfy.SaveWorkflow` would have written to the
+  user's own file. The save path is covered by the stubbed run (including the
+  double-click guard) and delegates to the same command as Ctrl+S; a human click
+  on a scratch workflow is still the outstanding check.
+
 ## 2026-08-19 - Shared active-tab highlight and curved panel connection
 
 - Backup before the source change:

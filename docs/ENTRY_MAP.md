@@ -134,16 +134,20 @@ Key: `renderPanel` (L10157), `renderCanvasGroupsPanel` (L10443), `renderTemplate
 `renderNodesPanel` (L10850), `showNodePreview` (L10939), `openNodeContextMenu` (L11151),
 `renderFavoriteGroupFolder` (L11550), `renderEssentialsNodeSection` (L11739), `showFallbackPanel` (L11855).
 
-### Sidebar registration, remount recovery & extension bootstrap — L7740–8047
-Registers the ComfyUI sidebar tab, remount recovery, context-menu ordering, and
-the `app.registerExtension` composition root with staged `setup()`.
-Key: `registerWorkspace2SidebarTab` (L7740), `installWorkspace2SidebarIcon` (L7769),
-`recoverWorkspace2SidebarAfterRemount` (L7820), `setupWorkspace2ContextMenuOrdering` (L7860),
-`app.registerExtension({...})` (L7916), staged `setup()` (L7982).
-The sidebar entry now renders a local single-colour SVG mask from the Icon Kit;
-`installWorkspace2SidebarIcon` replaced the former emoji-overlay function of a
-similar name. The `icon: "pi pi-sitemap"` in the registration call is a required
-class-string fallback for ComfyUI's `registerSidebarTab()`, not the visible icon.
+### Sidebar registration, remount recovery & extension bootstrap — L8562–8950
+Registers the ComfyUI sidebar tab, remount recovery, context-menu ordering, the
+top-bar Save button, and the `app.registerExtension` composition root with
+staged `setup()`.
+Key: `registerWorkspace2SidebarTab` (L8562), `installWorkspace2SidebarIcon` (L8591),
+`installWorkspaceTopbarSaveButton` (L8655), `recoverWorkspace2SidebarAfterRemount` (L8698),
+`setupWorkspace2ContextMenuOrdering` (L8738), `app.registerExtension({...})` (L8795).
+The sidebar entry draws the 🧩 marker as a colour glyph through a `::before`
+rule; `installWorkspace2SidebarIcon` no longer renders the Icon Kit's
+single-colour mask, because a `currentColor` mask was indistinguishable from the
+native icons around it. The `icon: "pi pi-sitemap"` in the registration call is a
+required class-string fallback for ComfyUI's `registerSidebarTab()`, not the
+visible icon. `installWorkspaceTopbarSaveButton` only wires accessors; the
+placement and state rules live in `entry/ui/topbar-save-button.js`.
 
 ---
 

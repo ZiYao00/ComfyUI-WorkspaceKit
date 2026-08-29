@@ -15,6 +15,12 @@ import {
   WORKSPACEKIT_MENU_MARK,
   planCanvasMenuOrder,
 } from "./ui/canvas-menu-ordering.js?v=20260807_canvas_menu_ordering_r1";
+import {
+  TOPBAR_SAVE_COMMAND_ID,
+  TOPBAR_SAVE_ENABLED_KEY,
+  createTopbarSaveButton,
+  isTopbarSaveButtonEnabled,
+} from "./ui/topbar-save-button.js?v=20260828_topbar_save_r1";
 import { fetchJson, postJson } from "./core/api.js";
 import { createWorkspaceStartupStageRunner } from "./core/startup-stage.js?v=20260724_startup_stage_isolation_r1";
 import {
@@ -110,6 +116,8 @@ import {
   getOfficialWorkflowByPath,
   getOfficialWorkflowStore,
   getOpenOfficialWorkflows,
+  isOfficialWorkflowModified,
+  isOfficialWorkflowTemporary,
   loadOfficialWorkflow,
   saveOfficialWorkflow,
   subscribeOfficialWorkflowStore,
@@ -402,6 +410,7 @@ const workspaceState = {
   panelHostDispose: null,
   claimedProviderIds: new Set(),
   sidebarRegistered: false,
+  topbarSaveButton: null,
   startup: {
     lastStartedStage: "",
     lastCompletedStage: "",
@@ -1505,6 +1514,19 @@ function setWorkspacePanelIntegrationsEnabled(checked) {
 function isWorkspaceStatusHelpEnabled() { return localStorage.getItem(WORKSPACE2_STATUS_HELP_ENABLED_KEY) !== "0"; }
 function setWorkspaceStatusHelpEnabled(checked) { localStorage.setItem(WORKSPACE2_STATUS_HELP_ENABLED_KEY, checked ? "1" : "0"); }
 
+// Default-on, per the requested behaviour. The top bar is shared real estate,
+// so the switch must take effect immediately rather than on the next refresh.
+function isWorkspaceTopbarSaveEnabled() {
+  return isTopbarSaveButtonEnabled((key) => localStorage.getItem(key));
+}
+
+function setWorkspaceTopbarSaveEnabled(checked) {
+  const enabled = checked !== false;
+  localStorage.setItem(TOPBAR_SAVE_ENABLED_KEY, enabled ? "1" : "0");
+  workspaceState.topbarSaveButton?.setEnabled(enabled);
+  return enabled;
+}
+
 function isElementVisible(element) {
   if (!(element instanceof HTMLElement) || !element.isConnected) {
     return false;
@@ -1688,6 +1710,8 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
   setPanelIntegrationsEnabled: setWorkspacePanelIntegrationsEnabled,
   isStatusHelpEnabled: isWorkspaceStatusHelpEnabled,
   setStatusHelpEnabled: setWorkspaceStatusHelpEnabled,
+  isTopbarSaveEnabled: isWorkspaceTopbarSaveEnabled,
+  setTopbarSaveEnabled: setWorkspaceTopbarSaveEnabled,
   moduleShortcutOptions,
   groupPointerShortcutOptions,
   workflowRecentLimit,
@@ -8625,6 +8649,43 @@ function installWorkspace2SidebarIcon() {
   markButton();
 }
 
+// ComfyUI exposes no extension field for a clickable top-bar control, so the
+// button joins the legacy command row that the frontend keeps for `app.menu`.
+// See entry/ui/topbar-save-button.js for why the slot sits outside the native
+// button groups and why it re-asserts last place.
+function installWorkspaceTopbarSaveButton() {
+  if (!workspaceState.topbarSaveButton) {
+    workspaceState.topbarSaveButton = createTopbarSaveButton({
+      document,
+      // Resolved on every call: `app.menu` is a legacy surface that a future
+      // frontend may drop, and a missing menu must leave the button absent
+      // rather than throw during startup.
+      getMenuElement: () => app.menu?.element ?? null,
+      hasActiveWorkflow: () => Boolean(getActiveOfficialWorkflow(app)),
+      isActiveWorkflowModified: () => isOfficialWorkflowModified(getActiveOfficialWorkflow(app)),
+      isActiveWorkflowTemporary: () => isOfficialWorkflowTemporary(getActiveOfficialWorkflow(app)),
+      saveActiveWorkflow: () => executeOfficialWorkflowCommand(TOPBAR_SAVE_COMMAND_ID),
+      translate: t,
+      isEnabled: isWorkspaceTopbarSaveEnabled,
+      onError: (error) => console.warn("[Workspace2] top-bar save failed:", error),
+      requestFrame: (callback) => window.requestAnimationFrame(callback),
+      scheduleQuiet: (callback, delay) => window.setTimeout(callback, delay),
+    });
+  }
+
+  const button = workspaceState.topbarSaveButton;
+  button.installWhenReady();
+
+  if (installWorkspaceTopbarSaveButton.ready) return;
+  installWorkspaceTopbarSaveButton.ready = true;
+
+  // The dirty dot follows the same signal the panel's unsaved indicator uses.
+  // Switching tabs changes the active workflow without emitting graphChanged,
+  // so the store subscription is the other half of the refresh.
+  app.api?.addEventListener?.("graphChanged", () => button.refresh());
+  subscribeOfficialWorkflowStore(app, () => button.refresh());
+}
+
 function officialSidebarTabIds() {
   const getSidebarTabs = app.extensionManager?.getSidebarTabs;
   // An unavailable store API is not evidence that the tab was removed.  The
@@ -8860,6 +8921,7 @@ app.registerExtension({
     });
     await runWorkspaceStartupStage("shortcuts", () => setupWorkspaceShortcuts());
     await runWorkspaceStartupStage("context-menu-ordering", () => setupWorkspace2ContextMenuOrdering());
+    await runWorkspaceStartupStage("topbar-save-button", () => installWorkspaceTopbarSaveButton());
     await runWorkspaceStartupStage("workflow-dirty-tracking", () => setupWorkflowDirtyTracking());
     await runWorkspaceStartupStage("official-workflow-sync", () => setupOfficialWorkflowStateSync());
     await runWorkspaceStartupStage("canvas-groups", () => {

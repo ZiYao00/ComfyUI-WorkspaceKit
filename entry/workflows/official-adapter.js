@@ -30,6 +30,20 @@ export function isOfficialWorkflowModified(workflow) {
 }
 
 /**
+ * True while a workflow has no file on disk yet.
+ *
+ * ComfyUI reports `isModified: false` for a freshly created workflow even though
+ * it marks the browser title with `*`, so a "needs saving" indicator that reads
+ * only `isModified` stays dark on the one workflow that has never been saved at
+ * all. `isPersisted` is checked explicitly against `false` so a frontend that
+ * does not expose it falls back to `isTemporary` instead of reporting unsaved.
+ */
+export function isOfficialWorkflowTemporary(workflow) {
+  if (!workflow) return false;
+  return workflow.isTemporary === true || workflow.isPersisted === false;
+}
+
+/**
  * Load persisted content without changing the official active workflow.
  *
  * ComfyUI's workflow service performs the active-workflow transition from

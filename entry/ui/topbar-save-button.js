@@ -29,7 +29,7 @@
 export const TOPBAR_SAVE_ENABLED_KEY = "workspace2.topbar.save.enabled";
 export const TOPBAR_SAVE_SLOT_CLASS = "workspacekit-topbar-save-slot";
 export const TOPBAR_SAVE_BUTTON_CLASS = "workspacekit-topbar-save-button";
-export const TOPBAR_SAVE_DOT_CLASS = "workspacekit-topbar-save-dot";
+export const TOPBAR_SAVE_LABEL_CLASS = "workspacekit-topbar-save-label";
 export const TOPBAR_SAVE_COMMAND_ID = "Comfy.SaveWorkflow";
 
 // The user asked for ComfyUI's own save glyph. PrimeIcons ships with the
@@ -137,13 +137,15 @@ export function ensureTopbarSaveStyles(doc) {
   const style = doc.createElement("style");
   style.id = STYLE_ID;
   style.textContent = `
-    .${TOPBAR_SAVE_SLOT_CLASS} { display: inline-flex; flex: 0 0 auto; align-items: center; overflow: visible; min-width: 30px; min-height: 30px; margin-inline: 4px; }
+    .${TOPBAR_SAVE_SLOT_CLASS} { display: inline-flex; flex: 0 0 auto; align-items: center; overflow: visible; min-width: 82px; min-height: 32px; margin-inline: 4px; }
     .${TOPBAR_SAVE_SLOT_CLASS}[hidden] { display: none !important; }
-    .${TOPBAR_SAVE_BUTTON_CLASS} { position: relative; appearance: none; box-sizing: border-box; display: grid; flex: 0 0 auto; place-items: center; width: 30px; min-width: 30px; height: 30px; min-height: 30px; margin: 0; padding: 5px; border: 0 !important; border-radius: 6px; background: transparent !important; box-shadow: none !important; color: var(--fg-color, var(--p-text-color, #ddd)); cursor: pointer; }
-    .${TOPBAR_SAVE_BUTTON_CLASS}:not(:disabled):hover { background: var(--comfy-menu-hover-bg, var(--p-list-option-hover-background, rgba(255, 255, 255, 0.075))) !important; }
+    .${TOPBAR_SAVE_BUTTON_CLASS} { position: relative; appearance: none; box-sizing: border-box; display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px; width: auto; min-width: 82px; height: 32px; min-height: 32px; margin: 0; padding: 1px 16px; border: 0 !important; border-radius: 8px; background: var(--secondary-background, var(--comfy-menu-bg, rgba(255, 255, 255, 0.075))) !important; box-shadow: none !important; color: var(--base-foreground, var(--fg-color, var(--p-text-color, #ddd))); font-size: 14px; font-weight: 300; line-height: 20px; white-space: nowrap; cursor: pointer; transition: color 0.1s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.1s cubic-bezier(0.4, 0, 0.2, 1); }
+    .${TOPBAR_SAVE_BUTTON_CLASS}:not(:disabled):hover { background: var(--secondary-background-hover, var(--comfy-menu-hover-bg, var(--p-list-option-hover-background, rgba(255, 255, 255, 0.12)))) !important; }
+    .${TOPBAR_SAVE_BUTTON_CLASS}[data-dirty="true"] { background: var(--primary-background, var(--p-primary-color, #0b8ce9)) !important; }
+    .${TOPBAR_SAVE_BUTTON_CLASS}[data-dirty="true"]:not(:disabled):hover { background: var(--primary-background-hover, var(--p-primary-hover-background, #0876c3)) !important; }
     .${TOPBAR_SAVE_BUTTON_CLASS}:disabled { cursor: default; opacity: 0.42; }
-    .${TOPBAR_SAVE_BUTTON_CLASS} > i { display: block; font-size: 16px; line-height: 1; }
-    .${TOPBAR_SAVE_DOT_CLASS} { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--p-primary-color, #4ea1ff); pointer-events: none; }
+    .${TOPBAR_SAVE_BUTTON_CLASS} > i { display: block; flex: 0 0 auto; font-size: 16px; line-height: 1; }
+    .${TOPBAR_SAVE_LABEL_CLASS} { overflow: hidden; text-overflow: ellipsis; }
   `;
   doc.head.append(style);
 }
@@ -169,7 +171,7 @@ export function createTopbarSaveButton({
   const t = typeof translate === "function" ? translate : (key) => key;
   let slot = null;
   let button = null;
-  let dot = null;
+  let labelElement = null;
   let observer = null;
   let observedParent = null;
   let saving = false;
@@ -192,10 +194,9 @@ export function createTopbarSaveButton({
     const icon = doc.createElement("i");
     icon.className = TOPBAR_SAVE_ICON_CLASS;
     icon.setAttribute("aria-hidden", "true");
-    dot = doc.createElement("span");
-    dot.className = TOPBAR_SAVE_DOT_CLASS;
-    dot.hidden = true;
-    button.append(icon, dot);
+    labelElement = doc.createElement("span");
+    labelElement.className = TOPBAR_SAVE_LABEL_CLASS;
+    button.append(icon, labelElement);
     button.addEventListener("click", () => { void runSave(); });
     slot.append(button);
     return slot;
@@ -225,10 +226,12 @@ export function createTopbarSaveButton({
     });
     button.disabled = state.disabled;
     button.setAttribute("aria-disabled", String(state.disabled));
+    button.dataset.dirty = String(state.dirty);
+    button.dataset.busy = String(state.busy);
     const label = state.dirty ? t("topbar.saveUnsaved") : t("topbar.save");
     button.title = label;
     button.setAttribute("aria-label", label);
-    if (dot) dot.hidden = !state.dirty;
+    if (labelElement) labelElement.textContent = t("topbar.saveLabel");
   }
 
   // Runs on our own writes too, so it must be cheap and must not write when the

@@ -4,9 +4,9 @@ import {
   REASSERT_BURST_LIMIT,
   TOPBAR_SAVE_BUTTON_CLASS,
   TOPBAR_SAVE_COMMAND_ID,
-  TOPBAR_SAVE_DOT_CLASS,
   TOPBAR_SAVE_ENABLED_KEY,
   TOPBAR_SAVE_ICON_CLASS,
+  TOPBAR_SAVE_LABEL_CLASS,
   TOPBAR_SAVE_SLOT_CLASS,
   createReassertBudget,
   createTopbarSaveButton,
@@ -136,7 +136,7 @@ assert.ok(REASSERT_BURST_LIMIT > 1, "one write per burst would lose a legitimate
     bar.legacyContainer.append(bar.menuElement);
     assert.equal(bar.menuElement.lastElementChild, slot, "a remount must not strand the slot");
 
-    // State: dirty dot and disabled rule.
+    // State: dirty label and disabled rule.
     const button = slot.children[0];
     assert.ok(button.classList.contains(TOPBAR_SAVE_BUTTON_CLASS));
     assert.ok(
@@ -144,20 +144,21 @@ assert.ok(REASSERT_BURST_LIMIT > 1, "one write per burst would lose a legitimate
       "the button must not inherit the legacy flex:1 that let the row squeeze it",
     );
     assert.equal(button.children[0].className, TOPBAR_SAVE_ICON_CLASS, "ComfyUI's own save glyph");
-    const dot = button.children[1];
-    assert.ok(dot.classList.contains(TOPBAR_SAVE_DOT_CLASS));
-    assert.equal(dot.hidden, true, "a clean workflow shows no dot");
+    const label = button.children[1];
+    assert.ok(label.classList.contains(TOPBAR_SAVE_LABEL_CLASS));
+    assert.equal(label.textContent, "topbar.saveLabel", "the visible label stays short");
+    assert.equal(button.children.length, 2, "the primary dirty treatment replaces the redundant dot");
     assert.equal(button.disabled, false);
 
     activeWorkflow.isModified = true;
     controller.refresh();
-    assert.equal(dot.hidden, false, "an edited workflow must show the dot");
+    assert.equal(button.dataset.dirty, "true", "an edited workflow must use primary Save treatment");
     assert.equal(button.title, "topbar.saveUnsaved");
 
     activeWorkflow = null;
     controller.refresh();
     assert.equal(button.disabled, true, "no active workflow means nothing to save");
-    assert.equal(dot.hidden, true);
+    assert.equal(button.dataset.dirty, "false");
 
     // Clicking must delegate to the injected save, and must not double-fire.
     activeWorkflow = { isModified: true };
@@ -380,7 +381,7 @@ const [zh, en] = await Promise.all([
   readFile(new URL("../entry/locales/zh-CN.json", import.meta.url), "utf8").then(JSON.parse),
   readFile(new URL("../entry/locales/en-US.json", import.meta.url), "utf8").then(JSON.parse),
 ]);
-for (const key of ["settings.topbarSaveButton", "settings.topbarSaveButtonHelp", "topbar.save", "topbar.saveUnsaved"]) {
+for (const key of ["settings.topbarSaveButton", "settings.topbarSaveButtonHelp", "topbar.save", "topbar.saveLabel", "topbar.saveUnsaved"]) {
   assert.ok(zh[key], `zh-CN is missing ${key}`);
   assert.ok(en[key], `en-US is missing ${key}`);
 }
@@ -396,11 +397,11 @@ assert.ok(
   !/\/\*/.test(styles.slice(styles.indexOf("style.textContent = `"), styles.indexOf("`;\n  doc.head.append"))),
   "no CSS comments inside the template literal: a backtick there ends the string and node --check misses it",
 );
-for (const className of [TOPBAR_SAVE_SLOT_CLASS, TOPBAR_SAVE_BUTTON_CLASS, TOPBAR_SAVE_DOT_CLASS]) {
+for (const className of [TOPBAR_SAVE_SLOT_CLASS, TOPBAR_SAVE_BUTTON_CLASS, TOPBAR_SAVE_LABEL_CLASS]) {
   assert.ok(styles.includes(className), `the stylesheet must cover ${className}`);
 }
 // The live top bar is a flex row that was already at capacity, so both the slot
-// and the button have to refuse to shrink or the 30px button gets clipped.
+// and the button have to refuse to shrink or the labelled 32px button gets clipped.
 // Matched per line: the selectors interpolate the class names, so a brace scan
 // would stop at the `}` closing `${...}` rather than at the rule's own.
 {
@@ -414,7 +415,11 @@ for (const className of [TOPBAR_SAVE_SLOT_CLASS, TOPBAR_SAVE_BUTTON_CLASS, TOPBA
   assert.match(slotRule, /flex: 0 0 auto/, "the slot must not shrink in a full top bar");
   assert.match(slotRule, /overflow: visible/, "the slot must not clip its own button");
   assert.match(buttonRule, /flex: 0 0 auto/, "the button must not shrink either");
-  assert.match(buttonRule, /width: 30px/);
+  assert.match(buttonRule, /min-width: 82px/);
+  assert.match(buttonRule, /height: 32px/);
+  assert.match(buttonRule, /border-radius: 8px/);
 }
+
+assert.match(styles, /\[data-dirty="true"\]/, "unsaved work must receive the primary-action treatment");
 
 console.log("Top-bar save button contract passed.");

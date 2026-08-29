@@ -8679,7 +8679,7 @@ function installWorkspaceTopbarSaveButton() {
   if (installWorkspaceTopbarSaveButton.ready) return;
   installWorkspaceTopbarSaveButton.ready = true;
 
-  // The dirty dot follows the same signal the panel's unsaved indicator uses.
+  // The primary Save treatment follows the same signal the panel's unsaved indicator uses.
   // Switching tabs changes the active workflow without emitting graphChanged,
   // so the store subscription is the other half of the refresh.
   app.api?.addEventListener?.("graphChanged", () => button.refresh());

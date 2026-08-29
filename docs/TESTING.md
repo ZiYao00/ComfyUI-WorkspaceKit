@@ -81,6 +81,20 @@ genuinely crowded. Screenshots: `.dev-docs/artifacts/topbar-save-button-20260828
   double-click guard) and delegates to the same command as Ctrl+S; a human click
   on a scratch workflow is still the outstanding check.
 
+### 2026-08-29 - Run-style visual treatment
+
+- Backup before the visual change:
+  `.codex-backups/10-ui-canvas/ComfyUI-WorkspaceKit-before-topbar-save-run-style-20260829-141827.zip`
+  (22.22 MB, source-only archive).
+- The Save control now follows the native Run button's 32px height, 8px radius,
+  icon-plus-label layout and primary action colour. A dirty workflow uses the
+  primary treatment; a clean workflow uses the secondary surface. The redundant
+  right-side dot was removed, while the full unsaved tooltip and the underlying
+  dirty detection remain unchanged.
+- Real-page check at `http://127.0.0.1:8190/`: one dirty Save button rendered
+  at 82×32 with 8px radius, primary background, white label and no clipping;
+  its slot remained last in `app.menu.element`. No save action was fired.
+
 ## 2026-08-19 - Shared active-tab highlight and curved panel connection
 
 - Backup before the source change:

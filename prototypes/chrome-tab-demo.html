@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WorkspaceKit Chrome Tab Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page-bg: #eef2f4;
+      --card-bg: #ffffff;
+      --card-border: #d7dde1;
+      --text: #202124;
+      --muted: #5f6368;
+
+      --strip-bg: #dbe7eb;
+      --active-bg: #f7f8f9;
+      --toolbar-bg: #f7f8f9;
+      --inactive-hover: rgba(255, 255, 255, 0.46);
+      --divider: rgba(60, 64, 67, 0.24);
+      --tab-text: #3c4043;
+      --button-hover: rgba(60, 64, 67, 0.10);
+      --toolbar-line: #dfe3e6;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 32px;
+      background: var(--page-bg);
+      color: var(--text);
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+    }
+
+    .page {
+      width: min(100%, 1040px);
+      margin: 0 auto;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .theme-toggle {
+      height: 32px;
+      padding: 0 12px;
+      border: 1px solid var(--card-border);
+      border-radius: 9px;
+      background: var(--card-bg);
+      color: var(--text);
+      cursor: pointer;
+      font: 600 12px/1 Arial, sans-serif;
+    }
+
+    .demo-card {
+      width: 100vw;
+      margin-left: calc(50% - 50vw);
+      overflow: hidden;
+      border-top: 1px solid var(--card-border);
+      border-bottom: 1px solid var(--card-border);
+      border-left: 0;
+      border-right: 0;
+      border-radius: 0;
+      background: var(--card-bg);
+      box-shadow: 0 10px 28px rgba(25, 33, 40, 0.10);
+    }
+
+    .browser-top {
+      position: relative;
+      height: 48px;
+      display: flex;
+      align-items: flex-end;
+      padding: 0 8px;
+      overflow: hidden;
+      background: var(--strip-bg);
+    }
+
+    .browser-top::after {
+      content: "";
+      position: absolute;
+      z-index: 6;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 1px;
+      background: var(--toolbar-line);
+      pointer-events: none;
+    }
+
+    .collapse-button {
+      flex: 0 0 28px;
+      width: 28px;
+      height: 28px;
+      margin: 0 6px 8px 0;
+      border: 0;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, 0.72);
+      color: #263238;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .tabs {
+      position: relative;
+      z-index: 2;
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 44px;
+      display: flex;
+      align-items: flex-end;
+      overflow: visible;
+      isolation: isolate;
+    }
+
+    .tab {
+      --shoulder: 14px;
+      position: relative;
+      z-index: 1;
+      flex: 1 1 240px;
+      min-width: 120px;
+      max-width: 280px;
+      height: 40px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 12px 12px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      background: transparent;
+      color: var(--tab-text);
+      cursor: default;
+      font: 500 13px/1 Arial, "Microsoft YaHei", sans-serif;
+      text-align: left;
+      transition: background 110ms ease, color 110ms ease;
+    }
+
+    .tab:not(.active):hover {
+      background: var(--inactive-hover);
+      border-radius: 10px 10px 0 0;
+    }
+
+    .tab:not(.active)::after {
+      content: "";
+      position: absolute;
+      right: 0;
+      top: 11px;
+      width: 1px;
+      height: 18px;
+      background: var(--divider);
+    }
+
+    .tab:not(.active):has(+ .tab.active)::after {
+      opacity: 0;
+    }
+
+    .tab.active {
+      z-index: 3;
+      background: var(--active-bg);
+      color: var(--text);
+    }
+
+    /* Chrome's lower corners are not ordinary rounded corners. They are
+       outward shoulders with an inverse quarter-circle transition into the
+       strip. A rounded transparent square plus box-shadow produces a much
+       cleaner curve than the previous radial-gradient approximation. */
+    .tab.active::before,
+    .tab.active::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      width: var(--shoulder);
+      height: var(--shoulder);
+      background: transparent;
+      pointer-events: none;
+    }
+
+    .tab.active::before {
+      left: calc(var(--shoulder) * -1);
+      border-bottom-right-radius: var(--shoulder);
+      box-shadow: 7px 7px 0 7px var(--active-bg);
+    }
+
+    .tab.active::after {
+      right: calc(var(--shoulder) * -1);
+      border-bottom-left-radius: var(--shoulder);
+      box-shadow: -7px 7px 0 7px var(--active-bg);
+    }
+
+    .tab-icon {
+      position: relative;
+      z-index: 2;
+      flex: 0 0 16px;
+      width: 16px;
+      height: 16px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: #ffffff;
+      color: #5f6368;
+      border: 1px solid rgba(60, 64, 67, 0.24);
+      font-size: 9px;
+      font-weight: 700;
+    }
+
+    .tab-icon.comfy {
+      border-radius: 4px;
+      background: #202124;
+      color: #f8e71c;
+      border-color: #202124;
+    }
+
+    .tab-label {
+      position: relative;
+      z-index: 2;
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .tab-close {
+      position: relative;
+      z-index: 4;
+      flex: 0 0 22px;
+      width: 22px;
+      height: 22px;
+      margin-right: -5px;
+      border: 0;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .tab-close:hover {
+      background: var(--button-hover);
+    }
+
+    .toolbar {
+      height: 48px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 7px 18px 0;
+      border-top: 0;
+      background: var(--toolbar-bg);
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 8px;
+      padding-top: 5px;
+      color: #778087;
+      font-size: 21px;
+      line-height: 1;
+    }
+
+    .address {
+      flex: 1 1 auto;
+      height: 34px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 13px;
+      background: #ffffff;
+      color: #202124;
+      box-shadow: inset 0 0 0 1px rgba(60, 64, 67, 0.08);
+      font-size: 14px;
+    }
+
+    .site-controls {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #f0f2f3;
+      color: #5f6368;
+      font-size: 12px;
+    }
+
+    .note {
+      margin: 14px 2px 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    body.dark {
+      color-scheme: dark;
+      --page-bg: #111315;
+      --card-bg: #202225;
+      --card-border: #34383d;
+      --text: #f1f3f4;
+      --muted: #aeb4ba;
+      --strip-bg: #202124;
+      --active-bg: #303134;
+      --toolbar-bg: #303134;
+      --inactive-hover: rgba(255, 255, 255, 0.08);
+      --divider: rgba(255, 255, 255, 0.14);
+      --tab-text: #bdc1c6;
+      --button-hover: rgba(255, 255, 255, 0.10);
+      --toolbar-line: #3c4043;
+    }
+
+    body.dark .collapse-button,
+    body.dark .address,
+    body.dark .tab-icon {
+      background: #3c4043;
+      color: #e8eaed;
+      border-color: #5f6368;
+    }
+
+    body.dark .tab-icon.comfy {
+      background: #111315;
+      color: #f8e71c;
+      border-color: #111315;
+    }
+
+    body.dark .site-controls {
+      background: #45484d;
+      color: #e8eaed;
+    }
+
+    @media (max-width: 720px) {
+      body { padding: 18px; }
+      .tab { min-width: 90px; padding: 0 9px; }
+      .tab-icon { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="title-row">
+      <h1>Chrome-style tab geometry prototype</h1>
+      <button class="theme-toggle" id="themeToggle" type="button">Dark ComfyUI adaptation</button>
+    </div>
+
+    <section class="demo-card" aria-label="Chrome tab prototype">
+      <div class="browser-top">
+        <button class="collapse-button" type="button" aria-label="Tab search">⌄</button>
+        <div class="tabs" id="tabs">
+          <div class="tab" role="tab" tabindex="0">
+            <span class="tab-icon comfy">C</span>
+            <span class="tab-label">*B11 - ComfyUI</span>
+            <button class="tab-close" type="button" aria-label="Close tab">×</button>
+          </div>
+
+          <div class="tab active" role="tab" tabindex="0" aria-selected="true">
+            <span class="tab-icon">AI</span>
+            <span class="tab-label">ChatGPT</span>
+            <button class="tab-close" type="button" aria-label="Close tab">×</button>
+          </div>
+
+          <div class="tab" role="tab" tabindex="0">
+            <span class="tab-icon">AI</span>
+            <span class="tab-label">ChatGPT</span>
+            <button class="tab-close" type="button" aria-label="Close tab">×</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="nav-buttons" aria-hidden="true"><span>‹</span><span>›</span><span>↻</span></div>
+        <div class="address"><span class="site-controls">≡</span><span>chatgpt.com</span></div>
+      </div>
+    </section>
+
+    <p class="note">
+      Click a tab to move the active Chrome-style surface and its two curved bottom shoulders. Click × to remove a tab. The toggle shows the same geometry with a dark ComfyUI-oriented palette.
+    </p>
+  </main>
+
+  <script>
+    const tabs = document.getElementById('tabs');
+    const themeToggle = document.getElementById('themeToggle');
+
+    function activate(tab) {
+      for (const item of tabs.querySelectorAll('.tab')) {
+        const active = item === tab;
+        item.classList.toggle('active', active);
+        item.setAttribute('aria-selected', String(active));
+      }
+    }
+
+    tabs.addEventListener('click', (event) => {
+      const close = event.target.closest('.tab-close');
+      const tab = event.target.closest('.tab');
+      if (!tab) return;
+
+      if (close) {
+        event.stopPropagation();
+        const wasActive = tab.classList.contains('active');
+        const fallback = tab.nextElementSibling || tab.previousElementSibling;
+        tab.remove();
+        if (wasActive && fallback?.classList.contains('tab')) activate(fallback);
+        return;
+      }
+
+      activate(tab);
+    });
+
+    themeToggle.addEventListener('click', () => {
+      const dark = document.body.classList.toggle('dark');
+      themeToggle.textContent = dark ? 'Chrome light reference' : 'Dark ComfyUI adaptation';
+    });
+  </script>
+</body>
+</html>

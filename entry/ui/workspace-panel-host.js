@@ -116,7 +116,10 @@ export function createWorkspacePanelHost({
     }
     button.dataset.workspace2ModuleId = id;
     button.setAttribute("aria-current", activeTabId === id ? "page" : "false");
-    button.textContent = label;
+    const labelNode = document.createElement("span");
+    labelNode.className = "workspace2-module-tab-label";
+    labelNode.textContent = label;
+    button.append(labelNode);
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();

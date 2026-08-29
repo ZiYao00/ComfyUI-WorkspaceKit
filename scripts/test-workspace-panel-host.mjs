@@ -65,7 +65,7 @@ assert.equal(host.tabButtons.get("workflows").attributes.get("aria-current"), "f
 host.tabButtons.get("layout").click();
 host.settingsButton.click();
 assert.deepEqual(activated, ["layout", "settings"]);
-assert.equal(host.tabButtons.get("layout").textContent, "📐 Layout");
+assert.equal(host.tabButtons.get("layout").children[0].textContent, "📐 Layout");
 assert.equal(host.tabButtons.get("layout").title, "WorkspaceKit Layout");
 assert.equal(host.tabButtons.get("layout").attributes.get("aria-label"), "WorkspaceKit Layout");
 assert.equal(host.headerHost.hidden, true);
@@ -180,8 +180,8 @@ const builtinHost = createWorkspacePanelHost({
   onPinProvider: (id) => builtinEvents.push(`pin:${id}`),
 });
 assert.equal(builtinHost.tabButtons.size, 5);
-assert.equal(builtinHost.tabButtons.get("workspacekit.layout").textContent, "排版");
-assert.equal(builtinHost.tabButtons.get("workspacekit.theme").textContent, "外观");
+assert.equal(builtinHost.tabButtons.get("workspacekit.layout").children[0].textContent, "排版");
+assert.equal(builtinHost.tabButtons.get("workspacekit.theme").children[0].textContent, "外观");
 assert.match(builtinHost.tabButtons.get("workspacekit.layout").className, /is-active/);
 assert.equal(
   builtinHost.tabStrip.children.some((child) => /workspace2-module-overflow-tab/.test(child.className)),

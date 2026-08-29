@@ -192,42 +192,62 @@ export function styles() {
       pointer-events: none;
     }
     .workspace2-module-tabs {
+      --workspace2-tab-shoulder: 12px;
+      --workspace2-active-tab-surface: var(--workspace2-shell-surface);
       position: relative;
       z-index: 2;
+      isolation: isolate;
       flex: 0 0 auto;
       display: flex;
       align-items: flex-end;
       flex-wrap: nowrap;
       gap: 0;
-      padding: 8px 10px 0;
+      padding: 7px 12px 0;
       /* The inactive tabs belong to this darker strip. The active tab uses
          the panel surface below it, so the connection comes from continuous
          surface plus the small shoulders, never from a thick underline. */
       border-bottom: 0;
-      background: var(--workspace2-tab-bg);
+      background: color-mix(in srgb, var(--workspace2-tab-bg) 90%, black 10%);
       overflow: visible;
       container: workspace2-tabstrip / inline-size;
     }
+    .workspace2-shell.is-glass-background .workspace2-module-tabs {
+      --workspace2-active-tab-surface: color-mix(in srgb, var(--workspace2-tab-bg) 62%, var(--workspace2-shell-surface) 38%);
+    }
+    .workspace2-module-tabs::after {
+      content: "";
+      position: absolute;
+      z-index: 2;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 1px;
+      pointer-events: none;
+      background: color-mix(in srgb, var(--workspace2-border) 72%, transparent);
+    }
     .workspace2-module-tab {
       position: relative;
+      z-index: 1;
       box-sizing: border-box;
       flex: 1 1 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       /* 3em covers three CJK glyphs at the 12px tab font; the padding is added
          on top so the third glyph is never the one that gets ellipsised. */
       min-width: calc(3em + 16px);
       max-width: 14em;
       min-height: 34px;
-      padding: 0 10px;
-      border: 1px solid transparent;
-      border-radius: 10px 10px 0 0;
+      padding: 0 12px;
+      border: 0;
+      border-radius: 11px 11px 0 0;
       color: var(--p-text-muted-color, rgba(255, 255, 255, 0.68));
       background: transparent;
       font: var(--workspacekit-ui-weight-medium) var(--workspacekit-ui-font-control)/1.2 var(--font-family, Arial, sans-serif);
       cursor: pointer;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+      overflow: visible;
+      transition: background-color 110ms ease, color 110ms ease;
     }
     /* Below roughly 270px of sidebar the 3-glyph budget no longer fits together
        with the settings button, so the floor drops to two glyphs. The settings
@@ -240,49 +260,63 @@ export function styles() {
       .workspace2-module-overflow-tab { width: 0; min-width: calc(2em + 12px + 22px); }
       .workspace2-module-overflow-tab > .workspace2-module-tab { min-width: 0; }
     }
-    .workspace2-module-tab:hover {
+    .workspace2-module-tab:not(.is-active):hover {
       color: var(--p-text-color, var(--fg-color, #ddd));
-      background: color-mix(in srgb, var(--workspace2-tab-hover-bg) 72%, transparent);
+      background-color: color-mix(in srgb, var(--workspace2-tab-hover-bg) 58%, transparent);
+      border-radius: 10px 10px 0 0;
+    }
+    .workspace2-module-tabs > .workspace2-module-tab:not(.is-active)::after,
+    .workspace2-module-tabs > .workspace2-module-overflow-tab:not(.is-active)::after {
+      content: "";
+      position: absolute;
+      top: 9px;
+      right: 0;
+      width: 1px;
+      height: 16px;
+      pointer-events: none;
+      background: color-mix(in srgb, var(--workspace2-border) 54%, transparent);
+    }
+    .workspace2-module-tabs > .workspace2-module-tab:not(.is-active):has(+ .workspace2-module-tab.is-active)::after,
+    .workspace2-module-tabs > .workspace2-module-tab:not(.is-active):has(+ .workspace2-module-overflow-tab.is-active)::after,
+    .workspace2-module-tabs > .workspace2-module-overflow-tab:not(.is-active):has(+ .workspace2-module-tab.is-active)::after,
+    .workspace2-module-tabs > .workspace2-module-overflow-tab:not(.is-active):has(+ .workspace2-module-overflow-tab.is-active)::after {
+      opacity: 0;
     }
     .workspace2-module-tab.is-active,
     .workspace2-module-overflow-tab.is-active {
-      /* The strip is deliberately darker than the panel. An active tab must
-         therefore take the panel fill itself, not a tint of the strip; using
-         the latter was what made it look detached even though the boxes met. */
-      --workspace2-active-tab-surface: var(--workspace2-panel-fill, var(--workspace2-surface, var(--workspace2-tab-active-bg)));
-      --workspace2-active-tab-edge: color-mix(in srgb, var(--workspace2-accent) 48%, var(--workspace2-border));
-      --workspace2-active-tab-highlight: color-mix(in srgb, var(--workspace2-accent) 16%, var(--workspace2-active-tab-surface));
       z-index: 3;
-      color: color-mix(in srgb, var(--workspace2-accent) 38%, var(--p-text-color, var(--fg-color, #f5f8ff)));
-      background: linear-gradient(180deg, var(--workspace2-active-tab-highlight), var(--workspace2-active-tab-surface) 72%);
-      border-color: var(--workspace2-active-tab-edge);
+      color: var(--p-text-color, var(--fg-color, #f5f8ff));
+      background: var(--workspace2-active-tab-surface);
+      border-color: transparent;
       border-bottom-color: var(--workspace2-active-tab-surface);
-      /* The surface reaches the frame at the bottom, while the inset accent
-         keeps the selected tab visible even when panel and tab colours match. */
-      box-shadow: inset 0 2px 0 color-mix(in srgb, var(--workspace2-accent) 46%, transparent), 0 1px 0 var(--workspace2-active-tab-surface);
+      box-shadow: 0 1px 0 var(--workspace2-active-tab-surface);
     }
-    /* Small shoulder geometry joins the active tab to the module frame without
-       recreating the old thick underline or a hard Chrome colour. */
-    .workspace2-module-tab.is-active::before,
-    .workspace2-module-tab.is-active::after,
-    .workspace2-module-overflow-tab.is-active::before,
-    .workspace2-module-overflow-tab.is-active::after {
+    /* Chrome-style inverse lower corners. The tab itself stays unclipped while
+       the label owns ellipsis, allowing these shoulders to extend outside the
+       button and cover the full-width divider cleanly. */
+    .workspace2-module-tabs > .workspace2-module-tab.is-active::before,
+    .workspace2-module-tabs > .workspace2-module-tab.is-active::after,
+    .workspace2-module-tabs > .workspace2-module-overflow-tab.is-active::before,
+    .workspace2-module-tabs > .workspace2-module-overflow-tab.is-active::after {
       content: "";
       position: absolute;
       bottom: 0;
-      width: 9px;
-      height: 9px;
+      width: var(--workspace2-tab-shoulder);
+      height: var(--workspace2-tab-shoulder);
+      background: transparent;
       pointer-events: none;
     }
-    .workspace2-module-tab.is-active::before,
-    .workspace2-module-overflow-tab.is-active::before {
-      left: -9px;
-      background: radial-gradient(circle at 0 0, transparent 0 7px, var(--workspace2-active-tab-edge) 7.35px 8.35px, var(--workspace2-active-tab-surface) 8.7px 100%);
+    .workspace2-module-tabs > .workspace2-module-tab.is-active::before,
+    .workspace2-module-tabs > .workspace2-module-overflow-tab.is-active::before {
+      left: calc(var(--workspace2-tab-shoulder) * -1);
+      border-bottom-right-radius: var(--workspace2-tab-shoulder);
+      box-shadow: 6px 6px 0 6px var(--workspace2-active-tab-surface);
     }
-    .workspace2-module-tab.is-active::after,
-    .workspace2-module-overflow-tab.is-active::after {
-      right: -9px;
-      background: radial-gradient(circle at 100% 0, transparent 0 7px, var(--workspace2-active-tab-edge) 7.35px 8.35px, var(--workspace2-active-tab-surface) 8.7px 100%);
+    .workspace2-module-tabs > .workspace2-module-tab.is-active::after,
+    .workspace2-module-tabs > .workspace2-module-overflow-tab.is-active::after {
+      right: calc(var(--workspace2-tab-shoulder) * -1);
+      border-bottom-left-radius: var(--workspace2-tab-shoulder);
+      box-shadow: -6px 6px 0 6px var(--workspace2-active-tab-surface);
     }
     .workspace2-module-settings {
       min-width: 30px;
@@ -311,7 +345,7 @@ export function styles() {
        divider/caret. Reserving a core tab's three-glyph floor here caused the
        Chinese Workflows tab to collapse one step too early at normal sidebar
        widths. */
-    .workspace2-module-overflow-tab { position:relative; box-sizing:border-box; flex: 1 1 0; min-width: calc(2em + 12px + 22px); max-width: 14em; min-height:34px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:1px solid transparent; border-radius:10px 10px 0 0; background:transparent; transition: background 120ms ease, border-color 120ms ease; }
+    .workspace2-module-overflow-tab { position:relative; z-index:1; box-sizing:border-box; flex:1 1 0; min-width:calc(2em + 12px + 22px); max-width:14em; min-height:34px; display:flex; align-items:stretch; gap:0; padding-right:2px; border:0; border-radius:11px 11px 0 0; background:transparent; overflow:visible; transition:background-color 110ms ease,color 110ms ease; }
     .workspace2-module-overflow-tab:hover, .workspace2-module-overflow-tab.is-menu-open { background: color-mix(in srgb, var(--workspace2-tab-hover-bg) 72%, transparent); }
     .workspace2-module-overflow-tab.is-active:hover, .workspace2-module-overflow-tab.is-active.is-menu-open { background: var(--workspace2-active-tab-surface); }
     /* The tab button inside the wrapper drops its own chrome: the wrapper draws
@@ -323,7 +357,7 @@ export function styles() {
     .workspace2-module-overflow-tab > .workspace2-module-tab:hover { background:transparent; border-color:transparent; }
     .workspace2-module-overflow-tab > .workspace2-module-tab.is-active { background:transparent; box-shadow:none; }
     .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::before, .workspace2-module-overflow-tab > .workspace2-module-tab.is-active::after { display:none; }
-    .workspace2-module-tab-label { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
+    .workspace2-module-tab-label { display:block; flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
     .workspace2-module-tab-divider { flex:0 0 1px; align-self:center; width:1px; height:14px; margin:0 3px; background: color-mix(in srgb, currentColor 24%, transparent); }
     .workspace2-module-overflow-caret { flex:0 0 22px; display:inline-flex; align-items:center; justify-content:center; min-width:22px; padding:0; background:transparent; border:0; border-radius:6px 10px 0 0; color:var(--p-text-muted-color, rgba(255,255,255,.68)); font-size:15px; line-height:1; cursor:pointer; transition:transform 120ms ease, background 120ms ease, color 120ms ease; transform-origin:center; }
     .workspace2-module-overflow-caret:hover { color: var(--p-text-color, var(--fg-color, #ddd)); background: color-mix(in srgb, var(--p-primary-color, var(--accent-color, #0A84FF)) 24%, transparent); }
@@ -350,20 +384,8 @@ export function styles() {
       flex-direction: column;
       overflow: hidden;
     }
-    /* The inactive part of the tab strip meets the panel through this hairline.
-       The selected tab covers its own segment and joins it with the two curved
-       shoulders above, matching the familiar browser-tab relationship. */
-    .workspace2-module-frame::before {
-      content: "";
-      position: absolute;
-      z-index: 2;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 1px;
-      pointer-events: none;
-      background: color-mix(in srgb, var(--workspace2-border) 74%, transparent);
-    }
+    /* The browser-style divider now belongs to .workspace2-module-tabs::after so
+       it spans the full strip and can sit behind the active tab shoulders. */
     .workspace2-module-header-host[hidden],
     .workspace2-module-context-host[hidden],
     .workspace2-module-controls-host[hidden],

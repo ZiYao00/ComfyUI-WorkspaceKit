@@ -22,18 +22,34 @@ try {
     await page.waitForSelector(".workspace2-module-tab.is-active", { timeout: 15_000 });
     const metrics = await page.evaluate(() => {
       const tab = document.querySelector(".workspace2-module-tab.is-active");
-      const frame = document.querySelector(".workspace2-module-frame");
+      const label = tab?.querySelector(".workspace2-module-tab-label");
+      const strip = tab?.closest(".workspace2-module-tabs");
+      const tabStyle = getComputedStyle(tab);
+      const shoulder = getComputedStyle(tab, "::before");
+      const stripLine = getComputedStyle(strip, "::after");
       return {
-        activeGradient: getComputedStyle(tab).backgroundImage,
-        activeBorder: getComputedStyle(tab).borderTopColor,
-        arc: getComputedStyle(tab, "::before").backgroundImage,
-        frameLine: getComputedStyle(frame, "::before").backgroundColor,
+        activeBackgroundImage: tabStyle.backgroundImage,
+        activeBackgroundColor: tabStyle.backgroundColor,
+        tabOverflow: tabStyle.overflow,
+        labelOverflow: label ? getComputedStyle(label).overflow : "missing",
+        shoulderBackgroundImage: shoulder.backgroundImage,
+        shoulderShadow: shoulder.boxShadow,
+        shoulderRadius: shoulder.borderBottomRightRadius,
+        stripLine: stripLine.backgroundColor,
+        stripLineLeft: stripLine.left,
+        stripLineRight: stripLine.right,
       };
     });
-    assert.match(metrics.activeGradient, /linear-gradient/);
-    assert.notEqual(metrics.activeBorder, "rgba(0, 0, 0, 0)");
-    assert.match(metrics.arc, /radial-gradient/);
-    assert.notEqual(metrics.frameLine, "rgba(0, 0, 0, 0)");
+    assert.equal(metrics.activeBackgroundImage, "none");
+    assert.notEqual(metrics.activeBackgroundColor, "rgba(0, 0, 0, 0)");
+    assert.equal(metrics.tabOverflow, "visible", "active tab must not clip its shoulders");
+    assert.equal(metrics.labelOverflow, "hidden", "label owns ellipsis clipping");
+    assert.equal(metrics.shoulderBackgroundImage, "none", "shoulder uses inverse-radius geometry, not a radial-gradient approximation");
+    assert.notEqual(metrics.shoulderShadow, "none");
+    assert.notEqual(metrics.shoulderRadius, "0px");
+    assert.notEqual(metrics.stripLine, "rgba(0, 0, 0, 0)");
+    assert.equal(metrics.stripLineLeft, "0px");
+    assert.equal(metrics.stripLineRight, "0px");
     assert.equal(errors.length, 0, errors.join("\n"));
     await context.close();
   }

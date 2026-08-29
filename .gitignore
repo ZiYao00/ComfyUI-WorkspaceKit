@@ -79,6 +79,9 @@ tmp/
 *.tar
 *.gz
 
+# Local documentation source assets (keep locally, never publish)
+Preview/archive/interface.psd
+
 # Claude Code local files (personal, not shared)
 CLAUDE.md
 .claude/

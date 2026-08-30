@@ -15,6 +15,10 @@
 - The unified Appearance module no longer carries the old Theme Standalone/WorkspaceKit-discovery/Vendor-UI stack or Color Thief runtime dependency; it uses the main UI Kit and WorkspaceKit-owned reference-palette extraction.
 - Unified Layout no longer uses the former NodeAligner Shadow-DOM command bridge, standalone/Vendor UI, legacy floating toolbar modes, or permanent canvas polling. Old presentation preferences are mapped non-destructively to the new topbar preference, and old standalone Layout/Theme sidebar registrations are suppressed at runtime without deleting their plugin files.
 
+### Fixed
+
+- Synchronized Workflows > Open after the floating top-bar Save command completes, so the active workflow's unsaved marker and duplicate Save action disappear immediately after a successful save instead of remaining clickable with stale WorkspaceKit dirty state.
+
 ## 0.2.6 - 2026-08-08
 
 ### Added

@@ -1,5 +1,13 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-30 - T-058-R1 top-bar Save / Open-state synchronization
+
+- User-facing defect: after the top floating Save button completed a real `Comfy.SaveWorkflow`, the active entry in Workflows > Open could still retain its unsaved dot and its own Save action. The Open renderer was behaving as designed (`isDirty && isActive`); WorkspaceKit's path-keyed official dirty baseline simply had not been reconciled by the top-bar save path.
+- Fix boundary: the top-bar controller still delegates the actual write to `Comfy.SaveWorkflow`. After that command settles, `entry.js` re-reads the active official workflow; for a persisted workflow it reuses `setCurrentWorkflowCleanState(undefined, activePath)`, records the recent path, schedules an official catalog refresh, and uses the existing official-store-safe panel render scheduler. A cancelled first-time Save As remains temporary and is not marked clean.
+- Contract evidence: `node scripts/test-topbar-save-button.mjs` passed. The repository-wide `npm test` then passed **110/110 JavaScript contracts**, frontend module-goal syntax over **156 files**, **9/9 Python contracts**, and release-version check **0.2.6**.
+- Real-page evidence on `http://127.0.0.1:8190/`: new `scripts/e2e/t058-topbar-save-sync.mjs` creates one uniquely named disposable workflow under `__WK_TEST__`, opens it through the real WorkspaceKit Workflows panel, waits past the 300 ms load-normalization baseline window, creates a real `Workspace2Title` node inside the official ChangeTracker transaction, and confirms the official workflow reaches `isModified=true` plus the WK Open dirty marker. Clicking `.workspacekit-topbar-save-button` then removes the Open dirty marker, removes exactly one Open-row action (the Save button), and returns the top-bar control to `data-dirty="false"`. The script closes the test workflow, moves only that generated test file to the WK trash, then moves that same trash item to the system recycle bin.
+- Final real-page result: `T-058-R1 real-page save synchronization passed`. No WorkspaceKit console/page errors were recorded by the focused run.
+
 ## 2026-08-30 - Post-L1 Sidebar / Canvas Groups regression closeout
 
 - Sidebar identity: WorkspaceKit icon CSS no longer depends only on `.workspace2-tab-button`. It also targets the stable WorkspaceKit tab identity (`data-tab-id`, `data-sidebar-tab-id`, and `aria-label="WorkspaceKit"`), and the remount observer recognizes the same identity. This removes the redraw window where ComfyUI could briefly show its ordinary icon before the legacy class was restored.

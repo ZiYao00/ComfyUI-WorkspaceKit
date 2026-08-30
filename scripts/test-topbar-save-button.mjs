@@ -343,10 +343,19 @@ assert.ok(
   "never attach into a native ComfyButtonGroup; replaceChildren() would wipe the button",
 );
 
-// Saving must delegate to ComfyUI's command rather than reimplement a save.
+// Saving must delegate to ComfyUI's command rather than reimplement a save, then
+// reconcile the same WorkspaceKit dirty baseline used by the Open-section save.
 assert.ok(
-  /saveActiveWorkflow: \(\) => executeOfficialWorkflowCommand\(TOPBAR_SAVE_COMMAND_ID\)/.test(source),
-  "the button must reuse ComfyUI's own save command, exactly like Ctrl+S",
+  /saveActiveWorkflow: saveWorkspaceTopbarWorkflow/.test(source),
+  "the top-bar controller must delegate to the WorkspaceKit save coordinator",
+);
+assert.ok(
+  /async function saveWorkspaceTopbarWorkflow\(\)[\s\S]*?await executeOfficialWorkflowCommand\(TOPBAR_SAVE_COMMAND_ID\)/.test(source),
+  "the coordinator must still reuse ComfyUI's own save command, exactly like Ctrl+S",
+);
+assert.ok(
+  /saveWorkspaceTopbarWorkflow\(\)[\s\S]*?!isOfficialWorkflowTemporary\(activeWorkflow\)[\s\S]*?setCurrentWorkflowCleanState\(undefined, activePath\)[\s\S]*?scheduleOfficialWorkflowPanelRender\(\)/.test(source),
+  "a successful persisted save must clear the shared dirty baseline and schedule the Open list to re-render",
 );
 
 // The dot needs both signals: graphChanged covers edits, and the store

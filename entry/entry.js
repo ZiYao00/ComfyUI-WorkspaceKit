@@ -8873,6 +8873,27 @@ function installWorkspace2SidebarIcon() {
 // button joins the legacy command row that the frontend keeps for `app.menu`.
 // See entry/ui/topbar-save-button.js for why the slot sits outside the native
 // button groups and why it re-asserts last place.
+async function saveWorkspaceTopbarWorkflow() {
+  await executeOfficialWorkflowCommand(TOPBAR_SAVE_COMMAND_ID);
+
+  // The command owns the actual save. WorkspaceKit only reconciles its own
+  // path-keyed dirty baseline after that command settles. This is the same
+  // baseline the Open-section save action clears in saveCurrentWorkflowToPath().
+  // A cancelled first-time Save As remains temporary, so never mark it clean.
+  const activeWorkflow = getActiveOfficialWorkflow(app);
+  const activePath = relativeWorkflowPathFromOfficial(activeWorkflow?.path || "");
+  if (state.isOfficialRoot && activePath && !isOfficialWorkflowTemporary(activeWorkflow)) {
+    setCurrentWorkflowCleanState(undefined, activePath);
+    recordRecentWorkflow(activePath);
+    refreshOfficialWorkflowsDeferred(0);
+  }
+
+  // Reuse the existing official-store-safe render scheduler instead of hiding
+  // the Open-section save button directly. The next render recomputes the dirty
+  // dot and save action from the reconciled workflow state.
+  scheduleOfficialWorkflowPanelRender();
+}
+
 function installWorkspaceTopbarSaveButton() {
   if (!workspaceState.topbarSaveButton) {
     workspaceState.topbarSaveButton = createTopbarSaveButton({
@@ -8884,7 +8905,7 @@ function installWorkspaceTopbarSaveButton() {
       hasActiveWorkflow: () => Boolean(getActiveOfficialWorkflow(app)),
       isActiveWorkflowModified: () => isOfficialWorkflowModified(getActiveOfficialWorkflow(app)),
       isActiveWorkflowTemporary: () => isOfficialWorkflowTemporary(getActiveOfficialWorkflow(app)),
-      saveActiveWorkflow: () => executeOfficialWorkflowCommand(TOPBAR_SAVE_COMMAND_ID),
+      saveActiveWorkflow: saveWorkspaceTopbarWorkflow,
       translate: t,
       isEnabled: isWorkspaceTopbarSaveEnabled,
       onError: (error) => console.warn("[Workspace2] top-bar save failed:", error),

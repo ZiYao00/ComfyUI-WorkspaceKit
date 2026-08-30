@@ -9,9 +9,9 @@ function invalid(code, message) {
 }
 
 // This runtime is deliberately independent from the Provider integration
-// preference. That preference controls whether external panels merge into the
-// WorkspaceKit tab strip; family plugins may still use the Template while
-// rendering their own standalone sidebar entry.
+// preference. Provider registration/tab placement is the supported integration
+// boundary. External plugins may opt into this Template, but they are never
+// required to adopt WorkspaceKit's visual primitives.
 export function publishWorkspaceKitPanelUiTemplate(target = globalThis) {
   if (!target || (typeof target !== "object" && typeof target !== "function")) {
     return invalid("invalid-target", "A global object is required to publish the Panel UI Template.");
@@ -24,8 +24,15 @@ export function publishWorkspaceKitPanelUiTemplate(target = globalThis) {
       && typeof existing.supports === "function") {
       return Object.freeze({ ok: true, code: "existing", template: existing });
     }
-    return invalid("template-conflict", "A different WorkspaceKit Panel UI Template is already published.");
+    if (existing.major !== PANEL_UI_TEMPLATE_MAJOR) {
+      return invalid("template-conflict", "A different WorkspaceKit Panel UI Template major is already published.");
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(target, WORKSPACEKIT_PANEL_UI_TEMPLATE_KEY);
+    if (descriptor?.configurable === false) {
+      return invalid("template-conflict", "The existing WorkspaceKit Panel UI Template cannot be refreshed.");
+    }
   }
+  const replacedStaleTemplate = Boolean(existing);
   const template = Object.freeze({
     version: PANEL_UI_TEMPLATE_VERSION,
     major: PANEL_UI_TEMPLATE_MAJOR,
@@ -43,5 +50,5 @@ export function publishWorkspaceKitPanelUiTemplate(target = globalThis) {
     value: template,
     writable: false,
   });
-  return Object.freeze({ ok: true, code: "published", template });
+  return Object.freeze({ ok: true, code: replacedStaleTemplate ? "refreshed" : "published", template });
 }

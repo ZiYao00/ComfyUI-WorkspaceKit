@@ -37,7 +37,7 @@ class FakeDocument {
 
 const document = new FakeDocument();
 const ui = createPanelUiTemplate({ document });
-assert.equal(ui.version, "1.5.0");
+assert.equal(ui.version, "1.5.1");
 assert.equal(ui.supports(1), true);
 assert.equal(ui.supports(2), false);
 assert.equal(ui.contract.capabilities.includes("icon-kit"), true);

@@ -1,5 +1,14 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-30 - Layout L1 closeout / optional UI Template boundary
+
+- Product boundary: built-in Layout no longer depends on the public Panel UI Template. Third-party integration requires only Provider API v1 registration/lifecycle/host slots/tab merge; UI Template adoption is optional.
+- Runtime compatibility: Panel UI Template patch version is `1.5.1`. A stale same-major published Template can now be refreshed by the current WorkspaceKit runtime; a different major remains a conflict. `scripts/test-panel-ui-template-api.mjs` includes a stale `1.5.0` replacement regression.
+- Provider lifecycle coverage: `scripts/e2e/l1-layout-presentation.mjs` now accepts `--base-url` and includes an ON -> OFF -> ON -> OFF external-Provider availability sequence while built-in Layout remains mounted. This targets the previously reported `blueprint.setStatus is not a function` runtime-lifecycle class without adding a Layout-specific workaround.
+- Executed contracts: `scripts/run-contract-tests.mjs` passed **109/109** JavaScript contracts, including frontend module syntax over **154** files. `scripts/run-python-tests.py` passed **9/9** Python contracts.
+- Browser evidence limitation: the new runtime-toggle E2E could not be replayed in this session. `http://127.0.0.1:8188` returned `ERR_CONNECTION_REFUSED`; the available `8190` page did not expose `.workspace2-tab-button`. No new real-page pass is claimed.
+- Final L1 real-page gate therefore remains: an independent collapsed-node scenario; a dedicated temporary workflow Save -> disk-write confirmation -> ComfyUI restart -> reload; and replay of the runtime Provider toggle regression once the WorkspaceKit ComfyUI instance is online.
+
 ## 2026-08-29 - GPL unification B07-B11 Layout V2 migration
 
 - Scope: the former standalone `ComfyUI-WorkspaceKit-Layout` product has been re-established inside the main plugin as a new Layout V2 execution path. The new runtime does **not** import the old Layout `main.js`, NodeAligner Shadow-DOM command buttons, standalone host, Vendor UI copy, or the former 100 ms permanent canvas bridge.

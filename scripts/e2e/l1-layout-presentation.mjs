@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
-const URL = "http://127.0.0.1:8190/";
+const baseUrlArgIndex = process.argv.indexOf("--base-url");
+const URL = baseUrlArgIndex >= 0 && process.argv[baseUrlArgIndex + 1]
+  ? `${process.argv[baseUrlArgIndex + 1].replace(/\/$/, "")}/`
+  : "http://127.0.0.1:8190/";
 const MODE_KEY = "workspacekit.layout.presentation.mode";
 const TAB_KEYS = {
   workflows: "workspace2.tabs.workflows.visible",
@@ -29,7 +32,7 @@ await context.addInitScript(({ modeKey, tabKeys }) => {
   localStorage.setItem(modeKey, "top");
   localStorage.setItem("workspacekit.layout.command-icon-size", "22");
   localStorage.setItem("workspacekit.layout.spacing", "32");
-  localStorage.setItem("workspace2.panelIntegrations.enabled", "0");
+  localStorage.setItem("workspace2.panelIntegrations.enabled", "1");
   localStorage.setItem(tabKeys.workflows, "1");
   localStorage.setItem(tabKeys.nodes, "1");
   localStorage.setItem(tabKeys.templates, "1");
@@ -43,6 +46,20 @@ page.on("pageerror", (error) => pageErrors.push(error.message));
 
 try {
   await openLayout(page);
+
+  const disableResult = await page.evaluate(() => globalThis.WorkspaceKitPanelAPI?.setProvidersEnabled?.(false));
+  assert.equal(disableResult?.ok, true, "runtime Provider disable should succeed");
+  assert.equal(disableResult?.enabled, false);
+  await page.waitForSelector(".workspacekit-layout-v2", { timeout: 10_000 });
+  await page.locator('[data-workspace2-module-id="workspacekit.layout"]').click();
+  await page.waitForSelector(".workspacekit-layout-v2", { timeout: 10_000 });
+  const enableResult = await page.evaluate(() => globalThis.WorkspaceKitPanelAPI?.setProvidersEnabled?.(true));
+  assert.equal(enableResult?.ok, true, "runtime Provider enable should succeed");
+  assert.equal(enableResult?.enabled, true);
+  const disableAgainResult = await page.evaluate(() => globalThis.WorkspaceKitPanelAPI?.setProvidersEnabled?.(false));
+  assert.equal(disableAgainResult?.ok, true, "repeated runtime Provider disable should succeed");
+  assert.equal(disableAgainResult?.enabled, false);
+  await page.waitForSelector(".workspacekit-layout-v2", { timeout: 10_000 });
 
   const rows = page.locator("[data-layout-primary-row]");
   assert.equal(await rows.count(), 2, "primary Layout commands should have exactly two fixed rows");

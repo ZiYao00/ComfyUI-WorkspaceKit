@@ -16,7 +16,10 @@
 // family panels keep their current markup until an individual migration batch.
 // 1.5.0 adds a local, versioned icon-kit capability. It is intentionally
 // additive: existing panels can keep their own icons until their migration batch.
-export const PANEL_UI_TEMPLATE_VERSION = "1.5.0";
+// 1.5.1 is a compatibility-only refresh after Layout became a built-in module.
+// External Providers may opt into this UI Template, but tab registration and
+// host slots remain the only required integration boundary.
+export const PANEL_UI_TEMPLATE_VERSION = "1.5.1";
 export const PANEL_UI_TEMPLATE_MAJOR = 1;
 
 export function supportsPanelUiTemplate(requiredMajor) {

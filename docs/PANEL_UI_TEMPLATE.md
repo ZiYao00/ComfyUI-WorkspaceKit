@@ -1,13 +1,13 @@
 # WorkspaceKit Panel UI Template v1
 
-Status: **stable public v1.3.0 contract.** New capabilities are added only
+Status: **optional public v1.5.1 compatibility surface.** New capabilities are added only
 after their compatibility and real-page evidence pass.
-Scope: WorkspaceKit, WorkspaceKit family plugins such as Layout, and optional
-third-party panel Providers.
+Scope: WorkspaceKit internal shared UI plus optional third-party Providers that choose to reuse it.
 
-This document defines the intended UI-sharing boundary. It does not change the
-current Provider API v1 contract or promise that an existing Provider already
-uses these components.
+
+The Provider API v1 is the supported integration boundary for third-party plugins:
+registration, lifecycle, host slots, and merging a tab into WorkspaceKit. A Provider does not
+need to use WorkspaceKit's Panel UI Template, visual primitives, icons, spacing, or styling. The Template is opt-in only.
 
 Reproducible acceptance evidence is recorded in [`TESTING.md`](TESTING.md).
 The approved clean-rebuild and Layout/Theme migration sequence is tracked
@@ -19,10 +19,10 @@ WorkspaceKit is both a workspace product and a host for related tools. The
 goal is one coherent visual language without requiring every plugin to become
 one monolithic plugin.
 
-Layout remains a complete standalone plugin when WorkspaceKit is absent. When
-both are installed, it is a WorkspaceKit family module and merges into the
-WorkspaceKit sidebar without a duplicate primary entry. In both states its UI
-uses the same WorkspaceKit design source.
+Layout and Appearance are now built-in WorkspaceKit modules.
+They consume WorkspaceKit's internal Host and shared UI directly; the public Template is
+not their ownership, lifecycle, or integration boundary. Third-party plugins can merge a
+tab through Provider API v1 and keep their own visual system.
 
 Third-party plugins may merge into WorkspaceKit without adopting its UI. The
 shared UI Template is an opt-in convenience, not a requirement for Provider
@@ -43,28 +43,28 @@ adapters. It must not turn the Provider API into a security sandbox.
 
 ## 3. Required behavior
 
-### Layout without WorkspaceKit
+### Built-in WorkspaceKit modules
 
-Layout registers its normal standalone sidebar entry and renders with the
-bundled Vendor runtime copy. It must remain fully usable offline and must not
-load UI code from a CDN, local absolute path, Junction, or another repository.
+Layout and Appearance render as built-in WorkspaceKit modules and consume the
+host-owned slots/shared internal UI directly. Their feature lifecycle does not depend on
+the public Panel UI Template runtime.
 
-### Layout with WorkspaceKit
+### Third-party Providers
 
-WorkspaceKit publishes both its existing Provider API and a compatible Panel
-UI Template runtime early in startup. Layout uses that runtime for its
-standalone or merged presentation whenever it is compatible. The Provider
-integration preference controls *placement* only:
+WorkspaceKit publishes Provider API v1 for registration, lifecycle, host slots, and tab merge.
+The optional UI Template runtime is published separately. Providers may use it, ignore it, or
+render their own visual system. The Provider
+integration preference controls whether optional external Provider tabs are exposed:
 
-- integration enabled: Layout can be claimed as a WorkspaceKit tab;
-- integration disabled: Layout keeps its independent sidebar entry;
-- in both cases: a compatible installed WorkspaceKit UI Template may render
-  Layout's visual primitives.
+- integration enabled: registered external Provider tabs may merge into WorkspaceKit;
+- integration disabled: external Provider tabs are hidden from the WorkspaceKit tab strip;
+- in both cases: UI Template adoption remains optional and does not affect Provider registration or
+  tab placement.
 
-If WorkspaceKit is absent, fails to publish the Template, or exposes an
-incompatible Template major version, Layout uses its bundled Vendor copy. The
-fallback must be safe and visibly functional; it must never hide Layout's
-sidebar entry.
+If the optional Template is unavailable or incompatible, an external Provider must continue to
+render its own UI inside the Provider host slots. Template failure must never break the Provider
+registry, the host shell, or built-in WorkspaceKit modules.
+
 
 The runtime is published as `window.WorkspaceKitPanelUITemplate`. It is a
 separate public capability from `window.WorkspaceKitPanelAPI`: the latter owns
@@ -107,7 +107,7 @@ Plugin versions and Template versions are independent.
 
 ```text
 WorkspaceKit plugin 2.0.0
-  Panel UI Template v1.3.0
+  Panel UI Template v1.5.1
 
 Layout plugin 1.0.0
   bundled Panel UI Template v1.2.0
@@ -124,7 +124,7 @@ never force an incompatible renderer into an old Provider.
 The export manifest is for release traceability and stale-copy detection; it is
 not a requirement that both plugin releases share the same version number.
 
-### Capability contract v1.3.0
+### Capability contract v1.5.1
 
 The public Template and each created UI instance expose an immutable
 `contract` object:
@@ -132,7 +132,7 @@ The public Template and each created UI instance expose an immutable
 ```js
 {
   major: 1,
-  version: "1.3.0",
+  version: "1.5.1",
   capabilities: ["module-header", "range-control", "segmented-control", ...]
 }
 ```

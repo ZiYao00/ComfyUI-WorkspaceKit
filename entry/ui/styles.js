@@ -512,6 +512,19 @@ export function styles() {
       width: min(640px, 100%);
       margin: 0 auto;
     }
+    .workspace2-settings-page-header {
+      padding: 18px 0 6px;
+    }
+    .workspace2-settings-page-title {
+      margin: 0 0 5px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      font: 600 18px/1.3 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-settings-page-description {
+      margin: 0;
+      color: var(--workspace2-muted, rgba(255,255,255,.55));
+      font: 12px/1.45 var(--font-family, Arial, sans-serif);
+    }
     .workspace2-settings-section {
       border-top: 0;
       padding: 18px 0;
@@ -629,6 +642,69 @@ export function styles() {
       border-radius: 5px;
       font: 500 13px/1.2 var(--font-family, Arial, sans-serif);
     }
+    .workspace2-settings-keybinding-control {
+      width: 260px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 28px;
+      align-items: center;
+      gap: 8px;
+      justify-self: end;
+    }
+    .workspace2-settings-keybinding {
+      min-width: 0;
+      min-height: 32px;
+      padding: 0 10px;
+      overflow: hidden;
+      border: 1px solid var(--p-inputtext-border-color, var(--workspace2-border, rgba(255,255,255,.18)));
+      border-radius: 5px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-inputtext-background, var(--comfy-input-bg, rgba(0,0,0,.18)));
+      cursor: pointer;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font: 500 12px/1.2 var(--font-family, Arial, sans-serif);
+    }
+    .workspace2-settings-keybinding:hover {
+      border-color: color-mix(in srgb, var(--workspace2-accent) 45%, var(--workspace2-border));
+    }
+    .workspace2-settings-keybinding.is-listening {
+      border-color: var(--workspace2-accent);
+      color: color-mix(in srgb, var(--workspace2-accent) 72%, var(--p-text-color, #fff));
+    }
+    .workspace2-settings-keybinding-clear {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      border-radius: 5px;
+      color: var(--workspace2-muted, rgba(255,255,255,.55));
+      background: transparent;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+    }
+    .workspace2-settings-keybinding-clear:hover {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--workspace2-hover, rgba(255,255,255,.08));
+    }
+    .workspace2-settings-pointer-binding {
+      width: 260px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 104px;
+      align-items: center;
+      gap: 8px;
+      justify-self: end;
+    }
+    .workspace2-settings-pointer-binding select {
+      min-width: 0;
+      min-height: 32px;
+      padding: 0 8px;
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      background: var(--p-inputtext-background, var(--comfy-input-bg, rgba(0,0,0,.18)));
+      border: 1px solid var(--p-inputtext-border-color, var(--workspace2-border, rgba(255,255,255,.18)));
+      border-radius: 5px;
+      font: 500 12px/1.2 var(--font-family, Arial, sans-serif);
+    }
     .workspace2-settings-range {
       width: 260px;
       display: grid !important;
@@ -721,6 +797,12 @@ export function styles() {
         grid-template-columns: 1fr;
         grid-auto-flow: row;
         grid-template-rows: none;
+      }
+    }
+    @media (max-width: 640px) {
+      .workspace2-settings-keybinding-control,
+      .workspace2-settings-pointer-binding {
+        width: 230px;
       }
     }
     .workspace2-confirm-backdrop {

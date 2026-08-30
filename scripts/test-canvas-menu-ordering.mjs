@@ -16,7 +16,7 @@ const labelsOf = (entries, order) => order.map((index) => entries[index].label);
 // implementation matched an exact set of hardcoded Chinese labels and silently
 // stopped matching anything once the labels became translatable.
 assert.ok(isWorkspaceKitMenuLabel("🧩 编组"));
-assert.ok(isWorkspaceKitMenuLabel("🧩 Group Selected Nodes (Ctrl+G)"));
+assert.ok(isWorkspaceKitMenuLabel("🧩 Group Selected Nodes"));
 assert.ok(!isWorkspaceKitMenuLabel("Add Node"));
 assert.ok(!isWorkspaceKitMenuLabel(undefined));
 assert.ok(!isWorkspaceKitMenuLabel({ label: "🧩" }));

@@ -19,10 +19,12 @@ const DEFAULT_VISIBILITY = Object.freeze({
   [WORKSPACE_MODULE_ID.nodes]: true,
   [WORKSPACE_MODULE_ID.templates]: true,
   [WORKSPACE_MODULE_ID.layout]: true,
-  [WORKSPACE_MODULE_ID.theme]: false,
+  [WORKSPACE_MODULE_ID.theme]: true,
 });
 
-const SEALED_MODULE_IDS = new Set([WORKSPACE_MODULE_ID.theme]);
+// Theme is now part of the unified WorkspaceKit product line. Keep the sealed
+// mechanism for future staged modules, but there are no sealed built-ins today.
+const SEALED_MODULE_IDS = new Set();
 
 export function isWorkspaceModuleSealed(moduleId) {
   return SEALED_MODULE_IDS.has(String(moduleId || ""));

@@ -6,7 +6,7 @@
 import { app } from "../../scripts/app.js";
 import { t } from "./core/i18n.js";
 import { ensureWorkspaceKitDialogStyles } from "./core/dialog_styles.js";
-import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, normalizeGroupPointerBindings, resolveGroupPointerAction } from "./canvas-groups/pointer-actions.js?v=20260724_configurable_modifiers_r1";
+import { GROUP_POINTER_ACTION, readGroupPointerBindings, resolveGroupPointerAction } from "./canvas-groups/pointer-actions.js?v=20260830_unified_input_bindings_r1";
 import { buildMultiGroupDragPlan, hasNodePosition } from "./canvas-groups/multi-drag-plan.js?v=20260804_joint_drag_r1";
 import { buildGroupContentsSelectionPlan } from "./canvas-groups/contents-selection-plan.js?v=20260804_group_header_select_contents_r1";
 import { GROUP_HIT_REGION_SELECTOR, shouldPassThroughGroupHitRegions } from "./canvas-groups/hit-region-passthrough.js?v=20260805_group_node_hit_priority_r1";
@@ -551,21 +551,25 @@ const Workspace2CanvasGroups = {
         // document/window key events here.
     },
 
-    /* ── 编组修饰键：Ctrl=忽略，Alt=禁止，Shift=多选 ── */
+    /* ── 可配置编组鼠标手势 ── */
     setupGroupPointerActions() {
-        document.addEventListener('mousedown', e => {
-            let storedBindings = null;
-            try { storedBindings = JSON.parse(localStorage.getItem(GROUP_POINTER_BINDINGS_KEY) || ""); } catch { /* default mapping */ }
-            const action = resolveGroupPointerAction(e, normalizeGroupPointerBindings(storedBindings));
-            if (!action) return;
+        const groupGestureTarget = e => {
             const groupEl = e.target?.closest?.('.xzg-group-box');
             const gid = groupEl?.dataset?.groupId;
-            if (!gid || !this.groups[gid]) return;
+            if (!gid || !this.groups[gid]) return null;
             // Header controls and resize handles retain their own single-group
-            // behaviour; modifier gestures belong only to a group surface.
-            if (e.target?.closest?.('button, input, select, textarea, .xzg-resize-handle')) return;
+            // behaviour; configurable gestures belong only to a group surface.
+            if (e.target?.closest?.('button, input, select, textarea, .xzg-resize-handle')) return null;
+            return gid;
+        };
+        const runGroupGesture = e => {
+            const action = resolveGroupPointerAction(e, readGroupPointerBindings(localStorage));
+            if (!action) return false;
+            const gid = groupGestureTarget(e);
+            if (!gid) return false;
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation?.();
             if (action === GROUP_POINTER_ACTION.SELECT) {
                 this.toggleGroupSelection(gid);
             } else if (action === GROUP_POINTER_ACTION.BYPASS) {
@@ -573,6 +577,23 @@ const Workspace2CanvasGroups = {
             } else if (action === GROUP_POINTER_ACTION.MUTE) {
                 this.toggleGroupExecutionMode(gid, 'mute');
             }
+            return true;
+        };
+        // Pointer capture runs before LiteGraph receives left/middle/right button
+        // input. This matters once a gesture is moved away from the legacy left
+        // button: the configured WorkspaceKit action must own that gesture rather
+        // than also starting canvas pan/drag behavior.
+        window.addEventListener('pointerdown', runGroupGesture, true);
+        window.addEventListener('contextmenu', e => {
+            // A right-button gesture already executes on pointerdown. Suppress the
+            // browser/LiteGraph context menu for the same configured gesture
+            // without executing the action a second time.
+            if (e.button !== 2) return;
+            const action = resolveGroupPointerAction(e, readGroupPointerBindings(localStorage));
+            if (!action || !groupGestureTarget(e)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation?.();
         }, true);
 
         // Use window capture rather than document capture.  A third-party

@@ -82,13 +82,18 @@
       font-weight: 600;
       color: #f0f0f0;
     }
+    .section-note {
+      margin: -5px 0 12px;
+      color: #858585;
+      font-size: 11px;
+    }
     .row {
-      min-height: 48px;
+      min-height: 46px;
       display: grid;
       grid-template-columns: minmax(230px, 1fr) 250px;
       align-items: center;
       gap: 28px;
-      padding: 7px 0;
+      padding: 6px 0;
     }
     .name {
       color: #e6e6e6;
@@ -108,9 +113,7 @@
       gap: 8px;
     }
     .control select,
-    .control input[type="range"] {
-      width: 220px;
-    }
+    .control input[type="range"] { width: 220px; }
     .check {
       display: inline-flex;
       align-items: center;
@@ -132,38 +135,108 @@
     .radio-item input { margin: 0; transform: translateY(1px); }
     .radio-item strong { font-weight: 500; color: #e8e8e8; }
     .radio-item span { color: #8e8e8e; font-size: 12px; }
-    .full-row {
-      padding: 8px 0;
-    }
-    .shortcut-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    .shortcut-table th,
-    .shortcut-table td {
-      padding: 9px 8px;
-      border-bottom: 1px solid #333;
-      text-align: left;
-      font-weight: 400;
-    }
-    .shortcut-table th { color: #8e8e8e; font-size: 12px; }
-    .shortcut-table td:first-child { width: 120px; color: #d8d8d8; }
-    .shortcut-table td:last-child { width: 90px; text-align: right; }
     .actions {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
       justify-content: flex-end;
     }
-    .plain-btn {
+    .plain-btn,
+    .binding-btn {
       min-height: 32px;
-      padding: 0 11px;
       border: 1px solid #4b4b4b;
       background: #292929;
       color: #e8e8e8;
       cursor: pointer;
     }
+    .plain-btn { padding: 0 11px; }
+    .binding-btn {
+      width: 156px;
+      padding: 0 10px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .binding-btn:hover,
+    .plain-btn:hover { background: #313131; }
+    .binding-btn.listening {
+      border-color: #6ea8fe;
+      color: #b9d5ff;
+    }
+    .shortcut-list {
+      border-top: 1px solid #333;
+    }
+    .shortcut-row {
+      min-height: 45px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 168px 28px;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #333;
+    }
+    .shortcut-row .command { min-width: 0; }
+    .shortcut-row .command .desc { margin-top: 1px; }
+    .shortcut-clear {
+      width: 26px;
+      height: 26px;
+      border: 0;
+      background: transparent;
+      color: #777;
+      cursor: pointer;
+    }
+    .shortcut-clear:hover { color: #ddd; }
+    .gesture-binding {
+      display: grid;
+      grid-template-columns: 104px 104px;
+      gap: 8px;
+      justify-content: end;
+    }
+    .gesture-binding select {
+      min-height: 32px;
+      padding: 0 7px;
+      color: #e8e8e8;
+      background: #292929;
+      border: 1px solid #4b4b4b;
+    }
+    .status-line {
+      min-height: 18px;
+      margin-top: 10px;
+      color: #8e8e8e;
+      font-size: 11px;
+    }
     .muted { color: #8e8e8e; font-size: 12px; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, .46);
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      width: min(420px, 100%);
+      padding: 18px;
+      border: 1px solid #454545;
+      background: #222;
+    }
+    .modal h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+    .modal p {
+      margin: 0;
+      color: #aaa;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-line;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 18px;
+    }
     @media (max-width: 760px) {
       body { padding: 12px; }
       .demo { grid-template-columns: 128px minmax(0, 1fr); }
@@ -171,6 +244,7 @@
       .row { grid-template-columns: 1fr; gap: 7px; }
       .control { justify-content: flex-start; }
       .actions { justify-content: flex-start; }
+      .shortcut-row { grid-template-columns: minmax(0, 1fr) 150px 28px; }
     }
   </style>
 </head>
@@ -183,7 +257,7 @@
       <button data-page="layout">排版</button>
       <button data-page="workflows">工作流</button>
       <button data-page="templates">模板</button>
-      <button data-page="shortcuts">快捷键</button>
+      <button data-page="shortcuts">快捷键与手势</button>
       <button data-page="advanced">高级</button>
     </aside>
 
@@ -191,88 +265,54 @@
       <div class="page active" id="appearance">
         <header class="page-head">
           <h1>外观</h1>
-          <p>控制 WorkspaceKit 的标签入口、背景和辅助信息。</p>
+          <p>面板入口、背景和辅助显示。</p>
         </header>
 
         <div class="section">
           <h2>侧边栏标签</h2>
-          <div class="row">
-            <div><div class="name">工作流</div><div class="desc">显示「工作流」标签。</div></div>
-            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
-          </div>
-          <div class="row">
-            <div><div class="name">节点</div><div class="desc">显示「节点」标签。</div></div>
-            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
-          </div>
-          <div class="row">
-            <div><div class="name">模板</div><div class="desc">显示「模板」标签。</div></div>
-            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
-          </div>
-          <div class="row">
-            <div><div class="name">排版</div><div class="desc">显示「排版」标签。</div></div>
-            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
-          </div>
+          <div class="row"><div class="name">工作流</div><div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div></div>
+          <div class="row"><div class="name">节点</div><div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div></div>
+          <div class="row"><div class="name">模板</div><div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div></div>
+          <div class="row"><div class="name">排版</div><div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div></div>
+          <div class="row"><div class="name">主题</div><div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div></div>
         </div>
 
         <div class="section">
           <h2>背景效果</h2>
           <div class="row">
-            <div><div class="name">透明背景</div><div class="desc">使用透明面板，并调整透明度。</div></div>
+            <div><div class="name">透明背景</div><div class="desc">调整面板透明度。</div></div>
             <div class="control"><input type="radio" name="bg" checked /><input type="range" min="5" max="100" value="82" /></div>
           </div>
           <div class="row">
-            <div><div class="name">磨砂玻璃</div><div class="desc">使用背景模糊的玻璃效果。</div></div>
+            <div><div class="name">磨砂玻璃</div><div class="desc">调整背景模糊强度。</div></div>
             <div class="control"><input type="radio" name="bg" /><input type="range" min="0" max="100" value="30" /></div>
           </div>
         </div>
 
         <div class="section">
           <h2>面板显示</h2>
-          <div class="row">
-            <div><div class="name">状态说明</div><div class="desc">在面板底部显示必要的状态和操作提示。</div></div>
-            <div class="control"><label class="check"><input type="checkbox" checked /> 开启</label></div>
-          </div>
+          <div class="row"><div class="name">状态说明</div><div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div></div>
         </div>
       </div>
 
       <div class="page" id="groups">
         <header class="page-head">
           <h1>编组</h1>
-          <p>管理 WorkspaceKit 编组行为，以及与原生编组之间的转换。</p>
+          <p>WorkspaceKit 编组功能与编组转换。</p>
         </header>
 
         <div class="section">
-          <h2>基本行为</h2>
+          <h2>基本</h2>
           <div class="row">
-            <div><div class="name">启用 WorkspaceKit 编组</div><div class="desc">开启后，Ctrl+G 使用 WorkspaceKit 编组。</div></div>
+            <div><div class="name">WorkspaceKit 编组</div><div class="desc">使用 WorkspaceKit 编组功能。</div></div>
             <div class="control"><label class="check"><input type="checkbox" checked /> 开启</label></div>
-          </div>
-        </div>
-
-        <div class="section">
-          <h2>鼠标手势</h2>
-          <div class="row">
-            <div><div class="name">Ctrl / Cmd + 左键</div><div class="desc">点击编组时执行的快捷动作。</div></div>
-            <div class="control"><select><option>忽略编组</option><option>禁止编组</option><option>多选编组</option><option>关闭</option></select></div>
-          </div>
-          <div class="row">
-            <div><div class="name">Alt + 左键</div><div class="desc">点击编组时执行的快捷动作。</div></div>
-            <div class="control"><select><option>禁止编组</option><option>忽略编组</option><option>多选编组</option><option>关闭</option></select></div>
-          </div>
-          <div class="row">
-            <div><div class="name">Shift + 左键</div><div class="desc">点击编组时执行的快捷动作。</div></div>
-            <div class="control"><select><option>多选编组</option><option>忽略编组</option><option>禁止编组</option><option>关闭</option></select></div>
-          </div>
-          <div class="row">
-            <div><div class="name">恢复默认手势</div><div class="desc">恢复 WorkspaceKit 默认鼠标绑定。</div></div>
-            <div class="control"><button class="plain-btn">恢复默认</button></div>
           </div>
         </div>
 
         <div class="section">
           <h2>编组转换</h2>
           <div class="row">
-            <div><div class="name">当前画布编组</div><div class="desc">WK 编组 3 · ComfyUI 原生编组 1</div></div>
+            <div><div class="name">当前画布</div><div class="desc">WK 编组 3 · ComfyUI 原生编组 1</div></div>
             <div class="actions"><button class="plain-btn">转为原生</button><button class="plain-btn">转为 WK</button></div>
           </div>
         </div>
@@ -281,16 +321,13 @@
       <div class="page" id="layout">
         <header class="page-head">
           <h1>排版</h1>
-          <p>设置排版快捷工具出现的位置与操作尺寸。</p>
+          <p>排版快捷工具的显示方式与尺寸。</p>
         </header>
 
         <div class="section">
           <h2>快捷入口</h2>
           <div class="row" style="align-items:start;">
-            <div>
-              <div class="name">显示方式</div>
-              <div class="desc">只决定排版快捷工具显示在哪里，不影响侧边栏「排版」面板。</div>
-            </div>
+            <div><div class="name">显示方式</div></div>
             <div class="radio-list">
               <label class="radio-item"><input type="radio" name="layout-mode" checked /><strong>顶部</strong><span>固定在画布顶部工具栏</span></label>
               <label class="radio-item"><input type="radio" name="layout-mode" /><strong>选中</strong><span>选中多个对象时出现</span></label>
@@ -301,13 +338,13 @@
         </div>
 
         <div class="section">
-          <h2>工具尺寸</h2>
+          <h2>工具</h2>
           <div class="row">
-            <div><div class="name">图标大小</div><div class="desc">调整排版快捷按钮的图标尺寸。</div></div>
+            <div class="name">图标大小</div>
             <div class="control"><input type="range" min="12" max="28" value="18" /><span class="muted">18</span></div>
           </div>
           <div class="row">
-            <div><div class="name">悬浮条位置</div><div class="desc">将拖动过的悬浮工具条恢复到默认位置。</div></div>
+            <div class="name">悬浮条位置</div>
             <div class="control"><button class="plain-btn">恢复默认位置</button></div>
           </div>
         </div>
@@ -316,19 +353,19 @@
       <div class="page" id="workflows">
         <header class="page-head">
           <h1>工作流</h1>
-          <p>控制工作流列表与保存入口的行为。</p>
+          <p>工作流列表与保存行为。</p>
         </header>
         <div class="section">
-          <h2>打开行为</h2>
+          <h2>打开</h2>
           <div class="row">
-            <div><div class="name">打开历史数量</div><div class="desc">控制「打开」区域可直接看到的工作流数量。</div></div>
+            <div><div class="name">打开历史数量</div><div class="desc">控制「打开」区域显示的工作流数量。</div></div>
             <div class="control"><input type="range" min="2" max="15" value="5" /><span class="muted">5</span></div>
           </div>
         </div>
         <div class="section">
           <h2>保存</h2>
           <div class="row">
-            <div><div class="name">顶部保存按钮</div><div class="desc">在画布顶部工具栏显示与 Ctrl+S 相同的保存按钮。</div></div>
+            <div><div class="name">顶部保存按钮</div><div class="desc">功能与 Ctrl+S 相同。</div></div>
             <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
           </div>
         </div>
@@ -337,12 +374,12 @@
       <div class="page" id="templates">
         <header class="page-head">
           <h1>模板</h1>
-          <p>控制模板保存后的交互行为。</p>
+          <p>模板保存后的行为。</p>
         </header>
         <div class="section">
-          <h2>保存行为</h2>
+          <h2>保存</h2>
           <div class="row">
-            <div><div class="name">保存后打开模板</div><div class="desc">使用 Alt+C 保存后，自动切换到模板并定位新项目。</div></div>
+            <div><div class="name">保存后打开模板</div><div class="desc">保存完成后切换到模板面板并定位新模板。</div></div>
             <div class="control"><label class="check"><input type="checkbox" checked /> 开启</label></div>
           </div>
         </div>
@@ -350,62 +387,86 @@
 
       <div class="page" id="shortcuts">
         <header class="page-head">
-          <h1>快捷键</h1>
-          <p>先看当前映射，再决定哪些快捷键由 WorkspaceKit 接管。</p>
+          <h1>快捷键与手势</h1>
+          <p>为 WorkspaceKit 命令分配键盘快捷键和鼠标手势。</p>
         </header>
+
         <div class="section">
-          <h2>快捷键一览</h2>
-          <div class="full-row">
-            <table class="shortcut-table">
-              <thead><tr><th>快捷键</th><th>功能</th><th>状态</th></tr></thead>
-              <tbody>
-                <tr><td>Shift + 1</td><td>工作流面板</td><td><input type="checkbox" checked /></td></tr>
-                <tr><td>Shift + 2</td><td>节点面板</td><td><input type="checkbox" checked /></td></tr>
-                <tr><td>Shift + 3</td><td>模板面板</td><td><input type="checkbox" checked /></td></tr>
-                <tr><td>Shift + 4</td><td>置顶扩展面板</td><td><input type="checkbox" checked /></td></tr>
-                <tr><td>Alt + C</td><td>保存模板</td><td>固定</td></tr>
-              </tbody>
-            </table>
+          <h2>面板</h2>
+          <div class="section-note">点击快捷键后直接按下新的组合键；清空后该命令不再占用快捷键。</div>
+          <div class="shortcut-list" id="keyboard-bindings">
+            <div class="shortcut-row" data-command="打开工作流"><div class="command"><div class="name">打开工作流</div></div><button class="binding-btn" data-binding="Shift + 1">Shift + 1</button><button class="shortcut-clear" title="清除">×</button></div>
+            <div class="shortcut-row" data-command="打开节点"><div class="command"><div class="name">打开节点</div></div><button class="binding-btn" data-binding="Shift + 2">Shift + 2</button><button class="shortcut-clear" title="清除">×</button></div>
+            <div class="shortcut-row" data-command="打开模板"><div class="command"><div class="name">打开模板</div></div><button class="binding-btn" data-binding="Shift + 3">Shift + 3</button><button class="shortcut-clear" title="清除">×</button></div>
+            <div class="shortcut-row" data-command="打开排版"><div class="command"><div class="name">打开排版</div></div><button class="binding-btn" data-binding="Shift + 4">Shift + 4</button><button class="shortcut-clear" title="清除">×</button></div>
+            <div class="shortcut-row" data-command="打开主题"><div class="command"><div class="name">打开主题</div></div><button class="binding-btn" data-binding="Shift + 5">Shift + 5</button><button class="shortcut-clear" title="清除">×</button></div>
           </div>
         </div>
+
         <div class="section">
-          <h2>标签行为</h2>
-          <div class="row">
-            <div><div class="name">重复快捷键关闭面板</div><div class="desc">再次按当前标签快捷键时关闭 WorkspaceKit。</div></div>
-            <div class="control"><label class="check"><input type="checkbox" /> 开启</label></div>
+          <h2>操作</h2>
+          <div class="shortcut-list">
+            <div class="shortcut-row" data-command="保存为模板"><div class="command"><div class="name">保存为模板</div></div><button class="binding-btn" data-binding="Alt + C">Alt + C</button><button class="shortcut-clear" title="清除">×</button></div>
+            <div class="shortcut-row" data-command="创建编组"><div class="command"><div class="name">创建编组</div></div><button class="binding-btn" data-binding="Ctrl + G">Ctrl + G</button><button class="shortcut-clear" title="清除">×</button></div>
+            <div class="shortcut-row" data-command="取消编组"><div class="command"><div class="name">取消编组</div></div><button class="binding-btn" data-binding="Shift + G">Shift + G</button><button class="shortcut-clear" title="清除">×</button></div>
           </div>
+          <div class="status-line" id="shortcut-status">冲突检测：WorkspaceKit、ComfyUI、浏览器/系统保留组合。第三方扩展不扫描。</div>
+        </div>
+
+        <div class="section">
+          <h2>编组鼠标手势</h2>
+          <div class="row">
+            <div class="name">忽略编组</div>
+            <div class="gesture-binding"><select><option>Ctrl / Cmd</option><option>Alt</option><option>Shift</option><option>无</option></select><select><option>左键</option><option>右键</option><option>中键</option></select></div>
+          </div>
+          <div class="row">
+            <div class="name">禁止编组</div>
+            <div class="gesture-binding"><select><option>Alt</option><option>Ctrl / Cmd</option><option>Shift</option><option>无</option></select><select><option>左键</option><option>右键</option><option>中键</option></select></div>
+          </div>
+          <div class="row">
+            <div class="name">多选编组</div>
+            <div class="gesture-binding"><select><option>Shift</option><option>Ctrl / Cmd</option><option>Alt</option><option>无</option></select><select><option>左键</option><option>右键</option><option>中键</option></select></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>行为</h2>
+          <div class="row"><div class="name">重复快捷键关闭面板</div><div class="control"><label class="check"><input type="checkbox" /> 开启</label></div></div>
+          <div class="row"><div class="name">恢复默认映射</div><div class="control"><button class="plain-btn" id="restore-bindings">恢复默认</button></div></div>
         </div>
       </div>
 
       <div class="page" id="advanced">
         <header class="page-head">
           <h1>高级</h1>
-          <p>缓存、数据迁移等低频维护功能集中放在这里。</p>
+          <p>缓存、数据迁移和扩展维护。</p>
         </header>
         <div class="section">
           <h2>节点缓存</h2>
-          <div class="row">
-            <div><div class="name">本地节点缓存</div><div class="desc">缓存节点：846 · 最近更新：今天 19:42</div></div>
-            <div class="control"><button class="plain-btn">清空缓存</button></div>
-          </div>
+          <div class="row"><div><div class="name">本地节点缓存</div><div class="desc">846 个节点 · 今天 19:42 更新</div></div><div class="control"><button class="plain-btn">清空缓存</button></div></div>
         </div>
         <div class="section">
           <h2>数据备份与迁移</h2>
-          <div class="row">
-            <div><div class="name">WorkspaceKit 数据</div><div class="desc">导出设置与插件数据；导入前自动备份当前数据。</div></div>
-            <div class="actions"><button class="plain-btn">导出数据</button><button class="plain-btn">导入数据</button></div>
-          </div>
+          <div class="row"><div><div class="name">WorkspaceKit 数据</div><div class="desc">导入前自动备份当前数据。</div></div><div class="actions"><button class="plain-btn">导出数据</button><button class="plain-btn">导入数据</button></div></div>
         </div>
         <div class="section">
           <h2>关于</h2>
-          <div class="row">
-            <div><div class="name">ComfyUI-WorkspaceKit</div><div class="desc">GitHub：ZiYao00/ComfyUI-WorkspaceKit</div></div>
-            <div class="control"><span class="muted">版本 1.x</span></div>
-          </div>
+          <div class="row"><div><div class="name">ComfyUI-WorkspaceKit</div><div class="desc">ZiYao00/ComfyUI-WorkspaceKit</div></div><div class="control"><span class="muted">版本 1.x</span></div></div>
         </div>
       </div>
     </section>
   </main>
+
+  <div class="modal-backdrop" id="conflict-modal" aria-hidden="true">
+    <div class="modal">
+      <h3 id="conflict-title">快捷键冲突</h3>
+      <p id="conflict-message"></p>
+      <div class="modal-actions">
+        <button class="plain-btn" id="conflict-cancel">取消</button>
+        <button class="plain-btn" id="conflict-confirm">仍然使用</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     const navButtons = [...document.querySelectorAll('.nav button[data-page]')];
@@ -416,6 +477,160 @@
         for (const page of pages) page.classList.toggle('active', page.id === button.dataset.page);
       });
     }
+
+    const defaults = new Map([
+      ['打开工作流', 'Shift + 1'],
+      ['打开节点', 'Shift + 2'],
+      ['打开模板', 'Shift + 3'],
+      ['打开排版', 'Shift + 4'],
+      ['打开主题', 'Shift + 5'],
+      ['保存为模板', 'Alt + C'],
+      ['创建编组', 'Ctrl + G'],
+      ['取消编组', 'Shift + G'],
+    ]);
+
+    const comfyConflicts = new Map([
+      ['Ctrl + S', 'ComfyUI：保存工作流'],
+      ['Ctrl + O', 'ComfyUI：打开工作流'],
+      ['Ctrl + G', 'ComfyUI：创建原生编组'],
+    ]);
+    const reserved = new Set(['Ctrl + W', 'Ctrl + T', 'Ctrl + Shift + T', 'Alt + F4']);
+    const status = document.getElementById('shortcut-status');
+    const modal = document.getElementById('conflict-modal');
+    const modalTitle = document.getElementById('conflict-title');
+    const modalMessage = document.getElementById('conflict-message');
+    const confirmButton = document.getElementById('conflict-confirm');
+    const cancelButton = document.getElementById('conflict-cancel');
+    let listeningButton = null;
+    let pendingApply = null;
+
+    const normalizeKey = (event) => {
+      const modifiers = [];
+      if (event.ctrlKey || event.metaKey) modifiers.push('Ctrl');
+      if (event.altKey) modifiers.push('Alt');
+      if (event.shiftKey) modifiers.push('Shift');
+      const ignored = new Set(['Control', 'Meta', 'Alt', 'Shift']);
+      if (ignored.has(event.key)) return null;
+      let key = event.key.length === 1 ? event.key.toUpperCase() : event.key;
+      if (key === ' ') key = 'Space';
+      return [...modifiers, key].join(' + ');
+    };
+
+    const closeModal = () => {
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      pendingApply = null;
+    };
+
+    const showModal = ({ title, message, confirm = true, onConfirm = null }) => {
+      modalTitle.textContent = title;
+      modalMessage.textContent = message;
+      confirmButton.hidden = !confirm;
+      pendingApply = onConfirm;
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+    };
+
+    const currentBindingOwner = (binding, exceptButton) => {
+      return [...document.querySelectorAll('.binding-btn')].find((button) => button !== exceptButton && button.dataset.binding === binding)?.closest('.shortcut-row')?.dataset.command || '';
+    };
+
+    const applyBinding = (button, binding) => {
+      button.dataset.binding = binding;
+      button.textContent = binding || '未设置';
+      button.classList.remove('listening');
+      listeningButton = null;
+      status.textContent = binding ? `已设置：${button.closest('.shortcut-row').dataset.command} → ${binding}` : '已清除快捷键。';
+    };
+
+    const requestBinding = (button, binding) => {
+      const command = button.closest('.shortcut-row').dataset.command;
+      const owner = currentBindingOwner(binding, button);
+      if (reserved.has(binding)) {
+        showModal({
+          title: '无法使用此快捷键',
+          message: `${binding} 属于浏览器或系统保留组合，WorkspaceKit 无法可靠接管。`,
+          confirm: false,
+        });
+        button.classList.remove('listening');
+        listeningButton = null;
+        return;
+      }
+      if (owner) {
+        showModal({
+          title: 'WorkspaceKit 快捷键冲突',
+          message: `${binding} 当前用于「${owner}」。\n\n继续后，「${owner}」的快捷键将被清除，并改为「${command}」。`,
+          onConfirm: () => {
+            const previous = [...document.querySelectorAll('.binding-btn')].find((item) => item !== button && item.dataset.binding === binding);
+            if (previous) applyBinding(previous, '');
+            applyBinding(button, binding);
+          },
+        });
+        return;
+      }
+      if (comfyConflicts.has(binding) && defaults.get(command) !== binding) {
+        showModal({
+          title: '与 ComfyUI 快捷键冲突',
+          message: `${binding} 当前用于「${comfyConflicts.get(binding)}」。\n\n继续使用后，WorkspaceKit 将接管这个组合键，原 ComfyUI 快捷操作将失效。`,
+          onConfirm: () => applyBinding(button, binding),
+        });
+        return;
+      }
+      applyBinding(button, binding);
+    };
+
+    for (const button of document.querySelectorAll('.binding-btn')) {
+      button.addEventListener('click', () => {
+        if (listeningButton && listeningButton !== button) listeningButton.classList.remove('listening');
+        listeningButton = button;
+        button.classList.add('listening');
+        button.textContent = '请按新快捷键…';
+        status.textContent = `正在修改「${button.closest('.shortcut-row').dataset.command}」`;
+      });
+    }
+
+    for (const clear of document.querySelectorAll('.shortcut-clear')) {
+      clear.addEventListener('click', () => applyBinding(clear.closest('.shortcut-row').querySelector('.binding-btn'), ''));
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (!listeningButton || modal.classList.contains('open')) return;
+      event.preventDefault();
+      if (event.key === 'Escape') {
+        listeningButton.textContent = listeningButton.dataset.binding || '未设置';
+        listeningButton.classList.remove('listening');
+        listeningButton = null;
+        status.textContent = '已取消修改。';
+        return;
+      }
+      const binding = normalizeKey(event);
+      if (!binding) return;
+      requestBinding(listeningButton, binding);
+    }, true);
+
+    confirmButton.addEventListener('click', () => {
+      const action = pendingApply;
+      closeModal();
+      action?.();
+    });
+    cancelButton.addEventListener('click', () => {
+      if (listeningButton) {
+        listeningButton.textContent = listeningButton.dataset.binding || '未设置';
+        listeningButton.classList.remove('listening');
+        listeningButton = null;
+      }
+      closeModal();
+      status.textContent = '已取消修改。';
+    });
+
+    document.getElementById('restore-bindings').addEventListener('click', () => {
+      for (const row of document.querySelectorAll('.shortcut-row[data-command]')) {
+        const command = row.dataset.command;
+        const button = row.querySelector('.binding-btn');
+        if (button && defaults.has(command)) applyBinding(button, defaults.get(command));
+      }
+      status.textContent = '已恢复默认快捷键。';
+    });
   </script>
 </body>
 </html>

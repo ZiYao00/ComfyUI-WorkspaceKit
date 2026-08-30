@@ -59,11 +59,12 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
 
   const settingsShortcutGrid = () => {
     const shortcuts = [
-      ["Shift + 1", t("settings.shortcuts.workflow")],
-      ["Shift + 2", t("settings.shortcuts.nodes")],
-      ["Shift + 3", t("settings.shortcuts.templates")],
-      ["Shift + 4", t("settings.shortcuts.extension")],
-      ["Alt + C", t("settings.shortcuts.saveTemplate")],
+      ["Shift + 1", t("settings.shortcuts.commands.openWorkflows")],
+      ["Shift + 2", t("settings.shortcuts.commands.openNodes")],
+      ["Shift + 3", t("settings.shortcuts.commands.openTemplates")],
+      ["Shift + 4", t("settings.shortcuts.commands.openLayout")],
+      ["Shift + 5", t("settings.shortcuts.commands.openTheme")],
+      ["Alt + C", t("settings.shortcuts.commands.saveTemplate")],
     ];
     const grid = document.createElement("div");
     grid.className = "workspace2-settings-shortcut-grid";
@@ -161,6 +162,93 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
     row.classList.toggle("is-disabled", !selected);
   };
 
+  const settingsKeybinding = (label, commandId, display, { onCapture, onClear } = {}) => {
+    const row = document.createElement("div");
+    row.className = "workspace2-settings-row workspace2-settings-keybinding-row";
+    row.dataset.workspace2CommandRow = commandId;
+    const text = document.createElement("span");
+    text.textContent = label;
+    const control = document.createElement("div");
+    control.className = "workspace2-settings-keybinding-control";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace2-settings-keybinding";
+    button.dataset.workspace2CommandBinding = commandId;
+    button.dataset.workspace2KeybindingCapture = "true";
+    button.textContent = display;
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "workspace2-settings-keybinding-clear";
+    clear.title = t("settings.shortcuts.clear");
+    clear.setAttribute?.("aria-label", t("settings.shortcuts.clear"));
+    clear.textContent = "×";
+    let listening = false;
+    let previousText = display;
+    button.addEventListener("click", () => {
+      previousText = button.textContent || display;
+      listening = true;
+      button.classList.add("is-listening");
+      button.textContent = t("settings.shortcuts.pressKeys");
+      button.focus?.();
+    });
+    button.addEventListener("keydown", async (event) => {
+      if (!listening) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      if (event.key === "Escape") {
+        listening = false;
+        button.classList.remove("is-listening");
+        button.textContent = previousText;
+        return;
+      }
+      // Browsers emit a keydown for the modifier before the final key in a
+      // combination (for example Shift, then 4). Keep capture mode active until
+      // a non-modifier key arrives.
+      if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
+      const accepted = await onCapture?.(event);
+      listening = false;
+      button.classList.remove("is-listening");
+      if (accepted === false) button.textContent = previousText;
+    });
+    clear.addEventListener("click", () => onClear?.());
+    isolateComfyKeys(button);
+    isolateComfyKeys(clear);
+    control.append(button, clear);
+    row.append(text, control);
+    return row;
+  };
+
+  const settingsPointerBinding = (label, action, modifier, buttonValue, { modifierOptions = [], buttonOptions = [], onChange } = {}) => {
+    const row = document.createElement("div");
+    row.className = "workspace2-settings-row workspace2-settings-pointer-binding-row";
+    row.dataset.workspace2GroupPointerAction = action;
+    const text = document.createElement("span");
+    text.textContent = label;
+    const control = document.createElement("div");
+    control.className = "workspace2-settings-pointer-binding";
+    const createSelect = (part, value, options) => {
+      const select = document.createElement("select");
+      select.dataset.workspace2GroupPointerPart = part;
+      for (const option of options) {
+        const item = document.createElement("option");
+        item.value = option.value;
+        item.textContent = option.label;
+        select.append(item);
+      }
+      select.value = value;
+      isolateComfyKeys(select);
+      select.addEventListener("change", () => onChange?.(part, select.value));
+      return select;
+    };
+    control.append(
+      createSelect("modifier", modifier, modifierOptions),
+      createSelect("button", buttonValue, buttonOptions),
+    );
+    row.append(text, control);
+    return row;
+  };
+
   return {
     settingsCheckbox,
     settingsSelect,
@@ -170,5 +258,7 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
     settingsRange,
     settingsModeRange,
     updateSettingsModeRange,
+    settingsKeybinding,
+    settingsPointerBinding,
   };
 }

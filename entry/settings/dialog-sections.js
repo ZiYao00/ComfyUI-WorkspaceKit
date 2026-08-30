@@ -17,6 +17,8 @@ export function createSettingsDialogSections({
   settingsRange,
   settingsModeRange,
   updateSettingsModeRange,
+  settingsKeybinding,
+  settingsPointerBinding,
   isCtrlGEnabled,
   setCtrlGEnabled,
   isAltCOpenTemplatesEnabled,
@@ -32,7 +34,7 @@ export function createSettingsDialogSections({
   isTopbarSaveEnabled = null,
   setTopbarSaveEnabled = () => {},
   layoutSettingsStorage = globalThis.localStorage,
-  moduleShortcutOptions,
+  commandShortcutOptions,
   groupPointerShortcutOptions,
   workflowRecentLimit,
   snapWorkflowRecentLimit,
@@ -56,33 +58,57 @@ export function createSettingsDialogSections({
   confirmConvertGroupsToWorkspaceKit,
 }) {
   const buildSettingsDialogSections = () => {
-    // During a live frontend upgrade entry.js can briefly be newer than this
-    // child module or controls.js. Keep the base Settings dialog available if
-    // the optional group-gesture control has not loaded yet.
-    const groupPointerOptions = typeof groupPointerShortcutOptions === "function" ? groupPointerShortcutOptions() : null;
-    const groupPointerShortcuts = typeof settingsSelect === "function" && Array.isArray(groupPointerOptions)
+    const commandOptions = typeof commandShortcutOptions === "function" ? commandShortcutOptions() : [];
+    const commandRows = (group) => (
+      typeof settingsKeybinding === "function"
+        ? commandOptions
+          .filter((shortcut) => shortcut.group === group)
+          .map((shortcut) => settingsKeybinding(shortcut.label, shortcut.commandId, shortcut.display, {
+            onCapture: shortcut.onCapture,
+            onClear: shortcut.onClear,
+          }))
+        : []
+    );
+    const shortcutPanelSettings = settingsSection(t("settings.shortcuts.panels"), [
+      settingsHelp(t("settings.shortcuts.captureHelp")),
+      ...commandRows("panels"),
+    ]);
+    const shortcutActionSettings = settingsSection(t("settings.shortcuts.actions"), [
+      ...commandRows("actions"),
+      settingsHelp(t("settings.shortcuts.conflictScope")),
+    ]);
+
+    const groupPointerOptions = typeof groupPointerShortcutOptions === "function" ? groupPointerShortcutOptions() : [];
+    const groupPointerShortcuts = typeof settingsPointerBinding === "function" && Array.isArray(groupPointerOptions)
       ? settingsSection(t("settings.groupPointerShortcuts"), [
-        settingsHelp(t("settings.groupPointerShortcutsHelp")),
-        ...groupPointerOptions.map((shortcut) => {
-          const row = settingsSelect(shortcut.label, shortcut.value, shortcut.options, shortcut.onChange);
-          const select = row?.querySelector?.("select");
-          if (select && shortcut.modifier) {
-            select.dataset.workspace2GroupPointerModifier = shortcut.modifier;
-          }
-          return row;
-        }),
-        settingsActionButton("restore", t("settings.groupPointerRestore"), () => groupPointerOptions.restoreDefaults?.()),
+        ...groupPointerOptions.map((shortcut) => settingsPointerBinding(
+          shortcut.label,
+          shortcut.action,
+          shortcut.modifier,
+          shortcut.button,
+          {
+            modifierOptions: shortcut.modifierOptions,
+            buttonOptions: shortcut.buttonOptions,
+            onChange: shortcut.onChange,
+          },
+        )),
       ])
       : null;
 
-    const shortcuts = settingsSection(t("settings.shortcuts"), [
-      settingsShortcutGrid(),
-      settingsHelp(t("settings.moduleShortcutsHelp")),
-      ...moduleShortcutOptions().map((shortcut) => settingsCheckbox(shortcut.label, shortcut.checked, shortcut.onChange)),
-      groupPointerShortcuts,
-    ]);
+    const restoreShortcutRow = document.createElement("div");
+    restoreShortcutRow.className = "workspace2-settings-action-row";
+    const restoreShortcutButton = settingsActionButton("restore", t("settings.shortcuts.restoreDefaults"), () => {
+      commandOptions.restoreDefaults?.();
+      groupPointerOptions.restoreDefaults?.();
+    });
+    restoreShortcutRow.append(restoreShortcutButton);
+    const shortcutManagement = settingsSection(t("settings.shortcuts.management"), [restoreShortcutRow]);
+    // `shortcuts` remains a compatibility alias for callers that expect one
+    // primary shortcuts section; the page itself mounts the structured list.
+    const shortcuts = shortcutPanelSettings;
+    const shortcutSections = [shortcutPanelSettings, shortcutActionSettings, groupPointerShortcuts, shortcutManagement].filter(Boolean);
 
-    const workflowSettings = settingsSection(t("settings.workflowSettings"), [
+    const workflowOpenSettings = settingsSection(t("settings.workflowOpen"), [
       settingsRange(t("settings.recentWorkflows"), workflowRecentLimit(), {
         min: 2,
         max: 15,
@@ -90,14 +116,16 @@ export function createSettingsDialogSections({
         onChange: setWorkflowRecentLimit,
       }),
       settingsHelp(t("settings.recentWorkflowsHelp")),
-      // Omitted entirely rather than shown unchecked when entry.js has not wired
-      // the control yet: a dead switch is worse than an absent one.
+    ]);
+    const workflowSaveSettings = settingsSection(t("settings.workflowSave"), [
       typeof isTopbarSaveEnabled === "function"
         ? settingsCheckbox(t("settings.topbarSaveButton"), isTopbarSaveEnabled(), setTopbarSaveEnabled)
         : null,
       typeof isTopbarSaveEnabled === "function" ? settingsHelp(t("settings.topbarSaveButtonHelp")) : null,
     ].filter(Boolean));
-    const templateSettings = settingsSection(t("settings.templateSettings"), [
+    // Compatibility alias for older callers that expect one workflow section.
+    const workflowSettings = workflowOpenSettings;
+    const templateSettings = settingsSection(t("settings.templateSave"), [
       settingsCheckbox(t("settings.altCOpenTemplates"), isAltCOpenTemplatesEnabled(), setAltCOpenTemplatesEnabled),
       settingsHelp(t("settings.altCOpenTemplatesHelp")),
     ]);
@@ -193,7 +221,8 @@ export function createSettingsDialogSections({
       settingsRange,
       settingsActionButton,
     });
-    const layoutSettings = settingsSection(t("settings.layoutSettings"), layoutSettingsRows);
+    const layoutSettings = settingsSection(t("settings.layoutPresentationTitle"), layoutSettingsRows.slice(0, 3));
+    const layoutToolSettings = settingsSection(t("settings.layoutTools"), layoutSettingsRows.slice(3));
     if (layoutSettings?.dataset) layoutSettings.dataset.workspacekitLayoutDisplaySettings = "true";
 
     const panelDisplay = settingsSection(t("settings.panelDisplay"), [
@@ -349,14 +378,10 @@ export function createSettingsDialogSections({
       })()
       : null;
 
-    // Group behavior has its own Settings page. Pointer gestures remain in
-    // Shortcuts because they are bindings, not representation/data settings.
-    const groupSettings = settingsSection(t("settings.groupSettings"), [
-      settingsHelp(t("settings.groupSettingsHelp")),
-      settingsCheckbox(t("settings.ctrlG"), isCtrlGEnabled(), setCtrlGEnabled),
-      settingsHelp(t("settings.ctrlGHelp")),
-      groupRepresentation,
-    ].filter(Boolean));
+    // Group conversion remains a feature setting. Keyboard creation/ungroup and
+    // pointer actions moved to the unified input-mapping page, so the old Ctrl+G
+    // switch no longer creates a second source of truth.
+    const groupSettings = groupRepresentation;
 
     const versionInfo = settingsHelp(t("settings.version", { version: t("settings.versionLoading") }));
     const about = settingsSection(t("settings.about"), [
@@ -364,7 +389,30 @@ export function createSettingsDialogSections({
       settingsHelp(t("settings.github")),
     ]);
 
-    const sections = { shortcuts, groupPointerShortcuts, workflowSettings, templateSettings, groupSettings, layoutSettings, sidebarTabs, panelDisplay, backgroundEffect, nodeCache, dataManagement, integrations, about, versionInfo };
+    const sections = {
+      shortcuts,
+      shortcutSections,
+      shortcutPanelSettings,
+      shortcutActionSettings,
+      shortcutManagement,
+      groupPointerShortcuts,
+      workflowSettings,
+      workflowOpenSettings,
+      workflowSaveSettings,
+      templateSettings,
+      groupSettings,
+      groupRepresentation,
+      layoutSettings,
+      layoutToolSettings,
+      sidebarTabs,
+      panelDisplay,
+      backgroundEffect,
+      nodeCache,
+      dataManagement,
+      integrations,
+      about,
+      versionInfo,
+    };
     return sections;
   };
 

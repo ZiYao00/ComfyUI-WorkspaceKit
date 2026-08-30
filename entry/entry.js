@@ -93,16 +93,38 @@ import { createWorkspacePanelStatusController } from "./ui/panel-status.js";
 import { resolveWorkspacePanelProviderLabel } from "./ui/provider-label.js";
 import { PINNED_PROVIDER_KEY, createWorkspaceTabPlan } from "./ui/provider-tabs.js";
 import { WORKSPACE_MODULE_ID, isWorkspaceModuleSealed, isWorkspaceModuleVisible, setWorkspaceModuleVisible, visibleWorkspaceModuleIds } from "./ui/module-visibility.js";
-import { MODULE_SHORTCUTS, isModuleShortcutEnabled, moduleShortcutStorageKey, resolveModuleShortcut } from "./ui/module-shortcuts.js";
-import { GROUP_POINTER_ACTION, GROUP_POINTER_BINDINGS_KEY, GROUP_POINTER_MODIFIER, normalizeGroupPointerBindings, swapGroupPointerBinding } from "./canvas-groups/pointer-actions.js?v=20260804_group_gesture_disable_r1";
+import {
+  COMMAND_BINDING_DEFINITIONS,
+  WORKSPACE_COMMAND,
+  browserReservedShortcut,
+  comfyKeybindingConflict,
+  commandBindingDefinition,
+  findInternalBindingConflict,
+  formatKeyCombo,
+  keyComboFromEvent,
+  keyComboSignature,
+  readCommandBindings,
+  resetCommandBindings,
+  resolveBoundCommand,
+  setCommandBinding,
+} from "./ui/command-bindings.js?v=20260830_unified_input_bindings_r1";
+import {
+  GROUP_POINTER_ACTIONS,
+  GROUP_POINTER_BUTTON,
+  GROUP_POINTER_MODIFIER,
+  findGroupPointerBindingConflict,
+  readGroupPointerBindings,
+  resetGroupPointerBindings,
+  setGroupPointerBinding,
+} from "./canvas-groups/pointer-actions.js?v=20260830_unified_input_bindings_r1";
 // Settings controls and sections change their return contracts independently.
 // Keep their cache keys aligned with entry.js to avoid a refreshed entry using
 // an older child module from a long-lived ComfyUI browser session.
-import { createSettingsControls } from "./settings/controls.js?v=20260829_l0_sidebar_tabs_r1";
+import { createSettingsControls } from "./settings/controls.js?v=20260830_unified_input_bindings_r1";
 // Bump this query when the section return contract changes. ComfyUI browser
 // sessions can retain an imported child module after entry.js has refreshed;
 // an old section factory would otherwise omit a newly added section.
-import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260829_l0_sidebar_tabs_r1";
+import { createSettingsDialogSections } from "./settings/dialog-sections.js?v=20260830_unified_input_bindings_r1";
 import { createSettingsDialogShell } from "./settings/dialog-shell.js";
 import { configureI18n, getLocale, t as translate } from "./core/i18n.js";
 import { FALLBACK_STRINGS } from "./core/fallback-strings.js";
@@ -162,7 +184,6 @@ import {
   openWorkflowFileMenu as openWorkflowFileMenuRenderer,
 } from "./workflows/file-menu-renderer.js";
 import {
-  CANVAS_GROUP_CTRL_G_KEY,
   CANVAS_GROUPS_TAB_ID,
   COMFY_NODE_DRAG_TYPE,
   DEFAULT_FILE_ICON_CLASS,
@@ -1234,7 +1255,7 @@ function warnMissingTranslation(key) {
 
 function isEditableTarget(target) {
   return target instanceof HTMLElement
-    && Boolean(target.closest("input, textarea, [contenteditable='true'], [contenteditable='']"));
+    && Boolean(target.closest("input, textarea, [contenteditable='true'], [contenteditable=''], [data-workspace2-keybinding-capture='true']"));
 }
 
 function setupWorkspaceKeyIsolation() {
@@ -1260,127 +1281,228 @@ function setupWorkspaceKeyIsolation() {
   }
 }
 
-function setupWorkspaceShortcuts() {
-  if (setupWorkspaceShortcuts.ready) {
-    return;
+function executeWorkspaceBoundCommand(commandId) {
+  switch (commandId) {
+    case WORKSPACE_COMMAND.OPEN_WORKFLOWS:
+      return openWorkspace2Module(WORKSPACE_MODULE_ID.workflows, { closeIfActive: true });
+    case WORKSPACE_COMMAND.OPEN_NODES:
+      return openWorkspace2Module(WORKSPACE_MODULE_ID.nodes, { closeIfActive: true });
+    case WORKSPACE_COMMAND.OPEN_TEMPLATES:
+      return openWorkspace2Module(WORKSPACE_MODULE_ID.templates, { closeIfActive: true });
+    case WORKSPACE_COMMAND.OPEN_LAYOUT:
+      return openWorkspace2Module(WORKSPACE_MODULE_ID.layout, { closeIfActive: true });
+    case WORKSPACE_COMMAND.OPEN_THEME:
+      return openWorkspace2Module(WORKSPACE_MODULE_ID.theme, { closeIfActive: true });
+    case WORKSPACE_COMMAND.SAVE_TEMPLATE:
+      saveSelectedNodesAsTemplateFromShortcut();
+      return true;
+    case WORKSPACE_COMMAND.CREATE_GROUP:
+      workspace2CanvasGroups.createGroupFromSelection?.();
+      return true;
+    case WORKSPACE_COMMAND.UNGROUP:
+      workspace2CanvasGroups.ungroupSelection?.();
+      return true;
+    default:
+      return false;
   }
+}
+
+function setupWorkspaceShortcuts() {
+  if (setupWorkspaceShortcuts.ready) return;
   setupWorkspaceShortcuts.ready = true;
   const handler = (event) => {
-    if (
-      !event.workspace2Handled
-      && event.altKey
-      && !event.ctrlKey
-      && !event.shiftKey
-      && !event.metaKey
-      && !event.repeat
-      && event.code === "KeyC"
-      && !isEditableTarget(event.target)
-    ) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-      event.workspace2Handled = true;
-      saveSelectedNodesAsTemplateFromShortcut();
-      return;
-    }
-    // Module shortcuts are an explicit WorkspaceKit reservation.  Other
-    // extensions occasionally set the shared marker without performing a
-    // sidebar action; checking that marker first made Shift+1..4 silently do
-    // nothing when the panel was closed.  Alt/Meta/repeat are still rejected
-    // before resolving the reserved combinations.
-    if (event.altKey || event.metaKey || event.repeat) {
-      return;
-    }
-    if (isEditableTarget(event.target)) {
-      return;
-    }
-    const moduleShortcut = resolveModuleShortcut(event);
-    if (moduleShortcut && isModuleShortcutEnabled(moduleShortcut.id, (key) => localStorage.getItem(key))) {
-      const moduleId = moduleShortcut.moduleId === "pinned-provider"
-        ? workspaceTabPlan().pinned?.id
-        : moduleShortcut.moduleId;
-      // Shift+4 intentionally remains unhandled when no Provider is pinned,
-      // leaving that key available to ComfyUI and the browser.
-      if (moduleId) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.workspace2Handled = true;
-        openWorkspace2Module(moduleId, { closeIfActive: true });
-        return;
-      }
-    }
-    // Keep the shared marker boundary for all remaining canvas shortcuts. Only
-    // Shift+1..4 need to win over a stale marker from another extension.
-    if (event.workspace2Handled) {
-      return;
-    }
-    if (event.shiftKey && !event.ctrlKey && event.code === "KeyG") {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-      event.workspace2Handled = true;
-      workspace2CanvasGroups.ungroupSelection?.();
-      return;
-    }
-    if (event.ctrlKey && !event.shiftKey && event.code === "KeyG") {
-      if (!isWorkspace2CtrlGCreateEnabled()) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation?.();
-      event.workspace2Handled = true;
-      workspace2CanvasGroups.createGroupFromSelection?.();
-    }
+    if (event.workspace2Handled || event.repeat || isEditableTarget(event.target)) return;
+    const commandId = resolveBoundCommand(event, readCommandBindings(localStorage));
+    if (!commandId) return;
+    const handled = executeWorkspaceBoundCommand(commandId);
+    if (!handled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation?.();
+    event.workspace2Handled = true;
   };
-  document.addEventListener("keydown", handler, true);
+  // Window capture is intentionally registered first. Once the user explicitly
+  // accepts a ComfyUI conflict, the WorkspaceKit binding must take precedence
+  // over later canvas/LiteGraph handling for the same event.
   window.addEventListener("keydown", handler, true);
+  document.addEventListener("keydown", handler, true);
 }
 
-function isWorkspace2CtrlGCreateEnabled() {
-  return localStorage.getItem(CANVAS_GROUP_CTRL_G_KEY) !== "0";
+function commandBindingLabel(commandId) {
+  const definition = commandBindingDefinition(commandId);
+  return definition ? t(definition.labelKey) : String(commandId || "");
 }
 
-function moduleShortcutOptions() {
-  return MODULE_SHORTCUTS.map((shortcut) => ({
-    label: t(`settings.moduleShortcuts.${shortcut.id}`),
-    checked: isModuleShortcutEnabled(shortcut.id, (key) => localStorage.getItem(key)),
-    onChange: (checked) => localStorage.setItem(moduleShortcutStorageKey(shortcut.id), checked ? "1" : "0"),
+function refreshCommandBindingControls() {
+  const bindings = readCommandBindings(localStorage);
+  for (const button of workspaceState.settingsElement?.querySelectorAll?.("[data-workspace2-command-binding]") || []) {
+    const commandId = button.dataset.workspace2CommandBinding;
+    const combo = bindings[commandId] || null;
+    button.textContent = combo ? formatKeyCombo(combo, { isMac: /Mac|iPhone|iPad/.test(navigator.platform || "") }) : t("settings.shortcuts.unassigned");
+    button.dataset.workspace2CommandBindingValue = combo ? keyComboSignature(combo) : "";
+  }
+}
+
+function comfyKeybindingSettings() {
+  const setting = app.extensionManager?.setting;
+  return {
+    newBindings: setting?.get?.("Comfy.Keybinding.NewBindings") || [],
+    unsetBindings: setting?.get?.("Comfy.Keybinding.UnsetBindings") || [],
+  };
+}
+
+function comfyConflictLabel(conflict) {
+  if (!conflict?.commandId) return conflict?.label || "ComfyUI";
+  const command = app.extensionManager?.command?.commands?.find?.((item) => item?.id === conflict.commandId);
+  const label = typeof command?.label === "function" ? command.label() : command?.label;
+  return String(label || conflict.label || conflict.commandId);
+}
+
+async function assignCommandBinding(commandId, combo) {
+  const bindings = readCommandBindings(localStorage);
+  if (keyComboSignature(bindings[commandId]) === keyComboSignature(combo)) return true;
+
+  const reserved = browserReservedShortcut(combo);
+  if (reserved) {
+    await workspace2Notice({
+      title: t("settings.shortcuts.reservedTitle"),
+      message: t("settings.shortcuts.reservedMessage", {
+        shortcut: formatKeyCombo(combo),
+        reason: reserved.reason,
+      }),
+    });
+    return false;
+  }
+
+  const internalConflictId = findInternalBindingConflict(commandId, combo, bindings);
+  if (internalConflictId) {
+    const confirmed = await workspace2Confirm({
+      title: t("settings.shortcuts.workspaceConflictTitle"),
+      message: t("settings.shortcuts.workspaceConflictMessage", {
+        shortcut: formatKeyCombo(combo),
+        current: commandBindingLabel(internalConflictId),
+        next: commandBindingLabel(commandId),
+      }),
+      confirmText: t("settings.shortcuts.useAnyway"),
+    });
+    if (!confirmed) return false;
+  }
+
+  const comfyConflict = comfyKeybindingConflict(combo, comfyKeybindingSettings());
+  // Direct user edits always honor the conflict policy, including historical
+  // defaults such as Alt+C and Ctrl+G. The separate Restore defaults action
+  // writes the known default map directly and therefore does not create a noisy
+  // confirmation sequence.
+  if (comfyConflict) {
+    const confirmed = await workspace2Confirm({
+      title: t("settings.shortcuts.comfyConflictTitle"),
+      message: t("settings.shortcuts.comfyConflictMessage", {
+        shortcut: formatKeyCombo(combo),
+        command: comfyConflictLabel(comfyConflict),
+      }),
+      confirmText: t("settings.shortcuts.useAnyway"),
+    });
+    if (!confirmed) return false;
+  }
+
+  // Commit only after every conflict confirmation succeeds. If the user cancels
+  // a later ComfyUI conflict, the previous WorkspaceKit binding remains intact.
+  if (internalConflictId) setCommandBinding(internalConflictId, null, localStorage);
+  setCommandBinding(commandId, combo, localStorage);
+  refreshCommandBindingControls();
+  return true;
+}
+
+function commandShortcutOptions() {
+  const bindings = readCommandBindings(localStorage);
+  const options = COMMAND_BINDING_DEFINITIONS.map((definition) => ({
+    commandId: definition.commandId,
+    group: definition.group,
+    label: t(definition.labelKey),
+    combo: bindings[definition.commandId] || null,
+    display: bindings[definition.commandId] ? formatKeyCombo(bindings[definition.commandId]) : t("settings.shortcuts.unassigned"),
+    onCapture: async (event) => {
+      const combo = keyComboFromEvent(event);
+      if (!combo) return false;
+      return assignCommandBinding(definition.commandId, combo);
+    },
+    onClear: () => {
+      setCommandBinding(definition.commandId, null, localStorage);
+      refreshCommandBindingControls();
+    },
   }));
+  options.restoreDefaults = () => {
+    resetCommandBindings(localStorage);
+    refreshCommandBindingControls();
+  };
+  return options;
+}
+
+function refreshGroupPointerControls() {
+  const bindings = readGroupPointerBindings(localStorage);
+  for (const row of workspaceState.settingsElement?.querySelectorAll?.("[data-workspace2-group-pointer-action]") || []) {
+    const action = row.dataset.workspace2GroupPointerAction;
+    const binding = bindings[action];
+    const modifier = row.querySelector?.("[data-workspace2-group-pointer-part='modifier']");
+    const button = row.querySelector?.("[data-workspace2-group-pointer-part='button']");
+    if (modifier && binding) modifier.value = binding.modifier;
+    if (button && binding) button.value = binding.button;
+  }
+}
+
+async function assignGroupPointerBinding(action, nextBinding) {
+  const bindings = readGroupPointerBindings(localStorage);
+  const conflictAction = findGroupPointerBindingConflict(action, nextBinding, bindings);
+  if (conflictAction) {
+    const confirmed = await workspace2Confirm({
+      title: t("settings.shortcuts.pointerConflictTitle"),
+      message: t("settings.shortcuts.pointerConflictMessage", {
+        current: t(`settings.groupPointerActions.${conflictAction}`),
+        next: t(`settings.groupPointerActions.${action}`),
+      }),
+      confirmText: t("settings.shortcuts.useAnyway"),
+    });
+    if (!confirmed) {
+      refreshGroupPointerControls();
+      return false;
+    }
+  }
+  setGroupPointerBinding(action, nextBinding, localStorage, { clearConflict: true });
+  refreshGroupPointerControls();
+  return true;
 }
 
 function groupPointerShortcutOptions() {
-  let stored = null;
-  try { stored = JSON.parse(localStorage.getItem(GROUP_POINTER_BINDINGS_KEY) || ""); } catch { /* defaults */ }
-  const bindings = normalizeGroupPointerBindings(stored);
-  const actionOptions = Object.values(GROUP_POINTER_ACTION).map((action) => ({
-    value: action,
+  const bindings = readGroupPointerBindings(localStorage);
+  const modifierOptions = [
+    { value: GROUP_POINTER_MODIFIER.CONTROL, label: t("settings.groupPointerModifiers.controlShort") },
+    { value: GROUP_POINTER_MODIFIER.ALT, label: t("settings.groupPointerModifiers.altShort") },
+    { value: GROUP_POINTER_MODIFIER.SHIFT, label: t("settings.groupPointerModifiers.shiftShort") },
+    { value: GROUP_POINTER_MODIFIER.NONE, label: t("settings.groupPointerModifiers.none") },
+    { value: GROUP_POINTER_MODIFIER.DISABLED, label: t("settings.groupPointerModifiers.disabled") },
+  ];
+  const buttonOptions = [
+    { value: GROUP_POINTER_BUTTON.LEFT, label: t("settings.groupPointerButtons.left") },
+    { value: GROUP_POINTER_BUTTON.RIGHT, label: t("settings.groupPointerButtons.right") },
+    { value: GROUP_POINTER_BUTTON.MIDDLE, label: t("settings.groupPointerButtons.middle") },
+  ];
+  const options = GROUP_POINTER_ACTIONS.map((action) => ({
+    action,
     label: t(`settings.groupPointerActions.${action}`),
-  }));
-  const refreshControls = (next) => {
-    const settingsRoot = workspaceState.settingsElement;
-    for (const select of settingsRoot?.querySelectorAll?.("[data-workspace2-group-pointer-modifier]") || []) {
-      const selectModifier = select.dataset.workspace2GroupPointerModifier;
-      if (next[selectModifier]) select.value = next[selectModifier];
-    }
-  };
-  const restoreDefaults = () => {
-    localStorage.removeItem(GROUP_POINTER_BINDINGS_KEY);
-    refreshControls(normalizeGroupPointerBindings(null));
-  };
-  const shortcuts = [GROUP_POINTER_MODIFIER.CONTROL, GROUP_POINTER_MODIFIER.ALT, GROUP_POINTER_MODIFIER.SHIFT].map((modifier) => ({
-    modifier,
-    label: t(`settings.groupPointerModifiers.${modifier}`),
-    value: bindings[modifier],
-    options: actionOptions,
-    onChange: (nextAction) => {
-      const next = swapGroupPointerBinding(bindings, modifier, nextAction);
-      localStorage.setItem(GROUP_POINTER_BINDINGS_KEY, JSON.stringify(next));
-      refreshControls(next);
+    modifier: bindings[action].modifier,
+    button: bindings[action].button,
+    modifierOptions,
+    buttonOptions,
+    onChange: (part, value) => {
+      const current = readGroupPointerBindings(localStorage)[action];
+      return assignGroupPointerBinding(action, { ...current, [part]: value });
     },
   }));
-  shortcuts.restoreDefaults = restoreDefaults;
-  return shortcuts;
+  options.restoreDefaults = () => {
+    resetGroupPointerBindings(localStorage);
+    refreshGroupPointerControls();
+  };
+  return options;
 }
 
 function buildProviderSettingsSection() {
@@ -1487,22 +1609,6 @@ function openWorkspace2Module(moduleId, { closeIfActive = false } = {}) {
     return true;
   }
   return activateWorkspace2Tab(WORKSPACE2_TAB_ID);
-}
-
-function notifyCtrlGConflict() {
-  if (Date.now() - (notifyCtrlGConflict.lastShown || 0) < 5000) {
-    return;
-  }
-  notifyCtrlGConflict.lastShown = Date.now();
-  const message = "Ctrl+G is still handled by ComfyUI. Remove the official Ctrl+G binding to use WorkspaceKit groups.";
-  const toast = app.extensionManager?.toast;
-  if (toast?.addAlert) {
-    toast.addAlert(message);
-  } else if (toast?.add) {
-    toast.add({ severity: "warn", summary: "WorkspaceKit", detail: message, life: 5000 });
-  } else {
-    console.warn(`[Workspace2] ${message}`);
-  }
 }
 
 function isWorkspace2AltCOpenTemplatesEnabled() {
@@ -1732,6 +1838,8 @@ const {
   settingsRange,
   settingsModeRange,
   updateSettingsModeRange,
+  settingsKeybinding,
+  settingsPointerBinding,
 } = createSettingsControls({ document, t, isolateComfyKeys });
 
 const { buildSettingsDialogSections } = createSettingsDialogSections({
@@ -1747,8 +1855,8 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
   settingsRange,
   settingsModeRange,
   updateSettingsModeRange,
-  isCtrlGEnabled: isWorkspace2CtrlGCreateEnabled,
-  setCtrlGEnabled: (checked) => localStorage.setItem(CANVAS_GROUP_CTRL_G_KEY, checked ? "1" : "0"),
+  settingsKeybinding,
+  settingsPointerBinding,
   isAltCOpenTemplatesEnabled: isWorkspace2AltCOpenTemplatesEnabled,
   setAltCOpenTemplatesEnabled: (checked) => localStorage.setItem(WORKSPACE2_ALT_C_OPEN_TEMPLATES_KEY, checked ? "1" : "0"),
   isPanelIntegrationsEnabled: isWorkspacePanelIntegrationsEnabled,
@@ -1758,7 +1866,7 @@ const { buildSettingsDialogSections } = createSettingsDialogSections({
   setStatusHelpEnabled: setWorkspaceStatusHelpEnabled,
   isTopbarSaveEnabled: isWorkspaceTopbarSaveEnabled,
   setTopbarSaveEnabled: setWorkspaceTopbarSaveEnabled,
-  moduleShortcutOptions,
+  commandShortcutOptions,
   groupPointerShortcutOptions,
   workflowRecentLimit,
   snapWorkflowRecentLimit,
@@ -1823,11 +1931,12 @@ function openWorkspaceSettings() {
   const { backdrop, dialog, header } = buildSettingsDialogShell({ onClose: closeWorkspaceSettings });
 
   const {
-    shortcuts,
-    workflowSettings,
+    shortcutSections,
+    workflowOpenSettings,
+    workflowSaveSettings,
     templateSettings,
-    groupSettings,
     layoutSettings,
+    layoutToolSettings,
     sidebarTabs,
     panelDisplay,
     backgroundEffect,
@@ -1848,13 +1957,13 @@ function openWorkspaceSettings() {
   // the feature group (Groups/Workflows/Templates), then Shortcuts/Advanced.
   // `dividerBefore` renders a separator line above that entry.
   const settingPages = [
-    { id: "appearance", label: t("settings.nav.appearance"), icon: "settings.nav.appearance", sections: [sidebarTabs, panelDisplay, backgroundEffect].filter(Boolean) },
-    { id: "groups", label: t("settings.nav.groups"), icon: "settings.nav.groups", dividerBefore: true, sections: [groupSettings] },
-    { id: "layout", label: t("settings.nav.layout"), icon: "settings.nav.layout", sections: [layoutSettings] },
-    { id: "workflows", label: t("settings.nav.workflows"), icon: "settings.nav.workflows", sections: [workflowSettings] },
-    { id: "templates", label: t("settings.nav.templates"), icon: "settings.nav.templates", sections: [templateSettings] },
-    { id: "shortcuts", label: t("settings.nav.shortcuts"), icon: "settings.nav.shortcuts", dividerBefore: true, sections: [shortcuts].filter(Boolean) },
-    { id: "advanced", label: t("settings.nav.advanced"), icon: "settings.nav.advanced", sections: [providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
+    { id: "appearance", label: t("settings.nav.appearance"), description: t("settings.page.appearance"), icon: "settings.nav.appearance", sections: [sidebarTabs, backgroundEffect, panelDisplay].filter(Boolean) },
+    { id: "groups", label: t("settings.nav.groups"), description: t("settings.page.groups"), icon: "settings.nav.groups", dividerBefore: true, sections: [groupRepresentation].filter(Boolean) },
+    { id: "layout", label: t("settings.nav.layout"), description: t("settings.page.layout"), icon: "settings.nav.layout", sections: [layoutSettings, layoutToolSettings].filter(Boolean) },
+    { id: "workflows", label: t("settings.nav.workflows"), description: t("settings.page.workflows"), icon: "settings.nav.workflows", sections: [workflowOpenSettings, workflowSaveSettings].filter(Boolean) },
+    { id: "templates", label: t("settings.nav.templates"), description: t("settings.page.templates"), icon: "settings.nav.templates", sections: [templateSettings].filter(Boolean) },
+    { id: "shortcuts", label: t("settings.nav.shortcuts"), description: t("settings.page.shortcuts"), icon: "settings.nav.shortcuts", dividerBefore: true, sections: shortcutSections || [] },
+    { id: "advanced", label: t("settings.nav.advanced"), description: t("settings.page.advanced"), icon: "settings.nav.advanced", sections: [providerSettings, nodeCache, dataManagement, about].filter(Boolean) },
   ];
   const settingsLayout = document.createElement("div");
   settingsLayout.className = "workspace2-settings-layout";
@@ -1896,7 +2005,16 @@ function openWorkspaceSettings() {
     button.addEventListener("click", () => selectSettingsPage(page.id));
     const pageElement = document.createElement("section");
     pageElement.className = "workspace2-settings-page";
-    pageElement.append(...page.sections);
+    const pageHeader = document.createElement("header");
+    pageHeader.className = "workspace2-settings-page-header";
+    const pageTitle = document.createElement("h2");
+    pageTitle.className = "workspace2-settings-page-title";
+    pageTitle.textContent = page.label;
+    const pageDescription = document.createElement("p");
+    pageDescription.className = "workspace2-settings-page-description";
+    pageDescription.textContent = page.description || "";
+    pageHeader.append(pageTitle, pageDescription);
+    pageElement.append(pageHeader, ...page.sections);
     settingsNav.append(button);
     settingsPagesElement.append(pageElement);
     pageButtons.set(page.id, button);
@@ -8915,17 +9033,14 @@ app.registerExtension({
       },
     },
   ],
-  keybindings: [
-    {
-      combo: { key: "g", shift: true },
-      commandId: "Workspace2.CanvasGroups.UngroupSelection",
-    },
-  ],
+  // Keyboard bindings are intentionally not declared here. WorkspaceKit owns
+  // them through command-bindings.js so users can reassign or clear every
+  // shortcut from one Settings page without a hidden static binding remaining.
   getCanvasMenuItems() {
     return [
       null,
       {
-        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuCreateSelected", "Group Selected Nodes (Ctrl+G)")}`,
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuCreateSelected", "Group Selected Nodes")}`,
         callback: () => {
           workspace2CanvasGroups.createGroupFromSelection?.();
         },
@@ -8937,7 +9052,7 @@ app.registerExtension({
         },
       },
       {
-        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuSaveTemplate", "Save as Template (Alt+C)")}`,
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuSaveTemplate", "Save as Template")}`,
         callback: () => {
           saveSelectedNodesAsTemplateFromContextMenu();
         },
@@ -8951,13 +9066,13 @@ app.registerExtension({
     const favoriteDefinition = resolveCanvasNodeDefinition(node, getNodeDefinitionMap());
     const items = [
       {
-        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuCreateSelected", "Group Selected Nodes (Ctrl+G)")}`,
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuCreateSelected", "Group Selected Nodes")}`,
         callback: () => {
           workspace2CanvasGroups.createGroupFromSelection?.(node);
         },
       },
       {
-        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuSaveTemplate", "Save as Template (Alt+C)")}`,
+        content: `${WORKSPACE2_MENU_MARK}${menuLabel("groups.menuSaveTemplate", "Save as Template")}`,
         callback: () => {
           saveSelectedNodesAsTemplateFromContextMenu(node);
         },

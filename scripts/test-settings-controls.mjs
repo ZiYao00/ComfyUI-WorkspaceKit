@@ -8,14 +8,19 @@ class FakeElement {
     this.className = "";
     this.dataset = {};
     this.listeners = new Map();
+    this.attributes = new Map();
     this.classList = {
       values: new Set(),
       toggle: (name, enabled) => enabled ? this.classList.values.add(name) : this.classList.values.delete(name),
+      add: (...names) => names.forEach((name) => this.classList.values.add(name)),
+      remove: (...names) => names.forEach((name) => this.classList.values.delete(name)),
     };
     this.style = {};
   }
   append(...children) { this.children.push(...children); }
   addEventListener(type, listener) { this.listeners.set(type, listener); }
+  setAttribute(name, value) { this.attributes.set(name, String(value)); }
+  focus() { this.focused = true; }
   querySelector(selector) {
     const find = (node) => {
       if (node?.tagName === "input" && selector === 'input[type="radio"]' && node.type === "radio") return node;
@@ -42,20 +47,22 @@ assert.equal(section.children[0].textContent, "Title");
 assert.equal(section.children[1].textContent, "Help");
 
 const grid = controls.settingsShortcutGrid();
-assert.equal(grid.children.length, 5);
+assert.equal(grid.children.length, 6);
 assert.equal(grid.children[0].children[0].textContent, "Shift + 1");
-assert.equal(grid.children[0].children[1].textContent, "t:settings.shortcuts.workflow");
+assert.equal(grid.children[0].children[1].textContent, "t:settings.shortcuts.commands.openWorkflows");
 assert.equal(grid.children[3].children[0].textContent, "Shift + 4");
-assert.equal(grid.children[3].children[1].textContent, "t:settings.shortcuts.extension");
+assert.equal(grid.children[3].children[1].textContent, "t:settings.shortcuts.commands.openLayout");
+assert.equal(grid.children[4].children[0].textContent, "Shift + 5");
+assert.equal(grid.children[4].children[1].textContent, "t:settings.shortcuts.commands.openTheme");
 
 let checkboxChanged = false;
-const sealedCheckbox = controls.settingsCheckbox("Theme", false, () => { checkboxChanged = true; }, { disabled: true, title: "sealed" });
-const sealedInput = sealedCheckbox.children[0].children[0];
-assert.equal(sealedInput.disabled, true);
-assert.equal(sealedCheckbox.classList.values.has("is-disabled"), true);
-assert.equal(sealedCheckbox.title, "sealed");
-sealedInput.checked = true;
-sealedInput.listeners.get("change")();
+const disabledCheckbox = controls.settingsCheckbox("Theme", false, () => { checkboxChanged = true; }, { disabled: true, title: "disabled" });
+const disabledInput = disabledCheckbox.children[0].children[0];
+assert.equal(disabledInput.disabled, true);
+assert.equal(disabledCheckbox.classList.values.has("is-disabled"), true);
+assert.equal(disabledCheckbox.title, "disabled");
+disabledInput.checked = true;
+disabledInput.listeners.get("change")();
 assert.equal(checkboxChanged, false);
 
 let changed = null;
@@ -84,6 +91,90 @@ controls.updateSettingsModeRange(modeRow, true);
 assert.equal(radio.checked, true);
 assert.equal(modeSlider.disabled, false);
 assert.equal(modeRow.classList.values.has("is-disabled"), false);
-assert.equal(isolated.length, 2);
+
+const bindingEvents = [];
+const keybindingRow = controls.settingsKeybinding("Open Layout", "workspace.openLayout", "Shift + 4", {
+  onCapture: async (event) => {
+    bindingEvents.push(["capture", event.code]);
+    return true;
+  },
+  onClear: () => bindingEvents.push(["clear"]),
+});
+assert.equal(keybindingRow.className, "workspace2-settings-row workspace2-settings-keybinding-row");
+assert.equal(keybindingRow.dataset.workspace2CommandRow, "workspace.openLayout");
+const bindingControl = keybindingRow.children[1];
+const bindingButton = bindingControl.children[0];
+const clearButton = bindingControl.children[1];
+assert.equal(bindingButton.dataset.workspace2CommandBinding, "workspace.openLayout");
+assert.equal(bindingButton.dataset.workspace2KeybindingCapture, "true");
+bindingButton.listeners.get("click")();
+assert.equal(bindingButton.classList.values.has("is-listening"), true);
+assert.equal(bindingButton.textContent, "t:settings.shortcuts.pressKeys");
+await bindingButton.listeners.get("keydown")({
+  code: "ShiftLeft",
+  key: "Shift",
+  shiftKey: true,
+  preventDefault() {},
+  stopPropagation() {},
+  stopImmediatePropagation() {},
+});
+assert.equal(bindingButton.classList.values.has("is-listening"), true, "modifier-only keydown must keep capture active");
+assert.equal(bindingEvents.length, 0);
+await bindingButton.listeners.get("keydown")({
+  code: "KeyK",
+  key: "k",
+  shiftKey: true,
+  preventDefault() {},
+  stopPropagation() {},
+  stopImmediatePropagation() {},
+});
+assert.deepEqual(bindingEvents.shift(), ["capture", "KeyK"]);
+assert.equal(bindingButton.classList.values.has("is-listening"), false);
+
+bindingButton.textContent = "Ctrl + K";
+bindingButton.listeners.get("click")();
+await bindingButton.listeners.get("keydown")({
+  code: "Escape",
+  key: "Escape",
+  preventDefault() {},
+  stopPropagation() {},
+  stopImmediatePropagation() {},
+});
+assert.equal(bindingButton.textContent, "Ctrl + K", "Escape restores the previous display value");
+clearButton.listeners.get("click")();
+assert.deepEqual(bindingEvents.shift(), ["clear"]);
+
+const pointerEvents = [];
+const pointerRow = controls.settingsPointerBinding(
+  "Ignore group",
+  "group.toggleIgnore",
+  "control",
+  "left",
+  {
+    modifierOptions: [
+      { value: "control", label: "Ctrl / Cmd" },
+      { value: "none", label: "None" },
+      { value: "disabled", label: "Disabled" },
+    ],
+    buttonOptions: [
+      { value: "left", label: "Left" },
+      { value: "right", label: "Right" },
+    ],
+    onChange: (part, value) => pointerEvents.push([part, value]),
+  },
+);
+assert.equal(pointerRow.dataset.workspace2GroupPointerAction, "group.toggleIgnore");
+const pointerControl = pointerRow.children[1];
+const modifierSelect = pointerControl.children[0];
+const buttonSelect = pointerControl.children[1];
+assert.equal(modifierSelect.value, "control");
+assert.equal(buttonSelect.value, "left");
+modifierSelect.value = "none";
+modifierSelect.listeners.get("change")();
+buttonSelect.value = "right";
+buttonSelect.listeners.get("change")();
+assert.deepEqual(pointerEvents, [["modifier", "none"], ["button", "right"]]);
+
+assert.equal(isolated.length, 6, "range, mode slider, binding button/clear, and two pointer selects must isolate ComfyUI keys");
 
 console.log("Settings controls contract passed.");

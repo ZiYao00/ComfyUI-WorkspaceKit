@@ -10,7 +10,7 @@ export function createAppearanceProvider({ app }) {
     apiVersion: APPEARANCE_PROVIDER_API_VERSION,
     id: APPEARANCE_PROVIDER_ID,
     builtin: true,
-    title: "Appearance",
+    title: "Theme",
     icon: "🎨",
     iconKey: "theme",
     getTitle: () => t("appearance.tab"),

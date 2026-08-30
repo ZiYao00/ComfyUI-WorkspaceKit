@@ -1827,6 +1827,7 @@ function openWorkspaceSettings() {
     workflowSettings,
     templateSettings,
     groupSettings,
+    layoutSettings,
     sidebarTabs,
     panelDisplay,
     backgroundEffect,
@@ -1849,6 +1850,7 @@ function openWorkspaceSettings() {
   const settingPages = [
     { id: "appearance", label: t("settings.nav.appearance"), icon: "settings.nav.appearance", sections: [sidebarTabs, panelDisplay, backgroundEffect].filter(Boolean) },
     { id: "groups", label: t("settings.nav.groups"), icon: "settings.nav.groups", dividerBefore: true, sections: [groupSettings] },
+    { id: "layout", label: t("settings.nav.layout"), icon: "settings.nav.layout", sections: [layoutSettings] },
     { id: "workflows", label: t("settings.nav.workflows"), icon: "settings.nav.workflows", sections: [workflowSettings] },
     { id: "templates", label: t("settings.nav.templates"), icon: "settings.nav.templates", sections: [templateSettings] },
     { id: "shortcuts", label: t("settings.nav.shortcuts"), icon: "settings.nav.shortcuts", dividerBefore: true, sections: [shortcuts].filter(Boolean) },
@@ -1881,6 +1883,7 @@ function openWorkspaceSettings() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "workspace2-settings-nav-button";
+    button.dataset.workspace2SettingsPage = page.id;
     if (page.icon) {
       const icon = iconSvg(page.icon);
       icon.classList.add("workspace2-settings-nav-icon");

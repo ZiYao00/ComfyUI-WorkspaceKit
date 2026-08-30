@@ -67,6 +67,15 @@ export function ensureLayoutStyles(document = globalThis.document) {
 .workspacekit-layout-floating-divider { width:1px; height:18px; margin:0 2px; background:var(--border-color, rgba(127,127,127,.35)); }
 
 .workspacekit-layout-settings-focus { outline:1px solid color-mix(in srgb, var(--workspacekit-ui-accent, #7aa2f7) 70%, transparent); outline-offset:4px; border-radius:5px; }
+.workspacekit-layout-settings-field-label { margin-top:4px; font-size:12px; font-weight:600; color:var(--base-foreground, var(--fg-color, #ddd)); }
+.workspacekit-layout-settings-mode-list { display:grid; gap:4px; margin:2px 0 6px; }
+.workspacekit-layout-settings-mode-option { box-sizing:border-box; display:grid; grid-template-columns:18px minmax(0,1fr); align-items:start; gap:8px; min-width:0; padding:7px 8px; border:1px solid transparent; border-radius:7px; cursor:pointer; }
+.workspacekit-layout-settings-mode-option:hover { border-color:var(--workspacekit-ui-border, rgba(127,127,127,.24)); background:var(--workspacekit-ui-control-bg, rgba(127,127,127,.05)); }
+.workspacekit-layout-settings-mode-option:has(input:checked) { border-color:color-mix(in srgb, var(--workspacekit-ui-accent, #7aa2f7) 45%, var(--workspacekit-ui-border, rgba(127,127,127,.24))); background:color-mix(in srgb, var(--workspacekit-ui-accent, #7aa2f7) 8%, transparent); }
+.workspacekit-layout-settings-mode-option input { margin:2px 0 0; accent-color:var(--workspacekit-ui-accent, #7aa2f7); }
+.workspacekit-layout-settings-mode-copy { display:flex; align-items:baseline; gap:9px; min-width:0; }
+.workspacekit-layout-settings-mode-title { flex:0 0 34px; font-size:12px; font-weight:600; white-space:nowrap; }
+.workspacekit-layout-settings-mode-help { min-width:0; color:var(--descrip-text, #9ca3af); font-size:11px; line-height:1.45; }
 
 @media (max-width:420px) {
   .workspacekit-layout-v2-options { gap:5px; }

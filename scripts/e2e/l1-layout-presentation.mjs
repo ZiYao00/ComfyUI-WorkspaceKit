@@ -66,24 +66,36 @@ try {
   await page.locator(".workspacekit-layout-v2-display-mode").click();
   await page.waitForSelector(".workspace2-settings-backdrop", { timeout: 10_000 });
   const layoutSettings = page.locator('[data-workspacekit-layout-display-settings="true"]');
-  assert.equal(await layoutSettings.count(), 1, "Display mode entry should navigate to Layout presentation settings");
-  const modeSelect = layoutSettings.locator('[data-workspacekit-layout-presentation-mode="true"] select');
-  assert.equal(await modeSelect.inputValue(), "top");
+  assert.equal(await layoutSettings.count(), 1, "Display mode entry should navigate to the dedicated Layout Settings page");
+  assert.equal(await page.locator('[data-workspace2-settings-page="layout"].is-active').count(), 1);
+  const modeGroup = layoutSettings.locator('[data-workspacekit-layout-presentation-mode="true"]');
+  const modeRadio = (value) => modeGroup.locator(`input[type="radio"][value="${value}"]`);
+  assert.equal(await modeRadio("top").isChecked(), true);
+  assert.equal(await modeGroup.locator('input[type="radio"]').count(), 4);
 
-  await modeSelect.selectOption("pinned");
+  await modeRadio("pinned").check();
   const floating = page.locator(".workspacekit-layout-floating-toolbar");
   await floating.waitFor({ state: "visible", timeout: 10_000 });
   assert.equal(await floating.locator(".workspacekit-layout-floating-button").count(), 8);
   await topbar.waitFor({ state: "detached", timeout: 10_000 });
+  const floatingBox = await floating.boundingBox();
+  const shellBox = await page.locator(".workspace2-shell").boundingBox();
+  if (floatingBox && shellBox) {
+    const overlapsShell = floatingBox.x < shellBox.x + shellBox.width
+      && floatingBox.x + floatingBox.width > shellBox.x
+      && floatingBox.y < shellBox.y + shellBox.height
+      && floatingBox.y + floatingBox.height > shellBox.y;
+    assert.equal(overlapsShell, false, "pinned Layout toolbar must stay out from under the WK sidebar");
+  }
 
-  await modeSelect.selectOption("selection");
+  await modeRadio("selection").check();
   await floating.waitFor({ state: "hidden", timeout: 10_000 });
 
-  await modeSelect.selectOption("none");
+  await modeRadio("none").check();
   await floating.waitFor({ state: "detached", timeout: 10_000 });
   assert.equal(await topbar.count(), 0);
 
-  await modeSelect.selectOption("top");
+  await modeRadio("top").check();
   await topbar.waitFor({ state: "visible", timeout: 10_000 });
 
   assert.deepEqual(pageErrors, [], `Unexpected page errors:\n${pageErrors.join("\n")}`);

@@ -33,6 +33,7 @@ export const WORKSPACEKIT_ICON_SEMANTICS = Object.freeze({
   "workflows.trash.systemDelete": "systemTrash",
   "settings.nav.appearance": "palette",
   "settings.nav.groups": "badge",
+  "settings.nav.layout": "arrowsUpDown",
   "settings.nav.workflows": "files",
   "settings.nav.templates": "template",
   "settings.nav.shortcuts": "keyboard",

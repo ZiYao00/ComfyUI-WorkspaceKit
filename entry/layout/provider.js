@@ -20,6 +20,7 @@ export function createLayoutProvider({ controller }) {
       controlsHost,
       contextHost,
       contentHost,
+      status,
       ui,
     }) {
       return renderLayoutPanel({
@@ -29,6 +30,7 @@ export function createLayoutProvider({ controller }) {
         controlsHost,
         contextHost,
         contentHost,
+        status,
         controller,
         ui,
       });

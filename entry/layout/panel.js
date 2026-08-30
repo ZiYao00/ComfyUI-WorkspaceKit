@@ -65,9 +65,11 @@ function createCommandButton(document, commandId, onPress) {
 
 function focusLayoutDisplaySettings(document) {
   const reveal = () => {
+    const navButton = document.querySelector?.('[data-workspace2-settings-page="layout"]');
+    navButton?.click?.();
     const section = document.querySelector?.('[data-workspacekit-layout-display-settings="true"]');
     if (!section) return false;
-    section.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    section.scrollIntoView?.({ block: "start", behavior: "smooth" });
     section.classList?.add("workspacekit-layout-settings-focus");
     globalThis.setTimeout?.(() => section.classList?.remove("workspacekit-layout-settings-focus"), 900);
     return true;
@@ -88,32 +90,36 @@ export function renderLayoutPanel({
   controlsHost,
   contextHost,
   contentHost,
+  status,
   controller,
-  ui,
 } = {}) {
   const controlHost = controlsHost ?? contextHost;
-  if (!document?.createElement || !headerHost || !controlHost || !contentHost || !controller || !ui) {
-    throw new TypeError("WorkspaceKit Layout panel requires UI Kit hosts and a Layout controller.");
+  const operationsHost = toolbarHost ?? controlHost;
+  if (!document?.createElement || !operationsHost || !contentHost || !controller) {
+    throw new TypeError("WorkspaceKit Layout panel requires Blueprint hosts and a Layout controller.");
   }
   ensureLayoutStyles(document);
-  headerHost.hidden = false;
-  controlHost.hidden = false;
-  contentHost.hidden = false;
-  if (toolbarHost) {
-    toolbarHost.hidden = true;
-    toolbarHost.replaceChildren();
+
+  // Layout follows the same Blueprint anatomy as the other built-in panels:
+  // top = operational controls, middle = content, bottom = shared status/help.
+  if (headerHost) {
+    headerHost.replaceChildren();
+    headerHost.hidden = true;
   }
-
-  headerHost.replaceChildren();
-  controlHost.replaceChildren();
+  if (controlHost && controlHost !== operationsHost) {
+    controlHost.replaceChildren();
+    controlHost.hidden = true;
+  }
+  operationsHost.hidden = false;
+  contentHost.hidden = false;
+  operationsHost.replaceChildren();
   contentHost.replaceChildren();
-
-  const header = ui.createModuleHeader({ title: t("layout.headerTitle") });
-  headerHost.append(header.element);
 
   const content = document.createElement("div");
   content.className = "workspacekit-layout-v2 workspacekit-layout-v2-palette";
   const buttons = new Map();
+  let lastMessage = "";
+  let lastTone = "neutral";
 
   const spacingInput = document.createElement("input");
   spacingInput.className = "workspacekit-layout-v2-number workspacekit-layout-v2-spacing-number";
@@ -130,23 +136,35 @@ export function renderLayoutPanel({
     setLayoutSpacing(value, storage);
   });
 
+  const selectionText = (selection) => t("layout.selectedTargets", {
+    count: selection.selectedCount,
+    nodes: selection.nodeTargets.length,
+    groups: selection.groupTargets.length,
+  });
+
+  const showBottomStatus = (selection = controller.selection()) => {
+    const pieces = [t("layout.headerTitle")];
+    if (lastMessage) pieces.push(lastMessage);
+    pieces.push(selectionText(selection));
+    status?.show?.({ text: pieces.join(" · "), tone: lastTone });
+  };
+
   const execute = (commandId) => {
     const definition = LAYOUT_COMMANDS[commandId];
     const spacing = Number(spacingInput.value);
     const result = controller.execute(commandId, definition?.acceptsSpacing ? { spacing } : {});
     if (result.ok) {
       const label = definition ? t(definition.labelKey) : commandId;
-      header.setStatus(t("layout.executed", { command: label }));
+      lastMessage = t("layout.executed", { command: label });
+      lastTone = "success";
     } else {
       const state = controller.state(commandId);
-      header.setStatus(reasonMessage(result.reason, state.minimumSelection));
+      lastMessage = reasonMessage(result.reason, state.minimumSelection);
+      lastTone = "warning";
     }
-    queueMicrotask(refresh);
+    refresh();
   };
 
-  // Presentation mode is a persistent preference, not a layout command. Keep a
-  // single discoverable entry here; the full top/selection/pinned configuration
-  // lives in Settings so future Layout commands do not compete for this space.
   const controls = document.createElement("div");
   controls.className = "workspacekit-layout-v2-options";
   const displayModeButton = document.createElement("button");
@@ -160,8 +178,6 @@ export function renderLayoutPanel({
     focusLayoutDisplaySettings(document);
   });
 
-  // Fixed spacing is parameterized, so keep its value and two commands together
-  // as one colored control group instead of a third command block below.
   const spacingGroup = document.createElement("div");
   spacingGroup.className = "workspacekit-layout-v2-spacing-accent";
   spacingGroup.dataset.layoutSpacingGroup = "true";
@@ -173,9 +189,8 @@ export function renderLayoutPanel({
     spacingGroup.append(button);
   }
   controls.append(displayModeButton, spacingGroup);
-  controlHost.append(controls);
+  operationsHost.append(controls);
 
-  // The first eight commands are a permanent 4x2 position-memory matrix.
   const primaryGrid = document.createElement("div");
   primaryGrid.className = "workspacekit-layout-v2-primary-grid";
   PRIMARY_COMMAND_ROWS.forEach((commandIds, rowIndex) => {
@@ -191,8 +206,6 @@ export function renderLayoutPanel({
   });
   content.append(primaryGrid);
 
-  // Size commands form one regular five-column row. Four historical commands use
-  // their original NodeAligner SVG vocabulary; equal-both is a WK supplemental.
   const sizeGrid = document.createElement("div");
   sizeGrid.className = "workspacekit-layout-v2-size-grid";
   sizeGrid.dataset.layoutSizeGrid = "true";
@@ -206,11 +219,6 @@ export function renderLayoutPanel({
 
   function refresh() {
     const selection = controller.selection();
-    header.setStatus(t("layout.selectedTargets", {
-      count: selection.selectedCount,
-      nodes: selection.nodeTargets.length,
-      groups: selection.groupTargets.length,
-    }));
     content.style.setProperty(
       "--workspacekit-layout-command-icon-size",
       `${readLayoutCommandIconSize(storage)}px`,
@@ -221,9 +229,14 @@ export function renderLayoutPanel({
       button.dataset.commandState = state.enabled ? "available" : "disabled";
       button.setAttribute("aria-disabled", String(!state.enabled));
     }
+    showBottomStatus(selection);
   }
 
-  const queueRefresh = () => queueMicrotask(refresh);
+  const queueRefresh = () => {
+    lastMessage = "";
+    lastTone = "neutral";
+    queueMicrotask(refresh);
+  };
   document.addEventListener("click", queueRefresh);
   document.addEventListener("keyup", queueRefresh, true);
   document.addEventListener("pointerup", queueRefresh, true);
@@ -235,9 +248,10 @@ export function renderLayoutPanel({
     document.removeEventListener("keyup", queueRefresh, true);
     document.removeEventListener("pointerup", queueRefresh, true);
     document.removeEventListener("workspacekit-layout:presentation-changed", queueRefresh);
-    headerHost.replaceChildren();
-    controlHost.replaceChildren();
+    status?.clear?.();
+    headerHost?.replaceChildren?.();
+    operationsHost.replaceChildren();
+    if (controlHost && controlHost !== operationsHost) controlHost.replaceChildren();
     contentHost.replaceChildren();
-    if (toolbarHost) toolbarHost.replaceChildren();
   };
 }

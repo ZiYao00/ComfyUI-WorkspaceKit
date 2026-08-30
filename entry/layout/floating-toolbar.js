@@ -14,7 +14,6 @@ import { t } from "../core/i18n.js";
 
 const EDGE_MARGIN = 8;
 const DEFAULT_TOP = 72;
-const DEFAULT_RIGHT = 24;
 
 function commandLabel(commandId) {
   const definition = LAYOUT_COMMANDS[commandId];
@@ -33,6 +32,36 @@ function numberFromCss(value) {
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+function visibleWorkspaceShellRect(document) {
+  const shells = [...(document?.querySelectorAll?.(".workspace2-shell") ?? [])];
+  for (let index = shells.length - 1; index >= 0; index -= 1) {
+    const rect = shells[index]?.getBoundingClientRect?.();
+    if (rect && rect.width > 0 && rect.height > 0) return rect;
+  }
+  return null;
+}
+
+function rectanglesOverlap(left, top, width, height, rect, margin = 0) {
+  if (!rect) return false;
+  return left < rect.right + margin
+    && left + width > rect.left - margin
+    && top < rect.bottom + margin
+    && top + height > rect.top - margin;
+}
+
+function avoidWorkspaceShell({ left, top, width, height, viewport, shellRect }) {
+  if (!rectanglesOverlap(left, top, width, height, shellRect, EDGE_MARGIN)) return { left, top };
+  const leftSpace = shellRect.left - EDGE_MARGIN;
+  const rightSpace = viewport.width - shellRect.right - EDGE_MARGIN;
+  if (leftSpace >= width + EDGE_MARGIN) {
+    return { left: shellRect.left - width - EDGE_MARGIN, top };
+  }
+  if (rightSpace >= width + EDGE_MARGIN) {
+    return { left: shellRect.right + EDGE_MARGIN, top };
+  }
+  return { left: clamp((viewport.width - width) / 2, EDGE_MARGIN, Math.max(EDGE_MARGIN, viewport.width - width - EDGE_MARGIN)), top };
 }
 
 export function createLayoutFloatingToolbar({
@@ -143,11 +172,23 @@ export function createLayoutFloatingToolbar({
 
     if (!Number.isFinite(left) && Number.isFinite(right)) left = viewport.width - right - rect.width;
     if (!Number.isFinite(top) && Number.isFinite(bottom)) top = viewport.height - bottom - rect.height;
-    if (useDefault || !Number.isFinite(left)) left = viewport.width - rect.width - DEFAULT_RIGHT;
+    // A fresh unified install starts near the visible canvas center rather than
+    // the browser's right edge, where the WorkspaceKit sidebar lives.
+    if (useDefault || !Number.isFinite(left)) left = (viewport.width - rect.width) / 2;
     if (useDefault || !Number.isFinite(top)) top = DEFAULT_TOP;
 
     left = clamp(left, EDGE_MARGIN, Math.max(EDGE_MARGIN, viewport.width - rect.width - EDGE_MARGIN));
     top = clamp(top, EDGE_MARGIN, Math.max(EDGE_MARGIN, viewport.height - rect.height - EDGE_MARGIN));
+    const visible = avoidWorkspaceShell({
+      left,
+      top,
+      width: rect.width,
+      height: rect.height,
+      viewport,
+      shellRect: visibleWorkspaceShellRect(document),
+    });
+    left = clamp(visible.left, EDGE_MARGIN, Math.max(EDGE_MARGIN, viewport.width - rect.width - EDGE_MARGIN));
+    top = clamp(visible.top, EDGE_MARGIN, Math.max(EDGE_MARGIN, viewport.height - rect.height - EDGE_MARGIN));
     root.style.left = `${left}px`;
     root.style.top = `${top}px`;
     root.style.right = "auto";
@@ -183,7 +224,12 @@ export function createLayoutFloatingToolbar({
     root.style.setProperty("--workspacekit-layout-command-icon-size", `${readLayoutCommandIconSize(storage)}px`);
 
     const storedToken = positionToken(readLayoutFloatingPosition(storage));
-    if (storedToken !== lastStoredPositionToken && !dragging) resolvePosition();
+    if (!dragging) {
+      // Re-constrain on every visible refresh. Opening/resizing the WK sidebar
+      // can change the usable canvas area without changing our stored position.
+      resolvePosition();
+      lastStoredPositionToken = storedToken;
+    }
 
     for (const [commandId, button] of buttons) {
       const state = controller.state(commandId);

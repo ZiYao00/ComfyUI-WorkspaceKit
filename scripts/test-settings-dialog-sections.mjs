@@ -8,8 +8,16 @@ import {
 import { createSettingsDialogSections } from "../entry/settings/dialog-sections.js";
 
 class FakeElement {
-  constructor() { this.children = []; this.className = ""; }
+  constructor() {
+    this.children = [];
+    this.className = "";
+    this.dataset = {};
+    this.attributes = new Map();
+    this.listeners = new Map();
+  }
   append(...children) { this.children.push(...children); }
+  setAttribute(name, value) { this.attributes.set(name, String(value)); }
+  addEventListener(type, listener) { this.listeners.set(type, listener); }
 }
 
 const updates = [];
@@ -109,7 +117,7 @@ const factory = createSettingsDialogSections({
 });
 
 const sections = factory.buildSettingsDialogSections();
-assert.deepEqual(Object.keys(sections), ["shortcuts", "groupPointerShortcuts", "workflowSettings", "templateSettings", "groupSettings", "sidebarTabs", "panelDisplay", "backgroundEffect", "nodeCache", "dataManagement", "integrations", "about", "versionInfo"]);
+assert.deepEqual(Object.keys(sections), ["shortcuts", "groupPointerShortcuts", "workflowSettings", "templateSettings", "groupSettings", "layoutSettings", "sidebarTabs", "panelDisplay", "backgroundEffect", "nodeCache", "dataManagement", "integrations", "about", "versionInfo"]);
 assert.equal(sections.shortcuts.children[2].checked, true);
 assert.equal(sections.shortcuts.children[3].checked, false);
 sections.shortcuts.children[2].onChange(false);
@@ -153,22 +161,28 @@ await sections.nodeCache.children[0].children[1].children[0].onClick();
 assert.deepEqual(actions.shift(), ["clearCache"]);
 assert.equal(sections.nodeCache.children[0].children[0].textContent, "settings.nodeCacheCleared");
 assert.equal(sections.dataManagement.kind, "data-management");
+assert.equal(sections.panelDisplay.children.length, 1, "global panel display must not own Layout-specific preferences");
 assert.equal(sections.panelDisplay.children[0].checked, true);
 sections.panelDisplay.children[0].onChange(false);
 assert.deepEqual(actions.shift(), ["statusHelp", false]);
-assert.equal(sections.panelDisplay.children[1].text, "settings.layoutPresentationTitle");
-assert.equal(sections.panelDisplay.children[2].text, "settings.layoutPresentationHelp");
-assert.equal(sections.panelDisplay.children[3].kind, "select");
-assert.equal(sections.panelDisplay.children[3].value, "top");
-assert.equal(sections.panelDisplay.children[3].options.length, 4);
-sections.panelDisplay.children[3].onChange("selection");
-assert.equal(layoutSettingsStorage.getItem(LAYOUT_PRESENTATION_MODE_KEY), "selection");
-assert.equal(sections.panelDisplay.children[4].kind, "range");
-assert.equal(sections.panelDisplay.children[4].value, 22);
-sections.panelDisplay.children[4].options.onChange(24);
+
+assert.equal(sections.layoutSettings.title, "settings.layoutSettings");
+assert.equal(sections.layoutSettings.children[0].text, "settings.layoutPresentationHelp");
+assert.equal(sections.layoutSettings.children[1].textContent, "settings.layoutPresentationMode");
+const layoutModeGroup = sections.layoutSettings.children[2];
+assert.equal(layoutModeGroup.children.length, 4, "Layout display mode must be four compact radio choices");
+assert.deepEqual(layoutModeGroup.children.map((row) => row.dataset.layoutPresentationValue), ["top", "selection", "pinned", "none"]);
+assert.equal(layoutModeGroup.children[0].children[0].checked, true);
+const pinnedRadio = layoutModeGroup.children[2].children[0];
+pinnedRadio.checked = true;
+pinnedRadio.listeners.get("change")();
+assert.equal(layoutSettingsStorage.getItem(LAYOUT_PRESENTATION_MODE_KEY), "pinned");
+assert.equal(sections.layoutSettings.children[3].kind, "range");
+assert.equal(sections.layoutSettings.children[3].value, 22);
+sections.layoutSettings.children[3].options.onChange(24);
 assert.equal(layoutSettingsStorage.getItem(LAYOUT_COMMAND_ICON_SIZE_KEY), "24");
-assert.equal(sections.panelDisplay.children[5].children[0].kind, "action");
-sections.panelDisplay.children[5].children[0].onClick();
+assert.equal(sections.layoutSettings.children[4].children[0].kind, "action");
+sections.layoutSettings.children[4].children[0].onClick();
 assert.match(layoutSettingsStorage.getItem(LAYOUT_FLOATING_POSITION_KEY), /"default":true/);
 assert.equal(sections.sidebarTabs.children.length, 7, "help + five built-in tabs + external extensions");
 assert.equal(sections.sidebarTabs.children[5].checked, false);
@@ -259,5 +273,7 @@ const entry = await readFile(new URL("../entry/entry.js", import.meta.url), "utf
 // order in openWorkspaceSettings().
 assert.match(entry, /selectSettingsPage\(settingPages\[0\]\.id\)/);
 assert.doesNotMatch(entry, /selectSettingsPage\("common"\)/);
+assert.match(entry, /id:\s*"layout"[\s\S]{0,180}settings\.nav\.layout[\s\S]{0,180}sections:\s*\[layoutSettings\]/, "Layout must own a first-class Settings navigation page");
+assert.match(entry, /button\.dataset\.workspace2SettingsPage\s*=\s*page\.id/, "Settings nav buttons expose stable page ids for feature deep-links");
 
 console.log("Settings dialog sections contract passed.");

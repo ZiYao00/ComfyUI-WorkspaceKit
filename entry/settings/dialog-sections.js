@@ -190,16 +190,15 @@ export function createSettingsDialogSections({
       storage: layoutSettingsStorage,
       t,
       settingsHelp,
-      settingsSelect,
       settingsRange,
       settingsActionButton,
     });
+    const layoutSettings = settingsSection(t("settings.layoutSettings"), layoutSettingsRows);
+    if (layoutSettings?.dataset) layoutSettings.dataset.workspacekitLayoutDisplaySettings = "true";
+
     const panelDisplay = settingsSection(t("settings.panelDisplay"), [
       settingsCheckbox(t("settings.statusHelp"), isStatusHelpEnabled(), setStatusHelpEnabled),
-      settingsHelp(t("settings.layoutPresentationTitle")),
-      ...layoutSettingsRows,
     ]);
-    if (panelDisplay?.dataset) panelDisplay.dataset.workspacekitLayoutDisplaySettings = "true";
     // Compatibility alias for a stale entry.js that still expects `integrations`.
     const integrations = panelDisplay;
 
@@ -365,7 +364,7 @@ export function createSettingsDialogSections({
       settingsHelp(t("settings.github")),
     ]);
 
-    const sections = { shortcuts, groupPointerShortcuts, workflowSettings, templateSettings, groupSettings, sidebarTabs, panelDisplay, backgroundEffect, nodeCache, dataManagement, integrations, about, versionInfo };
+    const sections = { shortcuts, groupPointerShortcuts, workflowSettings, templateSettings, groupSettings, layoutSettings, sidebarTabs, panelDisplay, backgroundEffect, nodeCache, dataManagement, integrations, about, versionInfo };
     return sections;
   };
 

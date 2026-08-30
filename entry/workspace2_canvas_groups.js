@@ -57,7 +57,7 @@ import {
 } from "./canvas-groups/conversion-archive.js?v=20260727_group_conversion_archive_r1";
 import { validateNativeGroupConversionResult, countStaleWorkspaceKitNodeMarkers } from "./canvas-groups/conversion-result.js?v=20260727_group_conversion_result_c3";
 import { createNativeToWorkspaceKitConversionPlan } from "./canvas-groups/reverse-conversion-plan.js?v=20260819_t040_native_defaults";
-import { resolveNodeVisualBounds } from "./canvas-groups/node-visual-bounds.js?v=20260817_nodes2_visual_bounds_p0";
+import { resolveNodeVisualBounds } from "./core/node-visual-bounds.js?v=20260830_shared_visual_bounds_r1";
 import {
     isNodes2Enabled,
     setNodeGraphPositionFromStart,
@@ -1514,10 +1514,8 @@ const Workspace2CanvasGroups = {
 
         let changed = false;
         graph._nodes.forEach(n => {
-            if (!n?.pos || typeof n.pos[0] !== 'number' || typeof n.pos[1] !== 'number') return;
-            const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
-            if (typeof nw !== 'number' || typeof nh !== 'number') return;
-            const nodeBounds = { x: n.pos[0], y: n.pos[1], w: nw, h: nh };
+            const nodeBounds = this.nodeVisualBounds(n);
+            if (!nodeBounds) return;
             if (isNodeInsideGroup(bounds, nodeBounds)) {
                 inBounds.add(n.id);
                 if (!this._idInArray(group.nodeIds, n.id)) {
@@ -3112,10 +3110,10 @@ const Workspace2CanvasGroups = {
         } else {
             graph._nodes.forEach(n => {
                 if (!n?.pos || childMemberIds.has(String(n.id))) return;
-                const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
-                // T-037: 与 syncNodeMembership 用同一条中心点规则，否则旧数据
-                // 回退路径会把刚刚判为成员的节点漏掉。
-                if (isNodeInsideGroup(b, { x: n.pos[0], y: n.pos[1], w: nw, h: nh })) {
+                const nodeBounds = self.nodeVisualBounds(n);
+                // T-037: 与 syncNodeMembership 用同一条中心点规则和视觉 Bounds，
+                // 否则折叠节点会按展开后的 size 被错误判定。
+                if (nodeBounds && isNodeInsideGroup(b, nodeBounds)) {
                     addNodeStart(n);
                 }
             });
@@ -3129,9 +3127,9 @@ const Workspace2CanvasGroups = {
             nodeStarts: cg.nodeIds.map(nid => {
                 const n = graph._nodes.find(x => x.id === nid || x.id == nid);
                 if (!n?.pos) return null;
-                const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
+                const nodeBounds = self.nodeVisualBounds(n);
                 // T-037: 只移动中心点落在大框体内的节点，与成员判定同规则。
-                if (isNodeInsideGroup(b, { x: n.pos[0], y: n.pos[1], w: nw, h: nh })) {
+                if (nodeBounds && isNodeInsideGroup(b, nodeBounds)) {
                     return { node: n, x: n.pos[0], y: n.pos[1] };
                 }
                 return null;
@@ -3152,9 +3150,9 @@ const Workspace2CanvasGroups = {
                 otherG.nodeIds.forEach(nid => {
                     const n = graph._nodes.find(x => x.id === nid || x.id == nid);
                     if (!n?.pos) return;
-                    const nw = n.size?.[0] || 200, nh = n.size?.[1] || 100;
+                    const nodeBounds = self.nodeVisualBounds(n);
                     // T-037: 中心点落在当前编组内即受其控制，与成员判定同规则。
-                    if (isNodeInsideGroup(b, { x: n.pos[0], y: n.pos[1], w: nw, h: nh })) {
+                    if (nodeBounds && isNodeInsideGroup(b, nodeBounds)) {
                         partialOverlapNodes.push({ node: n, x: n.pos[0], y: n.pos[1] });
                     }
                 });
@@ -3181,6 +3179,10 @@ const Workspace2CanvasGroups = {
             DRAG_MOVE_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onMove, true));
             DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onUp, true));
             self._suspendMembershipSync = false;
+            // A group dragged from empty space adopts nodes at its FINAL location
+            // before the next gesture. Waiting for the 10-frame polling cadence
+            // made a newly placed empty group feel detached/non-functional.
+            self.syncNodeMembership(group, group.bounds);
             const el = self.groupEls[group.id];
             if (el) el._xzgSyncFrame = 10;
             self.syncGroupsToExtra();
@@ -3249,9 +3251,12 @@ const Workspace2CanvasGroups = {
             DRAG_MOVE_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onMove, true));
             DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onUp, true));
             self._suspendMembershipSync = false;
-            // Resume periodic membership checks on a later frame, after the
-            // final node and border positions are visible to the overlay.
+            // Multi-drag is the path used when a new empty group is dragged while
+            // any canvas node remains selected. Reconcile every moved group at
+            // the final position so this path has the same commit semantics as
+            // ordinary group drag.
             groupStarts.forEach(({ group }) => {
+                self.syncNodeMembership(group, group.bounds);
                 const el = self.groupEls[group.id];
                 if (el) el._xzgSyncFrame = 10;
             });
@@ -3327,6 +3332,7 @@ const Workspace2CanvasGroups = {
             requestAnimationFrame(() => {
                 self._suspendMembershipSync = false;
                 groupStarts.forEach(({ group }) => {
+                    self.syncNodeMembership(group, group.bounds);
                     const el = self.groupEls[group.id];
                     if (el) el._xzgSyncFrame = 10;
                 });
@@ -3376,6 +3382,9 @@ const Workspace2CanvasGroups = {
         const onUp = createOnceGuard(() => {
             DRAG_MOVE_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onMove, true));
             DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.removeEventListener(name, onUp, true));
+            // Resize and drag share the same commit semantics: membership is
+            // reconciled immediately from the final visible bounds.
+            self.syncNodeMembership(group, group.bounds);
             self.syncGroupsToExtra();
             app.graph?.change?.();
         });

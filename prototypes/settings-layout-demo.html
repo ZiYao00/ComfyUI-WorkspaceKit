@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WorkspaceKit 设置排版示例</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      background: #151515;
+      color: #e8e8e8;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    button, select, input { font: inherit; }
+    .demo {
+      width: min(920px, 100%);
+      height: 700px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 164px minmax(0, 1fr);
+      border: 1px solid #3a3a3a;
+      background: #202020;
+    }
+    .nav {
+      padding: 18px 12px;
+      border-right: 1px solid #383838;
+    }
+    .nav-title {
+      margin: 0 8px 16px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .nav button {
+      width: 100%;
+      min-height: 36px;
+      margin: 1px 0;
+      padding: 0 10px;
+      border: 0;
+      border-left: 2px solid transparent;
+      background: transparent;
+      color: #aaa;
+      text-align: left;
+      cursor: pointer;
+    }
+    .nav button:hover { color: #fff; background: #292929; }
+    .nav button.active {
+      color: #fff;
+      border-left-color: #6ea8fe;
+      background: #292929;
+    }
+    .content {
+      min-width: 0;
+      overflow: auto;
+      padding: 26px 34px 36px;
+    }
+    .page { display: none; }
+    .page.active { display: block; }
+    .page-head { margin-bottom: 24px; }
+    .page-head h1 {
+      margin: 0 0 6px;
+      font-size: 20px;
+      font-weight: 600;
+    }
+    .page-head p {
+      margin: 0;
+      color: #9a9a9a;
+      font-size: 12px;
+    }
+    .section {
+      padding: 0 0 22px;
+      margin: 0 0 22px;
+      border-bottom: 1px solid #383838;
+    }
+    .section:last-child { border-bottom: 0; margin-bottom: 0; }
+    .section h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #f0f0f0;
+    }
+    .row {
+      min-height: 48px;
+      display: grid;
+      grid-template-columns: minmax(230px, 1fr) 250px;
+      align-items: center;
+      gap: 28px;
+      padding: 7px 0;
+    }
+    .name {
+      color: #e6e6e6;
+      font-weight: 500;
+    }
+    .desc {
+      margin-top: 3px;
+      color: #8e8e8e;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .control {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .control select,
+    .control input[type="range"] {
+      width: 220px;
+    }
+    .check {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .radio-list {
+      display: grid;
+      gap: 4px;
+      padding-top: 2px;
+    }
+    .radio-item {
+      display: grid;
+      grid-template-columns: 18px 62px minmax(0, 1fr);
+      align-items: baseline;
+      gap: 6px;
+      min-height: 28px;
+    }
+    .radio-item input { margin: 0; transform: translateY(1px); }
+    .radio-item strong { font-weight: 500; color: #e8e8e8; }
+    .radio-item span { color: #8e8e8e; font-size: 12px; }
+    .full-row {
+      padding: 8px 0;
+    }
+    .shortcut-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .shortcut-table th,
+    .shortcut-table td {
+      padding: 9px 8px;
+      border-bottom: 1px solid #333;
+      text-align: left;
+      font-weight: 400;
+    }
+    .shortcut-table th { color: #8e8e8e; font-size: 12px; }
+    .shortcut-table td:first-child { width: 120px; color: #d8d8d8; }
+    .shortcut-table td:last-child { width: 90px; text-align: right; }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .plain-btn {
+      min-height: 32px;
+      padding: 0 11px;
+      border: 1px solid #4b4b4b;
+      background: #292929;
+      color: #e8e8e8;
+      cursor: pointer;
+    }
+    .muted { color: #8e8e8e; font-size: 12px; }
+    @media (max-width: 760px) {
+      body { padding: 12px; }
+      .demo { grid-template-columns: 128px minmax(0, 1fr); }
+      .content { padding: 20px; }
+      .row { grid-template-columns: 1fr; gap: 7px; }
+      .control { justify-content: flex-start; }
+      .actions { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="demo">
+    <aside class="nav">
+      <div class="nav-title">设置</div>
+      <button class="active" data-page="appearance">外观</button>
+      <button data-page="groups">编组</button>
+      <button data-page="layout">排版</button>
+      <button data-page="workflows">工作流</button>
+      <button data-page="templates">模板</button>
+      <button data-page="shortcuts">快捷键</button>
+      <button data-page="advanced">高级</button>
+    </aside>
+
+    <section class="content">
+      <div class="page active" id="appearance">
+        <header class="page-head">
+          <h1>外观</h1>
+          <p>控制 WorkspaceKit 的标签入口、背景和辅助信息。</p>
+        </header>
+
+        <div class="section">
+          <h2>侧边栏标签</h2>
+          <div class="row">
+            <div><div class="name">工作流</div><div class="desc">显示「工作流」标签。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
+          </div>
+          <div class="row">
+            <div><div class="name">节点</div><div class="desc">显示「节点」标签。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
+          </div>
+          <div class="row">
+            <div><div class="name">模板</div><div class="desc">显示「模板」标签。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
+          </div>
+          <div class="row">
+            <div><div class="name">排版</div><div class="desc">显示「排版」标签。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>背景效果</h2>
+          <div class="row">
+            <div><div class="name">透明背景</div><div class="desc">使用透明面板，并调整透明度。</div></div>
+            <div class="control"><input type="radio" name="bg" checked /><input type="range" min="5" max="100" value="82" /></div>
+          </div>
+          <div class="row">
+            <div><div class="name">磨砂玻璃</div><div class="desc">使用背景模糊的玻璃效果。</div></div>
+            <div class="control"><input type="radio" name="bg" /><input type="range" min="0" max="100" value="30" /></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>面板显示</h2>
+          <div class="row">
+            <div><div class="name">状态说明</div><div class="desc">在面板底部显示必要的状态和操作提示。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" checked /> 开启</label></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="groups">
+        <header class="page-head">
+          <h1>编组</h1>
+          <p>管理 WorkspaceKit 编组行为，以及与原生编组之间的转换。</p>
+        </header>
+
+        <div class="section">
+          <h2>基本行为</h2>
+          <div class="row">
+            <div><div class="name">启用 WorkspaceKit 编组</div><div class="desc">开启后，Ctrl+G 使用 WorkspaceKit 编组。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" checked /> 开启</label></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>鼠标手势</h2>
+          <div class="row">
+            <div><div class="name">Ctrl / Cmd + 左键</div><div class="desc">点击编组时执行的快捷动作。</div></div>
+            <div class="control"><select><option>忽略编组</option><option>禁止编组</option><option>多选编组</option><option>关闭</option></select></div>
+          </div>
+          <div class="row">
+            <div><div class="name">Alt + 左键</div><div class="desc">点击编组时执行的快捷动作。</div></div>
+            <div class="control"><select><option>禁止编组</option><option>忽略编组</option><option>多选编组</option><option>关闭</option></select></div>
+          </div>
+          <div class="row">
+            <div><div class="name">Shift + 左键</div><div class="desc">点击编组时执行的快捷动作。</div></div>
+            <div class="control"><select><option>多选编组</option><option>忽略编组</option><option>禁止编组</option><option>关闭</option></select></div>
+          </div>
+          <div class="row">
+            <div><div class="name">恢复默认手势</div><div class="desc">恢复 WorkspaceKit 默认鼠标绑定。</div></div>
+            <div class="control"><button class="plain-btn">恢复默认</button></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>编组转换</h2>
+          <div class="row">
+            <div><div class="name">当前画布编组</div><div class="desc">WK 编组 3 · ComfyUI 原生编组 1</div></div>
+            <div class="actions"><button class="plain-btn">转为原生</button><button class="plain-btn">转为 WK</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="layout">
+        <header class="page-head">
+          <h1>排版</h1>
+          <p>设置排版快捷工具出现的位置与操作尺寸。</p>
+        </header>
+
+        <div class="section">
+          <h2>快捷入口</h2>
+          <div class="row" style="align-items:start;">
+            <div>
+              <div class="name">显示方式</div>
+              <div class="desc">只决定排版快捷工具显示在哪里，不影响侧边栏「排版」面板。</div>
+            </div>
+            <div class="radio-list">
+              <label class="radio-item"><input type="radio" name="layout-mode" checked /><strong>顶部</strong><span>固定在画布顶部工具栏</span></label>
+              <label class="radio-item"><input type="radio" name="layout-mode" /><strong>选中</strong><span>选中多个对象时出现</span></label>
+              <label class="radio-item"><input type="radio" name="layout-mode" /><strong>驻留</strong><span>画布中保留可拖动工具条</span></label>
+              <label class="radio-item"><input type="radio" name="layout-mode" /><strong>隐藏</strong><span>只保留侧边栏排版面板</span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>工具尺寸</h2>
+          <div class="row">
+            <div><div class="name">图标大小</div><div class="desc">调整排版快捷按钮的图标尺寸。</div></div>
+            <div class="control"><input type="range" min="12" max="28" value="18" /><span class="muted">18</span></div>
+          </div>
+          <div class="row">
+            <div><div class="name">悬浮条位置</div><div class="desc">将拖动过的悬浮工具条恢复到默认位置。</div></div>
+            <div class="control"><button class="plain-btn">恢复默认位置</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="workflows">
+        <header class="page-head">
+          <h1>工作流</h1>
+          <p>控制工作流列表与保存入口的行为。</p>
+        </header>
+        <div class="section">
+          <h2>打开行为</h2>
+          <div class="row">
+            <div><div class="name">打开历史数量</div><div class="desc">控制「打开」区域可直接看到的工作流数量。</div></div>
+            <div class="control"><input type="range" min="2" max="15" value="5" /><span class="muted">5</span></div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>保存</h2>
+          <div class="row">
+            <div><div class="name">顶部保存按钮</div><div class="desc">在画布顶部工具栏显示与 Ctrl+S 相同的保存按钮。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" checked /> 显示</label></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="templates">
+        <header class="page-head">
+          <h1>模板</h1>
+          <p>控制模板保存后的交互行为。</p>
+        </header>
+        <div class="section">
+          <h2>保存行为</h2>
+          <div class="row">
+            <div><div class="name">保存后打开模板</div><div class="desc">使用 Alt+C 保存后，自动切换到模板并定位新项目。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" checked /> 开启</label></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="shortcuts">
+        <header class="page-head">
+          <h1>快捷键</h1>
+          <p>先看当前映射，再决定哪些快捷键由 WorkspaceKit 接管。</p>
+        </header>
+        <div class="section">
+          <h2>快捷键一览</h2>
+          <div class="full-row">
+            <table class="shortcut-table">
+              <thead><tr><th>快捷键</th><th>功能</th><th>状态</th></tr></thead>
+              <tbody>
+                <tr><td>Shift + 1</td><td>工作流面板</td><td><input type="checkbox" checked /></td></tr>
+                <tr><td>Shift + 2</td><td>节点面板</td><td><input type="checkbox" checked /></td></tr>
+                <tr><td>Shift + 3</td><td>模板面板</td><td><input type="checkbox" checked /></td></tr>
+                <tr><td>Shift + 4</td><td>置顶扩展面板</td><td><input type="checkbox" checked /></td></tr>
+                <tr><td>Alt + C</td><td>保存模板</td><td>固定</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="section">
+          <h2>标签行为</h2>
+          <div class="row">
+            <div><div class="name">重复快捷键关闭面板</div><div class="desc">再次按当前标签快捷键时关闭 WorkspaceKit。</div></div>
+            <div class="control"><label class="check"><input type="checkbox" /> 开启</label></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="page" id="advanced">
+        <header class="page-head">
+          <h1>高级</h1>
+          <p>缓存、数据迁移等低频维护功能集中放在这里。</p>
+        </header>
+        <div class="section">
+          <h2>节点缓存</h2>
+          <div class="row">
+            <div><div class="name">本地节点缓存</div><div class="desc">缓存节点：846 · 最近更新：今天 19:42</div></div>
+            <div class="control"><button class="plain-btn">清空缓存</button></div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>数据备份与迁移</h2>
+          <div class="row">
+            <div><div class="name">WorkspaceKit 数据</div><div class="desc">导出设置与插件数据；导入前自动备份当前数据。</div></div>
+            <div class="actions"><button class="plain-btn">导出数据</button><button class="plain-btn">导入数据</button></div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>关于</h2>
+          <div class="row">
+            <div><div class="name">ComfyUI-WorkspaceKit</div><div class="desc">GitHub：ZiYao00/ComfyUI-WorkspaceKit</div></div>
+            <div class="control"><span class="muted">版本 1.x</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const navButtons = [...document.querySelectorAll('.nav button[data-page]')];
+    const pages = [...document.querySelectorAll('.page')];
+    for (const button of navButtons) {
+      button.addEventListener('click', () => {
+        for (const item of navButtons) item.classList.toggle('active', item === button);
+        for (const page of pages) page.classList.toggle('active', page.id === button.dataset.page);
+      });
+    }
+  </script>
+</body>
+</html>

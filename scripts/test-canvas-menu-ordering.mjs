@@ -149,9 +149,10 @@ assert.match(
 // fixed replacement colour could disappear against some theme's background.
 assert.match(
   source,
-  /\.workspace2-tab-button \.sidebar-icon-wrapper::before \{\s*content: "\$\{WORKSPACEKIT_MENU_MARK\}";/,
+  /\) \.sidebar-icon-wrapper::before \{\s*content: "\$\{WORKSPACEKIT_MENU_MARK\}";/,
   "the sidebar glyph must be the 🧩 marker",
 );
+assert.match(source, /\[aria-label="WorkspaceKit"\]/, "the sidebar glyph must survive ComfyUI redraws that drop the legacy class");
 assert.ok(
   !/-webkit-mask: url\("\$\{workspaceKitIconMaskDataUri/.test(source),
   "the monochrome sidebar mask must be gone; it is what made the tab hard to find",
@@ -170,7 +171,7 @@ assert.ok(
 // a monochrome glyph that must inherit the theme's text colour. Pinning any
 // colour on the sidebar glyph would make that fallback invisible on some theme.
 {
-  const rule = source.slice(source.indexOf(".workspace2-tab-button .sidebar-icon-wrapper::before"));
+  const rule = source.slice(source.indexOf(") .sidebar-icon-wrapper::before {"));
   const body = rule.slice(0, rule.indexOf("}"));
   assert.ok(!/^\s*color:/m.test(body), "the sidebar glyph must not pin a colour");
 }

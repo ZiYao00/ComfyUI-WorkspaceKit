@@ -4,7 +4,7 @@ import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
 // browser can retain a failed ES-module evaluation for the old query key; a
 // fresh key lets a normal page refresh fetch the repaired module and preserves
 // the independent sidebar-registration boundary in this entry module.
-import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260825_t042_canvas_frame_r6";
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260830_post_l1_groups_r1";
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260804_native_group_color_r1";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { getBuiltinWorkspaceKitProviders } from "./integrations/builtin-provider-registration.js";
@@ -8708,10 +8708,20 @@ function installWorkspace2SidebarIcon() {
     // backtick in that template literal ends the string, and `node --check`
     // does NOT catch the result — only the browser does.
     style.textContent = `
-      .workspace2-tab-button .sidebar-icon-wrapper > .side-bar-button-icon {
+      :is(
+        .workspace2-tab-button,
+        [data-tab-id="${WORKSPACE2_TAB_ID}"],
+        [data-sidebar-tab-id="${WORKSPACE2_TAB_ID}"],
+        [aria-label="WorkspaceKit"]
+      ) .sidebar-icon-wrapper > .side-bar-button-icon {
         display: none !important;
       }
-      .workspace2-tab-button .sidebar-icon-wrapper::before {
+      :is(
+        .workspace2-tab-button,
+        [data-tab-id="${WORKSPACE2_TAB_ID}"],
+        [data-sidebar-tab-id="${WORKSPACE2_TAB_ID}"],
+        [aria-label="WorkspaceKit"]
+      ) .sidebar-icon-wrapper::before {
         content: "${WORKSPACEKIT_MENU_MARK}";
         display: flex;
         align-items: center;
@@ -8818,9 +8828,10 @@ function setupWorkspace2SidebarRemountRecovery() {
   const mentionsWorkspaceKit = (node) => {
     if (!(node instanceof Element)) return false;
     const text = node.textContent || "";
+    const identitySelector = `[data-tab-id="${WORKSPACE2_TAB_ID}"], [data-sidebar-tab-id="${WORKSPACE2_TAB_ID}"], [aria-label="WorkspaceKit"]`;
     return text.includes("WorkspaceKit")
-      || Boolean(node.matches?.(`[data-tab-id="${WORKSPACE2_TAB_ID}"], [data-sidebar-tab-id="${WORKSPACE2_TAB_ID}"]`))
-      || Boolean(node.querySelector?.(`[data-tab-id="${WORKSPACE2_TAB_ID}"], [data-sidebar-tab-id="${WORKSPACE2_TAB_ID}"]`));
+      || Boolean(node.matches?.(identitySelector))
+      || Boolean(node.querySelector?.(identitySelector));
   };
   new MutationObserver((records) => {
     if (records.some((record) => [...record.addedNodes, ...record.removedNodes].some(mentionsWorkspaceKit))) {

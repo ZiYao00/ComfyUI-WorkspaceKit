@@ -1,13 +1,20 @@
 # WorkspaceKit Testing Log
 
+## 2026-08-30 - Post-L1 Sidebar / Canvas Groups regression closeout
+
+- Sidebar identity: WorkspaceKit icon CSS no longer depends only on `.workspace2-tab-button`. It also targets the stable WorkspaceKit tab identity (`data-tab-id`, `data-sidebar-tab-id`, and `aria-label="WorkspaceKit"`), and the remount observer recognizes the same identity. This removes the redraw window where ComfyUI could briefly show its ordinary icon before the legacy class was restored.
+- E2E selector maintenance: `scripts/e2e/l1-layout-presentation.mjs` and `scripts/e2e/smoke-workspacekit-sidebar.mjs` now use stable-first WorkspaceKit sidebar selectors. The old false timeout caused by the removed `.workspace2-tab-button` class is no longer an acceptance gate.
+- Shared node geometry: `entry/core/node-visual-bounds.js` is now the single visual-bounds resolver used by Layout and Canvas Groups. Priority is `getBounding()` -> live Nodes 2.0 DOM -> compatibility `boundingRect` -> logical `pos/size`, so collapsed nodes use the rectangle visible on canvas instead of stale expanded geometry.
+- Group membership commit: ordinary group drag, multi-group drag, native node/group joint drag, and resize all reconcile membership from their final bounds. This specifically covers the user path where an empty group is created while an earlier node selection still exists, which routes through `startMultiGroupDrag()` rather than ordinary `startDrag()`.
+- Real-page evidence on `http://127.0.0.1:8190/`: `l1-layout-presentation.mjs` passed; `smoke-workspacekit-sidebar.mjs` passed with `rootSidebarMark=true` and zero WorkspaceKit console errors; new `post-l1-group-regressions.mjs` passed the sequence "empty group -> drag over node -> pointer-up membership -> second group drag moves node" and also verified collapsed-node Ctrl+G bounds against the visible node rectangle.
+- Final automated baseline after these changes: **109/109 JavaScript contracts**, frontend module-goal syntax over **155 files**, **9/9 Python contracts**, and release-version check **0.2.6** passed. The existing `MODULE_TYPELESS_PACKAGE_JSON` warnings remain development-only Node warnings and were not introduced by these fixes.
+
 ## 2026-08-30 - Layout L1 closeout / optional UI Template boundary
 
 - Product boundary: built-in Layout no longer depends on the public Panel UI Template. Third-party integration requires only Provider API v1 registration/lifecycle/host slots/tab merge; UI Template adoption is optional.
 - Runtime compatibility: Panel UI Template patch version is `1.5.1`. A stale same-major published Template can now be refreshed by the current WorkspaceKit runtime; a different major remains a conflict. `scripts/test-panel-ui-template-api.mjs` includes a stale `1.5.0` replacement regression.
-- Provider lifecycle coverage: `scripts/e2e/l1-layout-presentation.mjs` now accepts `--base-url` and includes an ON -> OFF -> ON -> OFF external-Provider availability sequence while built-in Layout remains mounted. This targets the previously reported `blueprint.setStatus is not a function` runtime-lifecycle class without adding a Layout-specific workaround.
-- Executed contracts: `scripts/run-contract-tests.mjs` passed **109/109** JavaScript contracts, including frontend module syntax over **154** files. `scripts/run-python-tests.py` passed **9/9** Python contracts.
-- Browser evidence limitation: the new runtime-toggle E2E could not be replayed in this session. `http://127.0.0.1:8188` returned `ERR_CONNECTION_REFUSED`; the available `8190` page did not expose `.workspace2-tab-button`. No new real-page pass is claimed.
-- Final L1 real-page gate therefore remains: an independent collapsed-node scenario; a dedicated temporary workflow Save -> disk-write confirmation -> ComfyUI restart -> reload; and replay of the runtime Provider toggle regression once the WorkspaceKit ComfyUI instance is online.
+- Provider lifecycle coverage: `scripts/e2e/l1-layout-presentation.mjs` includes an ON -> OFF -> ON -> OFF external-Provider availability sequence while built-in Layout remains mounted. The real-page replay passed without `blueprint.setStatus` or other page errors.
+- Final L1 gates are closed: the independent collapsed-node case passed; a dedicated temporary workflow was saved, confirmed readable after restart, and reloaded; runtime Provider ON -> OFF -> ON -> OFF passed on a real WorkspaceKit page. Layout L1 is therefore closed rather than merely code/contract complete.
 
 ## 2026-08-29 - GPL unification B07-B11 Layout V2 migration
 

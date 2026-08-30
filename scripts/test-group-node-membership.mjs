@@ -126,6 +126,7 @@ assert.match(
 const syncMatch = groups.match(/syncNodeMembership\(group, bounds\) \{([\s\S]*?)\n    \},/);
 assert.ok(syncMatch, "syncNodeMembership body found");
 const syncBody = syncMatch[1];
+assert.match(syncBody, /const nodeBounds = this\.nodeVisualBounds\(n\)/, "membership must use the shared visual-bounds resolver");
 assert.match(syncBody, /isNodeInsideGroup\(bounds, nodeBounds\)/, "membership must use the shared centre-point rule");
 assert.doesNotMatch(syncBody, /retainedOverlapThreshold/, "the 20% anti-jitter rule must be gone");
 assert.doesNotMatch(syncBody, /_getOverlapRatio/, "membership must not consult area overlap");
@@ -143,6 +144,10 @@ assert.equal(
   (groups.match(/isNodeInsideGroup\(/g) || []).length,
   6,
   "one import plus the five node-membership/control call sites"
+);
+assert.ok(
+  (groups.match(/self\.syncNodeMembership\(group, group\.bounds\)/g) || []).length >= 4,
+  "ordinary drag, multi-drag, native joint-drag, and resize commits must reconcile membership at final bounds"
 );
 
 // Group-in-group nesting must KEEP full containment: native nesting uses

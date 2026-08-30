@@ -33,6 +33,11 @@ if (!source.includes("function recoverWorkspace2SidebarAfterRemount()") || !sour
 if (!source.includes('registeredIds === null || registeredIds.has(WORKSPACE2_TAB_ID)') || !source.includes('installWorkspace2SidebarIcon();')) {
   throw new Error("Registered sidebar tabs must recover styling without duplicate registration.");
 }
+if (!source.includes('[aria-label="WorkspaceKit"]')
+  || !source.includes('[data-tab-id="${WORKSPACE2_TAB_ID}"]')
+  || !source.includes('[data-sidebar-tab-id="${WORKSPACE2_TAB_ID}"]')) {
+  throw new Error("Sidebar icon styling must target stable ComfyUI tab identity, not only the legacy WorkspaceKit class.");
+}
 if (!source.includes('if (typeof getSidebarTabs !== "function") return null;')
   || !source.includes('registeredIds === null || registeredIds.has(WORKSPACE2_TAB_ID)')) {
   throw new Error("Missing official sidebar state must not be treated as permission to register a duplicate tab.");

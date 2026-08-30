@@ -1,3 +1,5 @@
+import { resolveNodeVisualBounds } from "../core/node-visual-bounds.js";
+
 function finite(value) {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -15,21 +17,16 @@ export function boundsFromRect(left, top, width, height) {
 }
 
 function measuredNodeBounds(node) {
-  if (typeof node?.getBounding !== "function") return null;
-  try {
-    const measured = node.getBounding();
-    if (!Array.isArray(measured) && !ArrayBuffer.isView(measured)) return null;
-    const [left, top, width, height] = measured;
-    return boundsFromRect(Number(left), Number(top), Number(width), Number(height));
-  } catch {
-    return null;
-  }
+  const measured = resolveNodeVisualBounds({ node });
+  if (!measured) return null;
+  return boundsFromRect(measured.x, measured.y, measured.w, measured.h);
 }
 
 /**
  * Normalize a ComfyUI node into the immutable geometry consumed by Layout.
- * Visual bounds intentionally prefer getBounding() so collapsed nodes align by
- * what the user sees while stored size remains available for size commands.
+ * Visual bounds use the shared node visual-bounds contract so Layout and Groups
+ * agree on collapsed/runtime node geometry while stored size remains available
+ * for size commands.
  */
 export function normalizeNodeLayoutTarget(node) {
   const x = Number(node?.pos?.[0]);

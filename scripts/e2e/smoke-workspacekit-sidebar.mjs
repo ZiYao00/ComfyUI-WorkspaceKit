@@ -24,7 +24,9 @@ const NAV_TIMEOUT_MS = 30_000;
 const APP_READY_TIMEOUT_MS = 30_000;
 const SETTLE_MS = 3_000;
 
-const EXPECTED_EXT_NAMES = ['comfyui.workspace2', 'WorkspaceKit.ThemeLab'];
+// Theme/Appearance is now a built-in WorkspaceKit Provider, not the old standalone
+// WorkspaceKit.ThemeLab extension. The root extension is the Sidebar smoke boundary.
+const EXPECTED_EXT_NAMES = ['comfyui.workspace2'];
 const EXPECTED_GLOBALS = [
   'WorkspaceKitPanelAPI',
   'WorkspaceKitPanelUITemplate',
@@ -68,7 +70,7 @@ async function installReadOnlyGuard(page) {
 async function verifyRecycleBinToolbarStates(page) {
   // This only changes transient panel state in the fresh headless browser
   // context. The route guard above rejects all WorkspaceKit data mutations.
-  await page.locator('.workspace2-tab-button').click();
+  await page.locator('[data-tab-id="workspace2"], [data-sidebar-tab-id="workspace2"], [aria-label="WorkspaceKit"], .workspace2-tab-button').first().click();
   await page.waitForSelector('.workspace2-button.is-trash-toggle', { timeout: 10_000 });
 
   async function verifyCurrentPanel(label) {
@@ -157,7 +159,7 @@ async function verifyWorkflowBrowseOrder(page) {
       openBeforeBrowse: open?.nextElementSibling === browse,
     };
   });
-  if (!report.openBeforeBrowse || report.browseHeaderCount !== 0 || report.browseFirstChild !== 'workspace2-workflow-view-tabs' || !report.hasTree) {
+  if (!report.openBeforeBrowse || report.browseHeaderCount !== 0 || !report.browseFirstChild.split(/\s+/).includes('workspace2-workflow-view-tabs') || !report.hasTree) {
     throw new Error(`workflow browse order mismatch: ${JSON.stringify(report)}`);
   }
   log('workflow_browse_order', JSON.stringify(report));
@@ -245,7 +247,7 @@ async function main() {
         globalsFound,
         styleFound,
         rootSidebarMark: (() => {
-          const wrapper = document.querySelector('.workspace2-tab-button .sidebar-icon-wrapper');
+          const wrapper = document.querySelector('[data-tab-id="workspace2"] .sidebar-icon-wrapper, [data-sidebar-tab-id="workspace2"] .sidebar-icon-wrapper, [aria-label="WorkspaceKit"] .sidebar-icon-wrapper, .workspace2-tab-button .sidebar-icon-wrapper');
           if (!wrapper) return false;
           const pseudo = getComputedStyle(wrapper, '::before');
           return pseudo.content.includes('🧩')

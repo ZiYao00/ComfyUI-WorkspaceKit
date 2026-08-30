@@ -13,11 +13,17 @@ const TAB_KEYS = {
   layout: "workspace2.tabs.layout.visible",
   theme: "workspace2.tabs.theme.visible",
 };
+const WORKSPACEKIT_SIDEBAR_SELECTOR = [
+  '[data-tab-id="workspace2"]',
+  '[data-sidebar-tab-id="workspace2"]',
+  '[aria-label="WorkspaceKit"]',
+  '.workspace2-tab-button',
+].join(', ');
 
 async function openLayout(page) {
   await page.goto(URL, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  await page.waitForSelector(".workspace2-tab-button", { timeout: 45_000 });
-  const sidebarButton = page.locator(".workspace2-tab-button").first();
+  await page.waitForSelector(WORKSPACEKIT_SIDEBAR_SELECTOR, { timeout: 45_000 });
+  const sidebarButton = page.locator(WORKSPACEKIT_SIDEBAR_SELECTOR).first();
   if (!(await sidebarButton.evaluate((el) => el.classList.contains("side-bar-button-selected")))) {
     await sidebarButton.click();
   }

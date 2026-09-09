@@ -29,6 +29,7 @@ export function createOfficialNodeTreeRenderer({
     const groupOpen = isFolderExpanded(folder.key) || Boolean(query);
     const categoryHeader = document.createElement("div");
     categoryHeader.className = "workspace2-node-folder-header";
+    (categoryHeader.dataset ||= {}).workspace2NodeFolderKey = folder.key;
     categoryHeader.style.paddingLeft = `${8 + depth * 24}px`;
     categoryHeader.addEventListener("click", (event) => {
       if (event.target.closest("button,input")) return;

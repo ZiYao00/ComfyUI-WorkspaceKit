@@ -12,14 +12,16 @@ export function createNodeTopSectionRenderer({
   buildOfficialNodeTree,
   renderOfficialNodeTree,
 }) {
-  const renderNodeTopSection = (el, body, sectionId, titleText, nodes, totalCount, favoriteTypes) => {
+  const renderNodeTopSection = (el, body, sectionId, titleText, nodes, totalCount, favoriteTypes, options = {}) => {
     const section = document.createElement("div");
     section.className = "workspace2-node-section";
     const sectionExpanded = renderTopSectionHeader(el, section, sectionId, titleText, `${nodes.length}/${totalCount}`);
     body.append(section);
+    const tree = options.buildTree ? options.buildTree(sectionId, nodes) : null;
 
     const query = getQuery().trim();
     if (!sectionExpanded && !query) return;
+    options.renderControls?.(section, tree);
 
     if (!nodes.length) {
       const empty = document.createElement("div");
@@ -39,7 +41,7 @@ export function createNodeTopSectionRenderer({
       return;
     }
 
-    renderOfficialNodeTree(el, section, buildOfficialNodeTree(sectionId, nodes), favoriteTypes);
+    renderOfficialNodeTree(el, section, tree || buildOfficialNodeTree(sectionId, nodes), favoriteTypes);
   };
 
   return { renderNodeTopSection };

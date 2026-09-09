@@ -19,6 +19,7 @@ export function createNodeRowRenderer({
   translate,
   beginReorderDrag,
   iconButton,
+  getLocateTarget,
   addFavorite,
   removeFavorite,
 }) {
@@ -78,6 +79,10 @@ export function createNodeRowRenderer({
 
     const actions = document.createElement("div");
     actions.className = "workspace2-actions";
+    const locateTarget = getLocateTarget?.(node);
+    if (locateTarget) {
+      actions.append(iconButton("search", translate(locateTarget.labelKey), () => locateTarget.onLocate()));
+    }
     const favoriteButton = iconButton(
       isFavorite ? "starFilled" : "star",
       isFavorite ? translate("nodes.removeFavorite") : translate("nodes.addFavorite"),

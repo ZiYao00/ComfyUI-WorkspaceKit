@@ -13,7 +13,9 @@ export function createNodePanelState({
 }) {
   const defaultVisibleSections = () => ({
     bookmarked: true,
+    blueprint: true,
     comfy: true,
+    partner: true,
     extensions: true,
   });
 

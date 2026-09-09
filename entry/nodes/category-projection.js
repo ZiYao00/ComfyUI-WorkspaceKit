@@ -6,7 +6,9 @@
 export function createNodeCategoryProjection({
   nodeMatchesQuery,
   sortNodeSearchResults,
-  isHiddenNode,
+  isHiddenNode = () => false,
+  isBlueprintNode = () => false,
+  isPartnerNode = () => false,
   isComfyCoreNode,
   isCustomNode,
   getDefaultVisibleSections,
@@ -26,12 +28,18 @@ export function createNodeCategoryProjection({
       visibleNodes.push(node);
     }
 
+    const blueprintNodes = [];
     const comfyNodes = [];
+    const partnerNodes = [];
     const extensionNodes = [];
     const unknownNodes = [];
     for (const node of normalizedQuery ? visibleNodes : filtered) {
       if (isHiddenNode(node)) continue;
-      if (isComfyCoreNode(node)) {
+      if (isBlueprintNode(node)) {
+        blueprintNodes.push(node);
+      } else if (isPartnerNode(node)) {
+        partnerNodes.push(node);
+      } else if (isComfyCoreNode(node)) {
         comfyNodes.push(node);
       } else if (isCustomNode(node)) {
         extensionNodes.push(node);
@@ -48,7 +56,9 @@ export function createNodeCategoryProjection({
     return {
       query: normalizedQuery,
       favoriteTypes,
+      blueprintNodes,
       comfyNodes,
+      partnerNodes,
       extensionNodes,
       unknownNodes,
       visibleTotal,

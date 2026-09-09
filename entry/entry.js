@@ -51,6 +51,7 @@ import { createOfficialNodeTreeRenderer } from "./nodes/official-tree-renderer.j
 import { createNodeRowRenderer } from "./nodes/row-renderer.js";
 import { createNodeTopSectionRenderer } from "./nodes/top-section-renderer.js";
 import { createNodeCategoryProjection } from "./nodes/category-projection.js";
+import { compareNodeBrowseLabels, nodeBrowseInitial } from "./nodes/browse-sort.js";
 import { mergeNodeDefinitionSources } from "./nodes/definition-merge.js";
 import { createNodeDragDrop } from "./nodes/drag-drop.js";
 import { buildNodePreviewRows } from "./nodes/preview-model.js";
@@ -199,6 +200,7 @@ import {
   NODE_CUSTOM_ORDER_KEY,
   NODE_DEFAULT_GROUP_ID,
   NODE_DRAG_TYPE,
+  NODE_EXTENSION_VIEW_KEY,
   NODE_FONT_SCALE_KEY,
   NODE_OBJECT_INFO_CACHE_DB,
   NODE_OBJECT_INFO_CACHE_KEY,
@@ -794,6 +796,11 @@ const nodesState = {
   sort: NODE_SORTS.includes(localStorage.getItem(NODE_SORT_KEY)) ? localStorage.getItem(NODE_SORT_KEY) : "original",
   customOrderEnabled: localStorage.getItem(NODE_CUSTOM_ORDER_ENABLED_KEY) === "1",
   customOrder: nodePanelState.readCustomOrder(),
+  extensionView: ["category", "plugin"].includes(localStorage.getItem(NODE_EXTENSION_VIEW_KEY))
+    ? localStorage.getItem(NODE_EXTENSION_VIEW_KEY)
+    : "category",
+  locateReturnQuery: "",
+  locateTargetType: "",
   previewEnabled: localStorage.getItem(NODE_PREVIEW_ENABLED_KEY) !== "0",
   uiScale: Number(localStorage.getItem(NODE_UI_SCALE_KEY) ?? localStorage.getItem(NODE_FONT_SCALE_KEY) ?? "50"),
   fontScale: Number(localStorage.getItem(NODE_FONT_SCALE_KEY) || "0"),
@@ -858,6 +865,19 @@ const { buildOfficialNodeTree } = createOfficialNodeTreeBuilder({
     Array.isArray(nodesState.customOrder?.[parentKey]) ? nodesState.customOrder[parentKey] : []
   ),
   getSortMode: () => nodesState.sort,
+  compareAlphabetical: compareNodeBrowseLabels,
+});
+
+const { buildOfficialNodeTree: buildExtensionModuleTree } = createOfficialNodeTreeBuilder({
+  categoryPartsForNode: extensionModuleCategoryParts,
+  getUncategorizedLabel: () => t("nodes.uncategorized"),
+  getCategorySortRank: () => 100,
+  getCustomOrderEnabled: () => nodesState.customOrderEnabled,
+  getCustomOrder: (parentKey) => (
+    Array.isArray(nodesState.customOrder?.[parentKey]) ? nodesState.customOrder[parentKey] : []
+  ),
+  getSortMode: () => nodesState.sort,
+  compareAlphabetical: compareNodeBrowseLabels,
 });
 
 const {
@@ -919,6 +939,7 @@ const { renderNodeRow } = createNodeRowRenderer({
   translate: t,
   beginReorderDrag: beginNodeReorderDrag,
   iconButton,
+  getLocateTarget: (node) => nodeLocateTarget(node),
   addFavorite: addFavoriteNode,
   removeFavorite: removeFavoriteNode,
 });
@@ -960,7 +981,9 @@ const {
 const { projectNodeCategories } = createNodeCategoryProjection({
   nodeMatchesQuery,
   sortNodeSearchResults,
-  isHiddenNode: isHiddenOfficialNodeSection,
+  isHiddenNode: () => false,
+  isBlueprintNode: (node) => node?.source === NODE_SOURCE.BLUEPRINT,
+  isPartnerNode,
   isComfyCoreNode,
   isCustomNode: (node) => node?.source === NODE_SOURCE.CUSTOM,
   getDefaultVisibleSections: nodePanelState.defaultVisibleSections,
@@ -2471,34 +2494,63 @@ async function openWorkflowFromOfficialStore(path) {
   return { opened: true, initializeCleanState: !wasAlreadyOpen };
 }
 
-async function openWorkflow(path) {
-  workflowOpenState.captureOfficialDirtyState();
-  state.workflowLoadInProgress = true;
-  clearCurrentWorkflowDirtyState();
-  let officialOpen = { opened: false, initializeCleanState: false };
-  try {
-    try {
-      officialOpen = await openWorkflowFromOfficialStore(path);
-    } catch (error) {
-      console.debug("[Workspace2] Official workflow open failed; using fallback", error);
-    }
+// `app.loadGraphData()` mutates the singleton canvas.  Two workflow-row
+// clicks can therefore not load concurrently: a slower earlier load can
+// otherwise complete after a newer click and leave the canvas on the wrong
+// workflow. Queue the transactions, but discard requests that have not begun
+// once a newer target has been selected. The in-flight load is allowed to
+// settle because ComfyUI exposes no safe cancellation point for graph loading.
+let workflowOpenRequestId = 0;
+let workflowOpenQueue = Promise.resolve();
 
-    if (!officialOpen.opened) {
-      const data = await fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`);
-      await app.loadGraphData(data.workflow);
+async function openWorkflow(path) {
+  const requestId = ++workflowOpenRequestId;
+  const open = async () => {
+    // A newer click arrived while this request was waiting behind a graph
+    // load. It must not briefly replace the canvas before the latest target.
+    if (requestId !== workflowOpenRequestId) return false;
+
+    workflowOpenState.captureOfficialDirtyState();
+    state.workflowLoadInProgress = true;
+    clearCurrentWorkflowDirtyState();
+    let officialOpen = { opened: false, initializeCleanState: false };
+    try {
+      try {
+        officialOpen = await openWorkflowFromOfficialStore(path);
+      } catch (error) {
+        console.debug("[Workspace2] Official workflow open failed; using fallback", error);
+      }
+
+      if (!officialOpen.opened) {
+        const data = await fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`);
+        await app.loadGraphData(data.workflow);
+      }
+      // The load that was already in progress may have been superseded. Leave
+      // its canvas result alone; the queued latest request starts next.
+      if (requestId !== workflowOpenRequestId) return false;
+      state.selectedPath = path;
+      // Only a first official open establishes a clean baseline. Calling this
+      // after every tab activation used to erase the dirty marker for 99 in
+      // `99 (edited) -> 100 (edited) -> 99`; keep the stored path state when
+      // returning to an already open official workflow.
+      if (!state.isOfficialRoot || !officialOpen.opened || officialOpen.initializeCleanState) {
+        setCurrentWorkflowCleanState();
+      }
+      recordRecentWorkflow(path);
+      return true;
+    } catch (error) {
+      // A superseded request must not leave an obsolete error in the footer.
+      if (requestId !== workflowOpenRequestId) return false;
+      throw error;
+    } finally {
+      state.workflowLoadInProgress = false;
     }
-    state.selectedPath = path;
-    // Only a first official open establishes a clean baseline. Calling this
-    // after every tab activation used to erase the dirty marker for 99 in
-    // `99 (edited) -> 100 (edited) -> 99`; keep the stored path state when
-    // returning to an already open official workflow.
-    if (!state.isOfficialRoot || !officialOpen.opened || officialOpen.initializeCleanState) {
-      setCurrentWorkflowCleanState();
-    }
-    recordRecentWorkflow(path);
-  } finally {
-    state.workflowLoadInProgress = false;
-  }
+  };
+
+  const queued = workflowOpenQueue.catch(() => {}).then(open);
+  // Keep subsequent workflow clicks alive after an individual load failure.
+  workflowOpenQueue = queued.catch(() => {});
+  return queued;
 }
 
 async function openWorkflowFileFromPicker(el) {
@@ -4911,6 +4963,23 @@ function nodePackageName(node) {
   return "";
 }
 
+function nodePackageKey(node) {
+  const parts = String(node?.pythonModule || "").split(".");
+  return parts[0] === "custom_nodes" && parts[1] ? parts[1] : "";
+}
+
+function extensionModuleCategoryParts(node) {
+  const packageKey = nodePackageKey(node);
+  const packageName = nodePackageName(node);
+  const categoryParts = Array.isArray(node?.categoryParts)
+    ? node.categoryParts.map((part) => String(part || "").trim()).filter(Boolean)
+    : [];
+  if (!packageKey) {
+    return [{ key: "__unresolved__", label: t("nodes.categoryUnknown") }, ...categoryParts];
+  }
+  return [{ key: `module:${packageKey}`, label: packageName || packageKey }, ...categoryParts];
+}
+
 function isComfyNode(node) {
   return node?.source === NODE_SOURCE.CORE || node?.source === NODE_SOURCE.ESSENTIALS;
 }
@@ -4931,8 +5000,10 @@ function isComfyCoreNode(node) {
   return isComfyNode(node);
 }
 
-function isHiddenOfficialNodeSection(node) {
-  return node?.source === NODE_SOURCE.BLUEPRINT || node?.apiNode;
+function isPartnerNode(node) {
+  const categoryRoot = String(node?.categoryParts?.[0] || "").trim();
+  const mainCategory = String(node?.mainCategory || "").trim();
+  return /^partner$/i.test(categoryRoot) || /^partner$/i.test(mainCategory);
 }
 
 function officialNodeCategoryParts(node) {
@@ -5870,6 +5941,21 @@ function nodesViewTabs(el) {
       }
       nodesState.visibleSections = next;
       nodePanelState.saveVisibleSections(nodesState.visibleSections);
+      renderNodesPanel(el);
+    });
+    tabs.append(button);
+  }
+  if (nodesState.locateReturnQuery) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspacekit-ui-view-tab workspace2-node-tab";
+    button.textContent = t("nodes.returnSearch");
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      nodesState.query = nodesState.locateReturnQuery;
+      nodesState.locateReturnQuery = "";
+      nodesState.locateTargetType = "";
+      nodesState.locateTargetParentKey = "";
       renderNodesPanel(el);
     });
     tabs.append(button);
@@ -8722,10 +8808,108 @@ function renderEssentialsNodeSection(el, body, nodes, favoriteTypes) {
   }
 }
 
+function setNodeExtensionView(el, view) {
+  if (view !== "category" && view !== "plugin") return;
+  nodesState.extensionView = view;
+  localStorage.setItem(NODE_EXTENSION_VIEW_KEY, view);
+  renderNodesPanel(el);
+}
+
+function renderExtensionViewControls(el, section, tree) {
+  const controls = document.createElement("div");
+  controls.className = "workspace2-node-extension-controls";
+  for (const view of ["category", "plugin"]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `workspacekit-ui-view-tab workspace2-node-tab ${nodesState.extensionView === view ? "is-active" : ""}`;
+    button.setAttribute("aria-pressed", nodesState.extensionView === view ? "true" : "false");
+    button.textContent = t(`nodes.extensionView.${view}`);
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setNodeExtensionView(el, view);
+    });
+    controls.append(button);
+  }
+  section.append(controls);
+
+  if (nodesState.extensionView !== "plugin" || nodesState.query.trim() || !tree?.children?.length) return;
+  const initials = [...new Set(tree.children.map((child) => nodeBrowseInitial(child.label)))].sort();
+  const index = document.createElement("div");
+  index.className = "workspace2-node-letter-index";
+  for (const initial of initials) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "workspace2-node-letter-button";
+    button.textContent = initial;
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const folder = tree.children.find((child) => nodeBrowseInitial(child.label) === initial);
+      const target = folder && section.querySelector(`[data-workspace2-node-folder-key="${cssEscape(folder.key)}"]`);
+      target?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+    index.append(button);
+  }
+  section.append(index);
+}
+
+function nodeLocateTarget(node) {
+  if (!nodesState.query.trim() || !node) return null;
+  return {
+    labelKey: node?.source === NODE_SOURCE.CUSTOM ? "nodes.locatePlugin" : "nodes.locateCategory",
+    onLocate: () => locateNodeInBrowse(nodesState.renderTarget, node),
+  };
+}
+
+function expandNodeBrowsePath(sectionId, parts) {
+  let parentKey = sectionId;
+  nodesState.expanded.add(sectionId);
+  for (const part of parts) {
+    const key = typeof part === "object" ? String(part.key || part.label || "") : String(part || "");
+    if (!key) continue;
+    parentKey = `${parentKey}/${key}`;
+    nodesState.expanded.add(parentKey);
+  }
+  return parentKey;
+}
+
+function locateNodeInBrowse(el, node) {
+  const query = nodesState.query.trim();
+  if (!query || !el) return;
+  let sectionId = "__unknown__";
+  let parts = officialNodeCategoryParts(node);
+  if (node?.source === NODE_SOURCE.CUSTOM) {
+    sectionId = "__extensions__";
+    parts = extensionModuleCategoryParts(node);
+    nodesState.extensionView = "plugin";
+    localStorage.setItem(NODE_EXTENSION_VIEW_KEY, "plugin");
+  } else if (node?.source === NODE_SOURCE.BLUEPRINT) {
+    sectionId = "__blueprint__";
+  } else if (isPartnerNode(node)) {
+    sectionId = "__partner__";
+  } else if (isComfyCoreNode(node)) {
+    sectionId = "__comfy__";
+  }
+  nodesState.locateReturnQuery = query;
+  nodesState.locateTargetType = node.type;
+  nodesState.locateTargetParentKey = expandNodeBrowsePath(sectionId, parts);
+  nodesState.query = "";
+  renderNodesPanel(el);
+  requestAnimationFrame(() => {
+    const selector = `[data-workspace2-node-type="${cssEscape(nodesState.locateTargetType)}"][data-workspace2-node-parent-key="${cssEscape(nodesState.locateTargetParentKey)}"]`;
+    const target = el.querySelector(selector);
+    if (!target) return;
+    target.classList.add("is-located");
+    target.scrollIntoView({ block: "center", behavior: "smooth" });
+    window.setTimeout(() => target.classList.remove("is-located"), 1800);
+  });
+}
+
 function renderNodeCategorySections(el, body) {
   const {
     favoriteTypes,
+    blueprintNodes,
     comfyNodes,
+    partnerNodes,
     extensionNodes,
     unknownNodes,
     visibleTotal,
@@ -8740,11 +8924,20 @@ function renderNodeCategorySections(el, body) {
   if (visibleSections.bookmarked) {
     renderFavoriteNodeSections(el, body);
   }
+  if (visibleSections.blueprint) {
+    renderNodeTopSection(el, body, "__blueprint__", t("nodes.categoryBlueprint"), blueprintNodes, visibleTotal, favoriteTypes);
+  }
   if (visibleSections.comfy) {
     renderNodeTopSection(el, body, "__comfy__", t("nodes.categoryComfy"), comfyNodes, visibleTotal, favoriteTypes);
   }
+  if (visibleSections.partner) {
+    renderNodeTopSection(el, body, "__partner__", t("nodes.categoryPartner"), partnerNodes, visibleTotal, favoriteTypes);
+  }
   if (visibleSections.extensions) {
-    renderNodeTopSection(el, body, "__extensions__", t("nodes.categoryExtensions"), extensionNodes, visibleTotal, favoriteTypes);
+    renderNodeTopSection(el, body, "__extensions__", t("nodes.categoryExtensions"), extensionNodes, visibleTotal, favoriteTypes, {
+      buildTree: nodesState.extensionView === "plugin" ? buildExtensionModuleTree : buildOfficialNodeTree,
+      renderControls: (section, tree) => renderExtensionViewControls(el, section, tree),
+    });
   }
   if (unknownNodes.length) {
     renderNodeTopSection(el, body, "__unknown__", t("nodes.categoryUnknown"), unknownNodes, visibleTotal, favoriteTypes);

@@ -977,6 +977,33 @@ export function styles() {
       padding-bottom: 6px;
       border-bottom: 0;
     }
+    .workspace2-node-extension-controls,
+    .workspace2-node-letter-index {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 4px 0 6px;
+    }
+    .workspace2-node-letter-button {
+      min-width: 24px;
+      min-height: 24px;
+      padding: 2px 5px;
+      border: 1px solid var(--workspace2-border);
+      border-radius: 6px;
+      color: var(--workspace2-muted);
+      background: transparent;
+      cursor: pointer;
+    }
+    .workspace2-node-letter-button:hover {
+      color: var(--p-text-color, var(--fg-color, #ddd));
+      border-color: var(--workspace2-accent);
+      background: var(--workspace2-accent-soft);
+    }
+    .workspace2-node-row.is-located {
+      outline: 2px solid var(--workspace2-accent);
+      outline-offset: -2px;
+      background: var(--workspace2-accent-soft);
+    }
     .workspace2-input,
     .workspace2-button {
       min-height: 28px;

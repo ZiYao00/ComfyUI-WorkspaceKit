@@ -11,6 +11,7 @@ export function createOfficialNodeTreeBuilder({
   getCustomOrderEnabled,
   getCustomOrder,
   getSortMode,
+  compareAlphabetical = (a, b) => String(a || "").localeCompare(String(b || "")),
 }) {
   const createNodeTreeFolder = (key, label) => ({
     key,
@@ -76,7 +77,7 @@ export function createOfficialNodeTreeBuilder({
       if (getSortMode() !== "alphabetical") {
         return 0;
       }
-      return String(a.label || "").localeCompare(String(b.label || ""));
+      return compareAlphabetical(a.label, b.label, a.node?.type, b.node?.type);
     });
     for (const child of node.children) {
       sortOfficialNodeTree(child);

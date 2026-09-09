@@ -5,6 +5,8 @@ const projector = createNodeCategoryProjection({
   nodeMatchesQuery: (node, query) => !query || node.title.toLowerCase().includes(query),
   sortNodeSearchResults: (nodes) => [...nodes].sort((a, b) => a.title.localeCompare(b.title)),
   isHiddenNode: (node) => Boolean(node.hidden),
+  isBlueprintNode: (node) => node.source === "blueprint",
+  isPartnerNode: (node) => node.source === "partner",
   isComfyCoreNode: (node) => node.source === "core",
   isCustomNode: (node) => node.source === "custom",
   getDefaultVisibleSections: () => ({ bookmarked: true, comfy: true, extensions: true }),
@@ -15,6 +17,8 @@ const nodes = [
   { type: "core-z", title: "Zebra", source: "core" },
   { type: "custom-a", title: "Apple", source: "custom" },
   { type: "unknown-b", title: "Banana", source: "other" },
+  { type: "blueprint-c", title: "Canvas", source: "blueprint" },
+  { type: "partner-d", title: "Date", source: "partner" },
   { type: "hidden", title: "Apricot", source: "core", hidden: true },
 ];
 const all = projector.projectNodeCategories({
@@ -23,10 +27,12 @@ const all = projector.projectNodeCategories({
   favorites: [{ type: "core-z" }],
   visibleSections: { bookmarked: false, comfy: true, extensions: false },
 });
-assert.equal(all.visibleTotal, 3);
+assert.equal(all.visibleTotal, 5);
+assert.deepEqual(all.blueprintNodes.map((node) => node.type), ["blueprint-c"]);
 assert.deepEqual(all.comfyNodes.map((node) => node.type), ["core-z"]);
 assert.deepEqual(all.extensionNodes.map((node) => node.type), ["custom-a"]);
 assert.deepEqual(all.unknownNodes.map((node) => node.type), ["unknown-b"]);
+assert.deepEqual(all.partnerNodes.map((node) => node.type), ["partner-d"]);
 assert.equal(all.favoriteTypes.has("core-z"), true);
 assert.deepEqual(all.visibleSections, { bookmarked: false, comfy: true, extensions: false });
 
@@ -36,10 +42,12 @@ const searched = projector.projectNodeCategories({
   favorites: [],
   visibleSections: { bookmarked: false, comfy: false, extensions: false },
 });
-assert.equal(searched.visibleTotal, 3);
+assert.equal(searched.visibleTotal, 5);
+assert.deepEqual(searched.blueprintNodes.map((node) => node.type), []);
 assert.deepEqual(searched.extensionNodes.map((node) => node.type), ["custom-a"]);
 assert.deepEqual(searched.unknownNodes.map((node) => node.type), ["unknown-b"]);
 assert.deepEqual(searched.comfyNodes.map((node) => node.type), []);
+assert.deepEqual(searched.partnerNodes.map((node) => node.type), []);
 assert.deepEqual(searched.visibleSections, { bookmarked: true, comfy: true, extensions: true });
 
 console.log("Node category projection contract passed.");

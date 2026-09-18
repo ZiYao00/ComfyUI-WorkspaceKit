@@ -338,6 +338,48 @@ reused directly** — this was evaluated and declined (see
 
 ---
 
+## 8. Queue-time widget mutation and ChangeTracker dirty state
+
+**Verified 2026-09-18 against current `Comfy-Org/ComfyUI_frontend` main
+(commit `2e87e50fc498995991e42b6bb57282a881dda81e`).**
+
+The official queue path has an observable public lifecycle:
+
+```text
+promptQueueing
+  -> widget.beforeQueued / promoted controls
+  -> graphToPrompt + backend queue request
+  -> widget.afterQueued / promoted controls
+  -> promptQueued
+```
+
+`ChangeTracker.init()` listens to `promptQueued` and calls
+`captureCanvasState()`. Dynamic widget changes such as random/increment seed
+can therefore become part of `activeState`, make official `workflow.isModified`
+true, and emit `graphChanged` even when the user only pressed Run. This is
+native behavior, not evidence by itself of a user-authored workflow edit.
+
+`ChangeTracker.graphEqual()` compares node content while ignoring node-array
+order, ignores `extra.ds` (viewport), and compares `links`, `floatingLinks`,
+`reroutes`, `groups`, `definitions`, and `subgraphs`. WorkspaceKit's own
+semantic save baseline mirrors that scope rather than serializing unrelated
+top-level workflow metadata.
+
+`ComfyApi` extends the browser `EventTarget`. A capture option on a listener
+attached directly to that target does **not** provide a reliable way to jump
+ahead of an earlier listener registered on the same target. WorkspaceKit must
+therefore tolerate the official `promptQueued` listener running first and
+emitting a nested `graphChanged` before the extension receives
+`promptQueued`.
+
+WorkspaceKit's rule is deliberately narrower than official `isModified`:
+execution-only queue mutations may advance WorkspaceKit's effective clean
+baseline only when the queue started semantically clean and no independent
+graph change was observed. It never rewrites ChangeTracker, undo/redo, drafts,
+or official `isModified`. Uncertain cases fail closed and remain dirty.
+
+---
+
 ## Related documents
 
 - [CANVAS_GROUPS_MAP.md](CANVAS_GROUPS_MAP.md) — where WK's group code lives

@@ -1,14 +1,20 @@
+import {
+  officialWorkflowSnapshot,
+  planExecutionDirtyReconciliation,
+} from "./dirty-snapshot.js";
+
 /**
  * Current-workflow state bridge.
  *
- * This module owns only transient state: the locally tracked dirty snapshot
- * and the subscription to ComfyUI's official workflow Store.  It deliberately
- * does not open, save, rename, close, or render workflows.  Those actions stay
- * in entry.js because their ordering is coupled to the visible canvas.
+ * This module owns only transient state: the locally tracked dirty snapshot,
+ * the official semantic dirty baseline, queue-time reconciliation, and the
+ * subscription to ComfyUI's official workflow Store. It deliberately does not
+ * open, save, rename, close, or render workflows. Those actions stay in
+ * entry.js because their ordering is coupled to the visible canvas.
  *
  * Regression boundary: an official Store notification can arrive during an
- * inline rename.  Rendering is deferred until that transaction completes so
- * the input is not removed.  Likewise, graphChanged is ignored while a graph
+ * inline rename. Rendering is deferred until that transaction completes so
+ * the input is not removed. Likewise, graphChanged is ignored while a graph
  * is loading so a normal workflow switch never creates a false dirty marker.
  */
 export function createWorkflowOpenState({
@@ -25,6 +31,9 @@ export function createWorkflowOpenState({
   let dirtyTrackingReady = false;
   let officialSyncReady = false;
   const officialBaselineTimers = new Map();
+  const officialQueueTransactions = new Map();
+  const provisionalOfficialGraphChanges = [];
+  const MAX_QUEUE_TRANSACTIONS = 32;
 
   function snapshot(workflow = serializeCurrentWorkflow()) {
     if (!workflow) return "";
@@ -36,43 +45,20 @@ export function createWorkflowOpenState({
     }
   }
 
-  // Match ComfyUI's ChangeTracker.graphEqual() semantics for the official
-  // workflow tabs. A switch stores the viewport in extra.ds and extensions
-  // may serialize nodes in a different order; neither represents a graph
-  // edit. We intentionally keep links, groups, reroutes, definitions and all
-  // node properties in the comparison, so real canvas edits still surface.
   function officialSnapshot(workflow = serializeCurrentWorkflow()) {
     if (!workflow) return "";
     try {
-      const copy = JSON.parse(JSON.stringify(workflow));
-      if (copy.extra && typeof copy.extra === "object") {
-        delete copy.extra.ds;
-      }
-      if (Array.isArray(copy.nodes)) {
-        copy.nodes.sort((left, right) => {
-          const leftKey = stableJson(left);
-          const rightKey = stableJson(right);
-          return leftKey.localeCompare(rightKey);
-        });
-      }
-      return stableJson(copy);
+      return officialWorkflowSnapshot(workflow);
     } catch (error) {
       console.debug("[Workspace2] Official workflow snapshot failed", error);
       return "";
     }
   }
 
-  function stableJson(value) {
-    if (Array.isArray(value)) {
-      return `[${value.map((item) => stableJson(item)).join(",")}]`;
-    }
-    if (value && typeof value === "object") {
-      return `{${Object.keys(value)
-        .sort()
-        .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
-        .join(",")}}`;
-    }
-    return JSON.stringify(value);
+  function activeOfficialPath() {
+    return relativeWorkflowPathFromOfficial(
+      getActiveOfficialWorkflow(app)?.path || "",
+    );
   }
 
   function clearDirtyState() {
@@ -100,10 +86,7 @@ export function createWorkflowOpenState({
       // window so these load-only changes do not become a false dirty dot.
       const timer = window.setTimeout(() => {
         officialBaselineTimers.delete(activePath);
-        const currentPath = relativeWorkflowPathFromOfficial(
-          getActiveOfficialWorkflow(app)?.path || "",
-        );
-        if (currentPath !== activePath) return;
+        if (activeOfficialPath() !== activePath) return;
         const settledSnapshot = officialSnapshot();
         if (!settledSnapshot) return;
         state.officialWorkflowSnapshots.set(activePath, settledSnapshot);
@@ -115,13 +98,13 @@ export function createWorkflowOpenState({
   }
 
   // ComfyUI can create an IndexedDB draft while merely switching cached tabs.
-  // The official isModified flag then becomes true even though the graph has
-  // not changed. WorkspaceKit keeps an in-memory baseline after each open/save
-  // and uses the same graph comparison semantics for its own dot/save UI.
+  // The official isModified flag can also become true after queue-time widget
+  // callbacks such as random/increment seed. WorkspaceKit therefore keeps an
+  // in-memory semantic baseline for its own dot/save UI and never rewrites the
+  // official ChangeTracker.
   function captureOfficialDirtyState() {
     if (!state.isOfficialRoot) return;
-    const activeWorkflow = getActiveOfficialWorkflow(app);
-    const path = relativeWorkflowPathFromOfficial(activeWorkflow?.path || "");
+    const path = activeOfficialPath();
     const baseline = state.officialWorkflowSnapshots.get(path);
     if (!path || !baseline) return;
 
@@ -142,6 +125,115 @@ export function createWorkflowOpenState({
     return state.officialWorkflowDirtyPaths.has(path);
   }
 
+  function queueRequestId(event) {
+    const requestId = event?.detail?.requestId;
+    return requestId === undefined || requestId === null ? null : requestId;
+  }
+
+  function trimQueueTransactions() {
+    while (officialQueueTransactions.size > MAX_QUEUE_TRANSACTIONS) {
+      const oldest = officialQueueTransactions.keys().next().value;
+      if (oldest === undefined) break;
+      officialQueueTransactions.delete(oldest);
+    }
+  }
+
+  function beginOfficialQueueTransaction(event) {
+    if (!state.isOfficialRoot) return;
+    const requestId = queueRequestId(event);
+    if (requestId === null) return;
+
+    const path = activeOfficialPath();
+    const baseline = state.officialWorkflowSnapshots.get(path);
+    const beforeSnapshot = officialSnapshot();
+    if (!path || !baseline || !beforeSnapshot) return;
+
+    officialQueueTransactions.set(requestId, {
+      path,
+      beforeSnapshot,
+      startedClean: beforeSnapshot === baseline,
+      tainted: false,
+    });
+    trimQueueTransactions();
+  }
+
+  function noteOfficialGraphChange() {
+    if (!state.isOfficialRoot || !officialQueueTransactions.size) return;
+
+    const path = activeOfficialPath();
+    const currentSnapshot = officialSnapshot();
+    if (!path || !currentSnapshot) return;
+
+    const marker = {
+      path,
+      snapshot: currentSnapshot,
+      consumed: false,
+    };
+    provisionalOfficialGraphChanges.push(marker);
+
+    const confirmTaint = () => {
+      const index = provisionalOfficialGraphChanges.indexOf(marker);
+      if (index >= 0) provisionalOfficialGraphChanges.splice(index, 1);
+      if (marker.consumed) return;
+
+      // A graphChanged that survives until the next microtask was not claimed
+      // by a synchronous promptQueued completion. It can therefore include a
+      // real user/third-party edit, so every clean-start transaction for this
+      // workflow fails closed.
+      for (const transaction of officialQueueTransactions.values()) {
+        if (transaction.path === marker.path && transaction.startedClean) {
+          transaction.tainted = true;
+        }
+      }
+    };
+
+    if (typeof queueMicrotask === "function") {
+      queueMicrotask(confirmTaint);
+    } else {
+      Promise.resolve().then(confirmTaint);
+    }
+  }
+
+  function consumePromptQueuedGraphChange(path, afterSnapshot) {
+    for (let index = provisionalOfficialGraphChanges.length - 1; index >= 0; index -= 1) {
+      const marker = provisionalOfficialGraphChanges[index];
+      if (marker.consumed || marker.path !== path || marker.snapshot !== afterSnapshot) continue;
+      marker.consumed = true;
+      return true;
+    }
+    return false;
+  }
+
+  function reconcileOfficialQueueTransaction(event) {
+    if (!state.isOfficialRoot) return;
+    const requestId = queueRequestId(event);
+    if (requestId === null) return;
+
+    const transaction = officialQueueTransactions.get(requestId);
+    officialQueueTransactions.delete(requestId);
+    if (!transaction) return;
+
+    const path = activeOfficialPath();
+    const afterSnapshot = officialSnapshot();
+    consumePromptQueuedGraphChange(path, afterSnapshot);
+    const plan = planExecutionDirtyReconciliation({
+      beforeSnapshot: transaction.beforeSnapshot,
+      afterSnapshot,
+      startedClean: transaction.startedClean,
+      tainted: transaction.tainted,
+      sameWorkflow: path === transaction.path,
+      currentDirty: state.officialWorkflowDirtyPaths.has(transaction.path),
+    });
+    if (!plan.absorb || !afterSnapshot) return;
+
+    // The queue began from WorkspaceKit-clean state and no intervening real
+    // graph edit was observed. Treat the post-queue graph as the new effective
+    // clean baseline for WorkspaceKit only. ComfyUI's own isModified,
+    // undo/redo and draft state are intentionally left untouched.
+    state.officialWorkflowSnapshots.set(transaction.path, afterSnapshot);
+    state.officialWorkflowDirtyPaths.delete(transaction.path);
+  }
+
   function remapOfficialWorkflowPathState(oldPath, newPath) {
     const snapshotValue = state.officialWorkflowSnapshots.get(oldPath);
     if (snapshotValue !== undefined) {
@@ -151,6 +243,12 @@ export function createWorkflowOpenState({
     if (state.officialWorkflowDirtyPaths.delete(oldPath)) {
       state.officialWorkflowDirtyPaths.add(newPath);
     }
+    // Renaming while a queue request is pending changes workflow identity.
+    // Drop those transactions rather than guessing whether their final graph
+    // belongs to the old or new path.
+    for (const [requestId, transaction] of officialQueueTransactions) {
+      if (transaction.path === oldPath) officialQueueTransactions.delete(requestId);
+    }
   }
 
   function removeOfficialWorkflowPathState(path) {
@@ -159,6 +257,9 @@ export function createWorkflowOpenState({
     officialBaselineTimers.delete(path);
     state.officialWorkflowSnapshots.delete(path);
     state.officialWorkflowDirtyPaths.delete(path);
+    for (const [requestId, transaction] of officialQueueTransactions) {
+      if (transaction.path === path) officialQueueTransactions.delete(requestId);
+    }
   }
 
   function renderIfWorkflowsActive() {
@@ -175,7 +276,19 @@ export function createWorkflowOpenState({
       return;
     }
     dirtyTrackingReady = true;
+
+    // promptQueueing is the earliest public queue boundary. ComfyUI's own
+    // promptQueued listener may run before an extension listener and emit a
+    // nested graphChanged synchronously. graphChanged is therefore recorded as
+    // provisional and only confirmed as an external edit in the next microtask.
+    // Our later promptQueued listener can claim the matching synchronous change
+    // in the same dispatch turn. Missing requestId on an older frontend simply
+    // disables reconciliation and falls back to conservative dirty behavior.
+    api.addEventListener("promptQueueing", beginOfficialQueueTransaction);
+    api.addEventListener("promptQueued", reconcileOfficialQueueTransaction);
+
     api.addEventListener("graphChanged", () => {
+      noteOfficialGraphChange();
       if (state.workflowDirtyCheckTimer) window.clearTimeout(state.workflowDirtyCheckTimer);
       state.workflowDirtyCheckTimer = window.setTimeout(() => {
         state.workflowDirtyCheckTimer = null;

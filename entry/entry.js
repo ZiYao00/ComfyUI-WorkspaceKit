@@ -21,7 +21,7 @@ import {
   TOPBAR_SAVE_ENABLED_KEY,
   createTopbarSaveButton,
   isTopbarSaveButtonEnabled,
-} from "./ui/topbar-save-button.js?v=20260828_topbar_save_r1";
+} from "./ui/topbar-save-button.js?v=20260918_semantic_dirty_r1";
 import { fetchJson, postJson } from "./core/api.js";
 import { createWorkspaceStartupStageRunner } from "./core/startup-stage.js?v=20260724_startup_stage_isolation_r1";
 import {
@@ -141,7 +141,6 @@ import {
   getOfficialWorkflowByPath,
   getOfficialWorkflowStore,
   getOpenOfficialWorkflows,
-  isOfficialWorkflowModified,
   isOfficialWorkflowTemporary,
   loadOfficialWorkflow,
   saveOfficialWorkflow,
@@ -9146,8 +9145,13 @@ function installWorkspaceTopbarSaveButton() {
       // rather than throw during startup.
       getMenuElement: () => app.menu?.element ?? null,
       hasActiveWorkflow: () => Boolean(getActiveOfficialWorkflow(app)),
-      isActiveWorkflowModified: () => isOfficialWorkflowModified(getActiveOfficialWorkflow(app)),
-      isActiveWorkflowTemporary: () => isOfficialWorkflowTemporary(getActiveOfficialWorkflow(app)),
+      needsActiveWorkflowSave: () => {
+        const workflow = getActiveOfficialWorkflow(app);
+        return Boolean(workflow) && (
+          isOfficialWorkflowTemporary(workflow)
+          || workflowOpenState.isOfficialWorkflowDirty(workflow)
+        );
+      },
       saveActiveWorkflow: saveWorkspaceTopbarWorkflow,
       translate: t,
       isEnabled: isWorkspaceTopbarSaveEnabled,
@@ -9163,10 +9167,15 @@ function installWorkspaceTopbarSaveButton() {
   if (installWorkspaceTopbarSaveButton.ready) return;
   installWorkspaceTopbarSaveButton.ready = true;
 
-  // The primary Save treatment follows the same signal the panel's unsaved indicator uses.
-  // Switching tabs changes the active workflow without emitting graphChanged,
-  // so the store subscription is the other half of the refresh.
-  app.api?.addEventListener?.("graphChanged", () => button.refresh());
+  // Both Save surfaces consume the same WorkspaceKit semantic dirty state.
+  // open-state resolves graphChanged through a zero-delay dirty check so queue
+  // reconciliation can finish first. Refresh this button one turn later as well:
+  // the dirty set is then authoritative for both real edits and run-only widget
+  // mutations. Switching tabs still needs the Store subscription because it
+  // does not emit graphChanged.
+  app.api?.addEventListener?.("graphChanged", () => {
+    window.setTimeout(() => button.refresh(), 0);
+  });
   subscribeOfficialWorkflowStore(app, () => button.refresh());
 }
 

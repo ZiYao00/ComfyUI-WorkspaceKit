@@ -68,26 +68,21 @@ export function planTopbarSaveSlotPlacement({ childCount = 0, slotIndex = -1 } =
 }
 
 /**
- * Saving is delegated to ComfyUI's own command, so the button mirrors the same
- * availability rule the WK panel's File menu already uses: no active workflow
- * means nothing to save.
- *
- * `isTemporary` is a second dirty signal, not a nicety. A brand-new workflow
- * that has never been written to disk reports `isModified: false` while ComfyUI
- * still marks its title with `*`; observed live on a real page, the dot stayed
- * dark on exactly the workflow that most needed saving.
+ * Saving is delegated to ComfyUI's own command, but WorkspaceKit owns whether
+ * that save is currently necessary. A clean persisted workflow therefore keeps
+ * the control visible for discoverability while disabling it; a temporary or
+ * semantically dirty workflow enables the primary Save action.
  */
 export function planTopbarSaveButtonState({
   hasActiveWorkflow = false,
-  isModified = false,
-  isTemporary = false,
+  needsSave = false,
   saving = false,
 } = {}) {
   const active = Boolean(hasActiveWorkflow);
-  const needsSave = Boolean(isModified) || Boolean(isTemporary);
+  const saveNeeded = active && Boolean(needsSave);
   return {
-    disabled: !active || Boolean(saving),
-    dirty: active && !saving && needsSave,
+    disabled: !saveNeeded || Boolean(saving),
+    dirty: saveNeeded && !saving,
     busy: Boolean(saving),
   };
 }
@@ -159,8 +154,7 @@ export function createTopbarSaveButton({
   document: doc,
   getMenuElement,
   hasActiveWorkflow,
-  isActiveWorkflowModified,
-  isActiveWorkflowTemporary,
+  needsActiveWorkflowSave,
   saveActiveWorkflow,
   translate,
   isEnabled,
@@ -203,7 +197,7 @@ export function createTopbarSaveButton({
   }
 
   async function runSave() {
-    if (saving || !hasActiveWorkflow?.()) return;
+    if (saving || !hasActiveWorkflow?.() || !needsActiveWorkflowSave?.()) return;
     saving = true;
     refresh();
     try {
@@ -220,8 +214,7 @@ export function createTopbarSaveButton({
     if (!button) return;
     const state = planTopbarSaveButtonState({
       hasActiveWorkflow: Boolean(hasActiveWorkflow?.()),
-      isModified: Boolean(isActiveWorkflowModified?.()),
-      isTemporary: Boolean(isActiveWorkflowTemporary?.()),
+      needsSave: Boolean(needsActiveWorkflowSave?.()),
       saving,
     });
     button.disabled = state.disabled;

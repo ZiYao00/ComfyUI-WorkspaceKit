@@ -80,15 +80,14 @@ assert.ok(REASSERT_BURST_LIMIT > 1, "one write per burst would lose a legitimate
     const doc = new StubDocument();
     const bar = createTopbarFixture(doc);
     const saved = [];
-    let activeWorkflow = { isModified: false };
+    let activeWorkflow = { needsSave: false };
 
     const controller = createTopbarSaveButton({
       document: doc,
       getMenuElement: () => bar.menuElement,
       hasActiveWorkflow: () => Boolean(activeWorkflow),
-      isActiveWorkflowModified: () => Boolean(activeWorkflow?.isModified),
-      isActiveWorkflowTemporary: () => isOfficialWorkflowTemporary(activeWorkflow),
-      saveActiveWorkflow: async () => { saved.push("save"); activeWorkflow.isModified = false; },
+      needsActiveWorkflowSave: () => Boolean(activeWorkflow?.needsSave) || isOfficialWorkflowTemporary(activeWorkflow),
+      saveActiveWorkflow: async () => { saved.push("save"); activeWorkflow.needsSave = false; },
       translate: (key) => key,
       isEnabled: () => true,
       requestFrame: (callback) => callback(),
@@ -148,9 +147,9 @@ assert.ok(REASSERT_BURST_LIMIT > 1, "one write per burst would lose a legitimate
     assert.ok(label.classList.contains(TOPBAR_SAVE_LABEL_CLASS));
     assert.equal(label.textContent, "topbar.saveLabel", "the visible label stays short");
     assert.equal(button.children.length, 2, "the primary dirty treatment replaces the redundant dot");
-    assert.equal(button.disabled, false);
+    assert.equal(button.disabled, true, "a clean persisted workflow keeps Save visible but disabled");
 
-    activeWorkflow.isModified = true;
+    activeWorkflow.needsSave = true;
     controller.refresh();
     assert.equal(button.dataset.dirty, "true", "an edited workflow must use primary Save treatment");
     assert.equal(button.title, "topbar.saveUnsaved");
@@ -161,12 +160,13 @@ assert.ok(REASSERT_BURST_LIMIT > 1, "one write per burst would lose a legitimate
     assert.equal(button.dataset.dirty, "false");
 
     // Clicking must delegate to the injected save, and must not double-fire.
-    activeWorkflow = { isModified: true };
+    activeWorkflow = { needsSave: true };
     controller.refresh();
     button.dispatch("click");
     button.dispatch("click");
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(saved, ["save"], "a second click during a save must be ignored");
+    assert.equal(button.disabled, true, "a successful save returns the clean workflow to disabled");
 
     // Turning the switch off removes the button immediately; turning it back on
     // restores it, still last.
@@ -202,7 +202,7 @@ assert.ok(REASSERT_BURST_LIMIT > 1, "one write per burst would lose a legitimate
       document: doc,
       getMenuElement: () => null,
       hasActiveWorkflow: () => true,
-      isActiveWorkflowModified: () => false,
+      needsActiveWorkflowSave: () => false,
       saveActiveWorkflow: async () => {},
       translate: (key) => key,
       isEnabled: () => true,
@@ -229,7 +229,7 @@ assert.ok(REASSERT_BURST_LIMIT > 1, "one write per burst would lose a legitimate
       document: doc,
       getMenuElement: () => bar.menuElement,
       hasActiveWorkflow: () => true,
-      isActiveWorkflowModified: () => false,
+      needsActiveWorkflowSave: () => false,
       saveActiveWorkflow: async () => {},
       translate: (key) => key,
       isEnabled: () => false,
@@ -244,45 +244,40 @@ assert.ok(REASSERT_BURST_LIMIT > 1, "one write per burst would lose a legitimate
 }
 
 // --- Button state -------------------------------------------------------------
-// Saving is delegated to ComfyUI's own command, so availability mirrors the WK
-// panel's File menu: no active workflow means nothing to save.
+// WorkspaceKit now owns one semantic needsSave signal. A clean persisted
+// workflow keeps the control visible but disabled; only an actual save need
+// enables the primary action.
 assert.deepEqual(
-  planTopbarSaveButtonState({ hasActiveWorkflow: false, isModified: false }),
+  planTopbarSaveButtonState({ hasActiveWorkflow: false, needsSave: false }),
   { disabled: true, dirty: false, busy: false },
 );
 assert.deepEqual(
-  planTopbarSaveButtonState({ hasActiveWorkflow: true, isModified: false }),
-  { disabled: false, dirty: false, busy: false },
+  planTopbarSaveButtonState({ hasActiveWorkflow: true, needsSave: false }),
+  { disabled: true, dirty: false, busy: false },
 );
 assert.deepEqual(
-  planTopbarSaveButtonState({ hasActiveWorkflow: true, isModified: true }),
+  planTopbarSaveButtonState({ hasActiveWorkflow: true, needsSave: true }),
   { disabled: false, dirty: true, busy: false },
 );
-// A dirty flag without an active workflow must never light the dot: the store
-// reports isModified per workflow, and a closed tab can still carry it.
-assert.equal(planTopbarSaveButtonState({ hasActiveWorkflow: false, isModified: true }).dirty, false);
-// Observed live: a brand-new workflow reports isModified false while ComfyUI
-// still marks its title with `*`, so the dot stayed dark on the one workflow
-// that had never been saved at all. isTemporary is the second dirty signal.
 assert.equal(
-  planTopbarSaveButtonState({ hasActiveWorkflow: true, isModified: false, isTemporary: true }).dirty,
+  planTopbarSaveButtonState({ hasActiveWorkflow: false, needsSave: true }).dirty,
+  false,
+  "a closed workflow cannot light the active Save action",
+);
+assert.equal(
+  planTopbarSaveButtonState({ hasActiveWorkflow: false, needsSave: true }).disabled,
   true,
-  "a never-saved workflow must show the dot",
+  "a save need without an active workflow is still not actionable",
 );
 assert.equal(
-  planTopbarSaveButtonState({ hasActiveWorkflow: false, isTemporary: true }).dirty,
+  planTopbarSaveButtonState({ hasActiveWorkflow: true, needsSave: true, saving: true }).dirty,
   false,
-  "no active workflow still means no dot",
+  "mid-save the primary treatment is suppressed",
 );
-assert.equal(
-  planTopbarSaveButtonState({ hasActiveWorkflow: true, isTemporary: true, saving: true }).dirty,
-  false,
-  "mid-save the dot stays suppressed whichever signal raised it",
-);
-// Mid-save the button is disabled and the dot is suppressed, so a double click
-// cannot queue a second save against the same graph.
+// Mid-save the button is disabled and the primary treatment is suppressed, so
+// a double click cannot queue a second save against the same graph.
 assert.deepEqual(
-  planTopbarSaveButtonState({ hasActiveWorkflow: true, isModified: true, saving: true }),
+  planTopbarSaveButtonState({ hasActiveWorkflow: true, needsSave: true, saving: true }),
   { disabled: true, dirty: false, busy: true },
 );
 assert.deepEqual(planTopbarSaveButtonState(), { disabled: true, dirty: false, busy: false });
@@ -358,9 +353,20 @@ assert.ok(
   "a successful persisted save must clear the shared dirty baseline and schedule the Open list to re-render",
 );
 
-// The dot needs both signals: graphChanged covers edits, and the store
-// subscription covers switching tabs, which does not emit graphChanged.
-assert.ok(/addEventListener\?\.\("graphChanged", \(\) => button\.refresh\(\)\)/.test(source));
+// Topbar and Open rows must consume one semantic save signal. Temporary state
+// remains a save need, while persisted dirty state comes from WorkspaceKit's
+// queue-aware baseline instead of ComfyUI's raw isModified flag.
+assert.match(
+  source,
+  /needsActiveWorkflowSave: \(\) => \{[\s\S]*?isOfficialWorkflowTemporary\(workflow\)[\s\S]*?workflowOpenState\.isOfficialWorkflowDirty\(workflow\)/,
+);
+assert.doesNotMatch(source, /isActiveWorkflowModified:/);
+// graphChanged resolves WorkspaceKit's semantic dirty state on a zero-delay
+// turn, so the button must refresh after that same turn rather than reading the
+// old dirty set synchronously. Store subscription still covers tab switches.
+assert.ok(
+  /addEventListener\?\.\("graphChanged", \(\) => \{[\s\S]*?window\.setTimeout\(\(\) => button\.refresh\(\), 0\)[\s\S]*?\}\)/.test(source),
+);
 assert.ok(/subscribeOfficialWorkflowStore\(app, \(\) => button\.refresh\(\)\)/.test(source));
 
 // The switch has to act immediately; a preference that only applies after a

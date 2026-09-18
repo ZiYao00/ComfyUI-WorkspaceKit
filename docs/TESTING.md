@@ -1,5 +1,13 @@
 # WorkspaceKit Testing Log
 
+## 2026-09-18 - Queue-aware semantic Save state
+
+- User-facing defect: pressing Run on an otherwise clean workflow could make both Workflows > Open and the floating Save control report an unsaved workflow. Current ComfyUI intentionally captures dynamic `beforeQueued` / `afterQueued` widget values (for example random/increment seed) on `promptQueued`, so official `workflow.isModified` can become true without a user-authored edit.
+- Fix boundary: WorkspaceKit now keeps one semantic Save baseline for both UI surfaces. `workflows/dirty-snapshot.js` mirrors the persisted graph scope of current `ChangeTracker.graphEqual()`; `open-state.js` correlates `promptQueueing` / `promptQueued` by `requestId`, absorbs only execution-only changes from a clean-start queue transaction, and never rewrites ComfyUI ChangeTracker, undo/redo, draft state, or official `isModified`.
+- Race handling: ComfyUI's ChangeTracker registers its `promptQueued` listener before extensions and may synchronously emit a nested `graphChanged`. Because `ComfyApi` is an `EventTarget`, a capture option does not pre-empt an earlier same-target listener. WorkspaceKit records such graph changes provisionally and confirms them in the next microtask; the matching synchronous `promptQueued` completion may consume that marker, while an independent user/third-party graph edit survives and taints the transaction.
+- Focused isolated validation ran under Node **22.16.0**: canonical snapshot equality ignored node order / `extra.ds` / unrelated top-level metadata while preserving widget and link changes; Run-only seed mutation remained clean; manual Prompt -> Run remained dirty; an edit while queueing failed closed; rapid execution-only queue requests remained clean; missing `requestId` fell back to dirty; and the top-bar state planner kept clean persisted workflows disabled while enabling semantic-dirty workflows.
+- Environment limitation: the CodexPro Bash bridge for the local Windows workspace does not resolve `node`, so the repository-wide `npm test` suite and real ComfyUI page acceptance were not executed from that bridge in this batch. The focused logic was validated in the available isolated Node runtime; a live Run-button acceptance on the user's ComfyUI instance remains the final runtime check.
+
 ## 2026-08-30 - T-058-R1 top-bar Save / Open-state synchronization
 
 - User-facing defect: after the top floating Save button completed a real `Comfy.SaveWorkflow`, the active entry in Workflows > Open could still retain its unsaved dot and its own Save action. The Open renderer was behaving as designed (`isDirty && isActive`); WorkspaceKit's path-keyed official dirty baseline simply had not been reconciled by the top-bar save path.

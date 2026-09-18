@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- Running an otherwise clean workflow no longer makes WorkspaceKit show a false Save requirement solely because ComfyUI's queue-time widgets (for example random/increment seed) changed serialized workflow state. The Workflows > Open Save action and floating top-bar Save now share one queue-aware semantic dirty baseline; clean persisted workflows keep the top-bar Save visible but disabled, while real manual edits and never-saved workflows remain actionable.
 - Synchronized Workflows > Open after the floating top-bar Save command completes, so the active workflow's unsaved marker and duplicate Save action disappear immediately after a successful save instead of remaining clickable with stale WorkspaceKit dirty state.
 
 ## 0.2.6 - 2026-08-08

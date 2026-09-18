@@ -54,6 +54,10 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
   if (state.selectedPath === node.path) {
     row.classList.add("is-selected");
   }
+  if (state.pendingWorkflowPath === node.path) {
+    row.classList.add("is-pending");
+    row.dataset.workspace2WorkflowPending = "true";
+  }
   // Two distinct marks that can coexist on one row: `is-selected` is where the
   // user last clicked, `is-active-*` is where the workflow being edited lives.
   const trailRole = activeTrailRole?.(activeTrail, node.path, node.type);
@@ -136,6 +140,12 @@ export function renderWorkflowBrowseNode(deps, el, list, node, depth) {
     const name = document.createElement("span");
     name.textContent = getDisplayName(node);
     nameCell.append(name);
+    if (state.pendingWorkflowPath === node.path) {
+      const pending = document.createElement("span");
+      pending.className = "workspace2-workflow-pending";
+      pending.textContent = t("workflows.switching");
+      nameCell.append(pending);
+    }
     if (node.type === "file" && node.size_bytes) {
       const size = document.createElement("span");
       size.className = "workspace2-meta";

@@ -8,7 +8,9 @@ import {
   waitForWorkspaceKitReady,
 } from "./lib/wk-runtime.mjs";
 
-const BASE_URL = "http://127.0.0.1:8190/";
+// Keep the isolated test runtime as the default while allowing a read-only
+// acceptance run against a specifically selected local ComfyUI instance.
+const BASE_URL = process.env.COMFY_BASE_URL || "http://127.0.0.1:8190/";
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });

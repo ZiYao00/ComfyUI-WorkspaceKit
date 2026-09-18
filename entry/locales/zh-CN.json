@@ -181,6 +181,7 @@
   "workflows.close": "关闭工作流",
   "workflows.saveCurrent": "保存当前工作流",
   "workflows.unsavedChanges": "未保存的更改",
+  "workflows.switching": "正在切换…",
   "workflows.fileMenu": "文件",
   "workflows.fileMenuTitle": "当前工作流文件操作",
   "workflows.fileNewWorkflow": "新建工作流",

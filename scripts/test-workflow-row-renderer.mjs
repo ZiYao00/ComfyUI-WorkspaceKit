@@ -28,7 +28,7 @@ const iconButton = (icon, title, action) => {
 const node = { type: "file", path: "folder/example.json", name: "example.json", size_bytes: 128 };
 const list = new Element("div");
 renderWorkflowBrowseNode({
-  state: { query: "", expanded: new Set(), selectedPath: "", editingPath: "", editingSurface: "", customOrderEnabled: false },
+  state: { query: "", expanded: new Set(), selectedPath: "", pendingWorkflowPath: node.path, editingPath: "", editingSurface: "", customOrderEnabled: false },
   t: (key) => key,
   matchesQuery: () => true,
   visibleChildren: () => [],
@@ -59,6 +59,8 @@ renderWorkflowBrowseNode({
 }, "panel", list, node, 0);
 
 const actions = list.children[0].children[4];
+assert.equal(list.children[0].dataset.workspace2WorkflowPending, "true");
+assert.equal(list.children[0].children[3].children[1].textContent, "workflows.switching");
 assert.deepEqual(actions.children.map((button) => button.icon), [
   "workflows.row.favorite",
   "workflows.row.copy",

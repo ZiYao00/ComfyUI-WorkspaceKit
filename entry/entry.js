@@ -402,6 +402,9 @@ const state = {
   officialWorkflowSnapshots: new Map(),
   officialWorkflowDirtyPaths: new Set(),
   workflowLoadInProgress: false,
+  // This is only the user's latest intent. It must stay separate from the
+  // active canvas workflow and selectedPath until the graph transaction wins.
+  pendingWorkflowPath: "",
   workflowDirtyCheckTimer: null,
   officialWorkflowRenderTimer: null,
 };
@@ -2443,7 +2446,7 @@ function officialWorkflowPath(path) {
   return `workflows/${String(path || "").replace(/^\/+/, "")}`;
 }
 
-async function openWorkflowFromOfficialStore(path) {
+async function openWorkflowFromOfficialStore(path, requestId) {
   if (!state.isOfficialRoot) {
     return { opened: false, initializeCleanState: false };
   }
@@ -2455,8 +2458,13 @@ async function openWorkflowFromOfficialStore(path) {
 
   const storePath = officialWorkflowPath(path);
   let workflow = getOfficialWorkflowByPath(app, storePath);
+  const indexHit = Boolean(workflow);
   if (!workflow && typeof workflowStore.syncWorkflows === "function") {
-    await workflowStore.syncWorkflows();
+    await measurePromise(
+      "workflows.open.sync-workflows",
+      () => workflowStore.syncWorkflows(),
+      { path, requestId },
+    );
     workflow = getOfficialWorkflowByPath(app, storePath);
   }
   if (!workflow) {
@@ -2475,7 +2483,11 @@ async function openWorkflowFromOfficialStore(path) {
   }
 
   const loadFromRemote = !workflow.isLoaded;
-  const loadedWorkflow = await loadOfficialWorkflow(workflow);
+  const loadedWorkflow = await measurePromise(
+    "workflows.open.workflow-load",
+    () => loadOfficialWorkflow(workflow),
+    { path, requestId, indexHit, loadFromRemote },
+  );
   if (!loadedWorkflow) {
     return { opened: false, initializeCleanState: false };
   }
@@ -2484,13 +2496,17 @@ async function openWorkflowFromOfficialStore(path) {
   if (!workflowData) {
     return { opened: false, initializeCleanState: false };
   }
-  await app.loadGraphData(workflowData, true, true, workflow, {
-    checkForRerouteMigration: false,
-    deferWarnings: true,
-    // Preserve the official service's cached-workflow path. It aborts scans
-    // from the outgoing graph instead of re-running them during a tab switch.
-    skipAssetScans: !loadFromRemote,
-  });
+  await measurePromise(
+    "workflows.open.graph-load",
+    () => app.loadGraphData(workflowData, true, true, workflow, {
+      checkForRerouteMigration: false,
+      deferWarnings: true,
+      // Preserve the official service's cached-workflow path. It aborts scans
+      // from the outgoing graph instead of re-running them during a tab switch.
+      skipAssetScans: !loadFromRemote,
+    }),
+    { path, requestId, source: "official", indexHit, loadFromRemote },
+  );
   return { opened: true, initializeCleanState: !wasAlreadyOpen };
 }
 
@@ -2505,29 +2521,48 @@ let workflowOpenQueue = Promise.resolve();
 
 async function openWorkflow(path) {
   const requestId = ++workflowOpenRequestId;
+  state.pendingWorkflowPath = path;
+  const finishQueueWait = startPerformanceSpan("workflows.open.queue-wait", { path, requestId });
+  const finishTotal = startPerformanceSpan("workflows.open.total", { path, requestId });
   const open = async () => {
     // A newer click arrived while this request was waiting behind a graph
     // load. It must not briefly replace the canvas before the latest target.
-    if (requestId !== workflowOpenRequestId) return false;
+    if (requestId !== workflowOpenRequestId) {
+      finishQueueWait({ outcome: "superseded-before-start" }, "superseded");
+      finishTotal({ outcome: "superseded-before-start" }, "superseded");
+      return false;
+    }
 
+    finishQueueWait({ outcome: "started" });
     workflowOpenState.captureOfficialDirtyState();
     state.workflowLoadInProgress = true;
     clearCurrentWorkflowDirtyState();
     let officialOpen = { opened: false, initializeCleanState: false };
     try {
       try {
-        officialOpen = await openWorkflowFromOfficialStore(path);
+        officialOpen = await openWorkflowFromOfficialStore(path, requestId);
       } catch (error) {
         console.debug("[Workspace2] Official workflow open failed; using fallback", error);
       }
 
       if (!officialOpen.opened) {
-        const data = await fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`);
-        await app.loadGraphData(data.workflow);
+        const data = await measurePromise(
+          "workflows.open.fallback-read",
+          () => fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`),
+          { path, requestId },
+        );
+        await measurePromise(
+          "workflows.open.graph-load",
+          () => app.loadGraphData(data.workflow),
+          { path, requestId, source: "fallback" },
+        );
       }
       // The load that was already in progress may have been superseded. Leave
       // its canvas result alone; the queued latest request starts next.
-      if (requestId !== workflowOpenRequestId) return false;
+      if (requestId !== workflowOpenRequestId) {
+        finishTotal({ outcome: "superseded-in-flight" }, "superseded");
+        return false;
+      }
       state.selectedPath = path;
       // Only a first official open establishes a clean baseline. Calling this
       // after every tab activation used to erase the dirty marker for 99 in
@@ -2537,13 +2572,21 @@ async function openWorkflow(path) {
         setCurrentWorkflowCleanState();
       }
       recordRecentWorkflow(path);
+      finishTotal({ outcome: "opened", source: officialOpen.opened ? "official" : "fallback" });
       return true;
     } catch (error) {
       // A superseded request must not leave an obsolete error in the footer.
-      if (requestId !== workflowOpenRequestId) return false;
+      if (requestId !== workflowOpenRequestId) {
+        finishTotal({ outcome: "superseded-in-flight" }, "superseded");
+        return false;
+      }
+      finishTotal({ error: error?.message || String(error) }, "error");
       throw error;
     } finally {
       state.workflowLoadInProgress = false;
+      if (requestId === workflowOpenRequestId) {
+        state.pendingWorkflowPath = "";
+      }
     }
   };
 
@@ -6851,7 +6894,11 @@ function renderNode(el, list, node, depth, activeTrail = null) {
     onCloseContextMenu: closeContextMenu,
     onToggleFolder: toggleWorkflowFolder,
     onOpenWorkflow: async (target, path) => {
-      await openWorkflow(path);
+      const opening = openWorkflow(path);
+      // A new render acknowledges the latest click immediately, but the
+      // pending marker never claims that the singleton canvas has switched.
+      renderPanel(target);
+      await opening;
       renderPanel(target);
     },
     onOpenContextMenu: openContextMenu,
@@ -6926,6 +6973,7 @@ function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
       isDirty: isOfficialWorkflow
         ? workflowOpenState.isOfficialWorkflowDirty(entry.officialWorkflow)
         : isActive && state.workflowDirty,
+      isPending: entry.path === state.pendingWorkflowPath,
       isRenaming: state.editingPath === entry.path && state.editingSurface === "open",
       displayName: workflowDisplayName(entry.item) || entry.name || entry.path,
     };
@@ -6937,7 +6985,9 @@ function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
     createRenameInput: (entry) => createWorkflowRenameInput(el, entry.item, "open"),
     onOpen: async (entry) => {
       state.selectedPath = entry.path;
-      await openWorkflow(entry.path);
+      const opening = openWorkflow(entry.path);
+      renderPanel(el);
+      await opening;
       renderPanel(el);
     },
     onSave: (entry) => saveCurrentWorkflowToPath(el, entry.path),

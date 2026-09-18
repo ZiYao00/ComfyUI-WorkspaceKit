@@ -43,6 +43,7 @@ export function createWorkflowOpenListRenderer({ document, translate, iconButton
       const row = document.createElement("div");
       row.className = "workspace2-current-workflow";
       if (entry.isActive) row.classList.add("is-selected");
+      if (entry.isPending) row.classList.add("is-pending");
       const info = document.createElement(entry.isRenaming ? "div" : "button");
       if (!entry.isRenaming) info.type = "button";
       info.className = "workspace2-current-workflow-info";
@@ -61,6 +62,12 @@ export function createWorkflowOpenListRenderer({ document, translate, iconButton
         name.className = "workspace2-current-workflow-name";
         name.textContent = entry.displayName;
         info.append(name);
+        if (entry.isPending) {
+          const pending = document.createElement("span");
+          pending.className = "workspace2-workflow-pending";
+          pending.textContent = translate("workflows.switching");
+          info.append(pending);
+        }
         info.addEventListener("click", (event) => runAction(event, () => onOpen(entry), onError));
       }
 

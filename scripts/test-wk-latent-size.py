@@ -17,6 +17,7 @@ SPEC.loader.exec_module(module)
 
 
 assert module.calculate_dimensions(1.0, "1:1", 64) == (1024, 1024)
+assert module.MEGAPIXEL_OPTIONS == tuple(f"{value / 10:.1f}" for value in range(1, 26))
 width, height = module.calculate_dimensions(1.0, "16:9", 64)
 assert (width, height) == (1344, 768)
 assert width % 64 == 0 and height % 64 == 0

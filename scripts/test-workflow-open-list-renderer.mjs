@@ -14,7 +14,7 @@ const { renderOpenWorkflowList } = createWorkflowOpenListRenderer({
   translate: (key) => key,
   iconButton: (icon, title, action) => { const button = new Element(); button.icon=icon; button.title=title; button.addEventListener("click", action); return button; },
 });
-const official = { path:"one.json", item:{path:"one.json"}, displayName:"One", isOfficialWorkflow:true, isActive:true, isDirty:true, isRenaming:false };
+const official = { path:"one.json", item:{path:"one.json"}, displayName:"One", isOfficialWorkflow:true, isActive:true, isPending:true, isDirty:true, isRenaming:false };
 const recent = { path:"two.json", item:{path:"two.json"}, displayName:"Two", isOfficialWorkflow:false, isActive:false, isDirty:true, isRenaming:false };
 const section = renderOpenWorkflowList({
   entries:[official,recent], capacity: 9, scrollTop: 42, createRenameInput: () => ({input:true}),
@@ -35,7 +35,9 @@ assert.equal(section.scrollTop, 42);
 assert.equal(section.children.length, 3);
 const officialRow = section.children[1];
 assert.equal(officialRow.classList.values.has("is-selected"), true);
+assert.equal(officialRow.classList.values.has("is-pending"), true);
 assert.equal(officialRow.children[0].children[0].className, "workspace2-current-workflow-dirty-dot");
+assert.equal(officialRow.children[0].children[2].textContent, "workflows.switching");
 assert.equal(officialRow.children[1].children.length, 3);
 const event = { preventDefault(){}, stopPropagation(){} };
 await officialRow.children[0].listeners.get("click")(event);

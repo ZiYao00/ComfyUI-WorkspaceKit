@@ -1440,6 +1440,19 @@ export function styles() {
       background: var(--workspace2-accent-mid);
       border-color: var(--workspace2-accent-border);
     }
+    /* Intent feedback is deliberately separate from the active-workflow tint:
+       the canvas still shows the previous graph until the queued load settles. */
+    .workspace2-row.is-pending,
+    .workspace2-current-workflow.is-pending {
+      box-shadow: inset 2px 0 0 var(--workspace2-accent);
+    }
+    .workspace2-workflow-pending {
+      margin-left: 6px;
+      color: var(--workspace2-muted);
+      font-size: var(--workspacekit-ui-font-meta);
+      font-weight: 400;
+      white-space: nowrap;
+    }
     .workspace2-current-workflow-label {
       display: none;
       color: var(--workspace2-muted);

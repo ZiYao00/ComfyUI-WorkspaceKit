@@ -35,7 +35,7 @@ ASPECT_RATIOS = (
     "21:9",
     "32:9",
 )
-MEGAPIXEL_OPTIONS = tuple(f"{value:.1f}" for value in (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5))
+MEGAPIXEL_OPTIONS = tuple(f"{value / 10:.1f}" for value in range(1, 26))
 DIVISIBILITY_OPTIONS = ("8", "16", "32", "64")
 MAX_DIMENSION = 16_384
 

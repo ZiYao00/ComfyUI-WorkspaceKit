@@ -142,7 +142,7 @@ import {
   getOfficialWorkflowStore,
   getOpenOfficialWorkflows,
   isOfficialWorkflowTemporary,
-  loadOfficialWorkflow,
+  openOfficialWorkflowThroughService,
   saveOfficialWorkflow,
   subscribeOfficialWorkflowStore,
 } from "./workflows/official-adapter.js";
@@ -2447,12 +2447,12 @@ function officialWorkflowPath(path) {
 
 async function openWorkflowFromOfficialStore(path, requestId) {
   if (!state.isOfficialRoot) {
-    return { opened: false, initializeCleanState: false };
+    return { opened: false, initializeCleanState: false, reason: "non-official-root" };
   }
 
   const workflowStore = getOfficialWorkflowStore(app);
   if (!workflowStore) {
-    return { opened: false, initializeCleanState: false };
+    return { opened: false, initializeCleanState: false, reason: "official-store-unavailable" };
   }
 
   const storePath = officialWorkflowPath(path);
@@ -2467,132 +2467,117 @@ async function openWorkflowFromOfficialStore(path, requestId) {
     workflow = getOfficialWorkflowByPath(app, storePath);
   }
   if (!workflow) {
-    return { opened: false, initializeCleanState: false };
-  }
-  // Capture this before app.loadGraphData(): the official load hook adds the
-  // target to openWorkflows. A workflow that was already open owns a baseline
-  // (and possibly a dirty marker) from its earlier activation, so revisiting
-  // it must not reset that state to clean.
-  const wasAlreadyOpen = workflowStore.openWorkflows.includes(workflow);
-  // Match workflowService.openWorkflow(): opening the active workflow is a
-  // no-op. Reloading it through the extension path can deactivate and draft
-  // the same ChangeTracker twice.
-  if (typeof workflowStore.isActive === "function" && workflowStore.isActive(workflow)) {
-    return { opened: true, initializeCleanState: false };
+    return { opened: false, initializeCleanState: false, reason: "workflow-not-found" };
   }
 
-  const loadFromRemote = !workflow.isLoaded;
-  const loadedWorkflow = await measurePromise(
-    "workflows.open.workflow-load",
-    () => loadOfficialWorkflow(workflow),
-    { path, requestId, indexHit, loadFromRemote },
+  return measurePromise(
+    "workflows.open.official-command",
+    () => openOfficialWorkflowThroughService(app, workflow),
+    { path, requestId, indexHit },
   );
-  if (!loadedWorkflow) {
-    return { opened: false, initializeCleanState: false };
-  }
-
-  const workflowData = loadedWorkflow.activeState || (loadedWorkflow.content ? JSON.parse(loadedWorkflow.content) : null);
-  if (!workflowData) {
-    return { opened: false, initializeCleanState: false };
-  }
-  await measurePromise(
-    "workflows.open.graph-load",
-    () => app.loadGraphData(workflowData, true, true, workflow, {
-      checkForRerouteMigration: false,
-      deferWarnings: true,
-      // Preserve the official service's cached-workflow path. It aborts scans
-      // from the outgoing graph instead of re-running them during a tab switch.
-      skipAssetScans: !loadFromRemote,
-    }),
-    { path, requestId, source: "official", indexHit, loadFromRemote },
-  );
-  return { opened: true, initializeCleanState: !wasAlreadyOpen };
 }
 
-// `app.loadGraphData()` mutates the singleton canvas.  Two workflow-row
-// clicks can therefore not load concurrently: a slower earlier load can
-// otherwise complete after a newer click and leave the canvas on the wrong
-// workflow. Queue the transactions, but discard requests that have not begun
-// once a newer target has been selected. The in-flight load is allowed to
-// settle because ComfyUI exposes no safe cancellation point for graph loading.
-let workflowOpenRequestId = 0;
-let workflowOpenQueue = Promise.resolve();
+// ComfyUI owns workflow serialization through workflowService.openWorkflow().
+// WorkspaceKit keeps only the latest UI intent so pending/highlight feedback
+// cannot be cleared by an older completion. It does not queue graph loads.
+let workflowOpenUiRequestId = 0;
+
+function officialWorkflowBaselineData(path) {
+  const workflow = getOfficialWorkflowByPath(app, officialWorkflowPath(path));
+  if (!workflow) return null;
+  if (workflow.activeState) return workflow.activeState;
+  if (!workflow.content) return null;
+  try {
+    return JSON.parse(workflow.content);
+  } catch {
+    return null;
+  }
+}
 
 async function openWorkflow(path) {
-  const requestId = ++workflowOpenRequestId;
+  const requestId = ++workflowOpenUiRequestId;
   state.pendingWorkflowPath = path;
-  const finishQueueWait = startPerformanceSpan("workflows.open.queue-wait", { path, requestId });
   const finishTotal = startPerformanceSpan("workflows.open.total", { path, requestId });
-  const open = async () => {
-    // A newer click arrived while this request was waiting behind a graph
-    // load. It must not briefly replace the canvas before the latest target.
-    if (requestId !== workflowOpenRequestId) {
-      finishQueueWait({ outcome: "superseded-before-start" }, "superseded");
-      finishTotal({ outcome: "superseded-before-start" }, "superseded");
+  workflowOpenState.captureOfficialDirtyState();
+  clearCurrentWorkflowDirtyState();
+
+  let officialOpen = { opened: false, initializeCleanState: false, reason: "" };
+  let initializedOfficialBaseline = false;
+  let localLoadInProgress = false;
+  try {
+    if (state.isOfficialRoot) {
+      officialOpen = await openWorkflowFromOfficialStore(path, requestId);
+      if (!officialOpen.opened) {
+        throw new Error(`Official workflow navigation failed (${officialOpen.reason || "unknown"})`);
+      }
+
+      // A first official open needs a WorkspaceKit display baseline even when a
+      // later click has already superseded its UI intent. Use the target's own
+      // official activeState instead of whichever graph happens to be visible
+      // when the official queue advances to the next request.
+      if (officialOpen.initializeCleanState) {
+        const baseline = officialWorkflowBaselineData(path);
+        if (baseline) {
+          setCurrentWorkflowCleanState(baseline, path);
+          initializedOfficialBaseline = true;
+        }
+      }
+    } else {
+      // Non-official roots remain WorkspaceKit file-browser territory. This is
+      // intentionally separate from the official ComfyUI workflow lifecycle.
+      localLoadInProgress = true;
+      state.workflowLoadInProgress = true;
+      const data = await measurePromise(
+        "workflows.open.fallback-read",
+        () => fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`),
+        { path, requestId },
+      );
+      await measurePromise(
+        "workflows.open.graph-load",
+        () => app.loadGraphData(data.workflow),
+        { path, requestId, source: "local-root" },
+      );
+    }
+
+    // Official loads are not cancelled here. ComfyUI owns their queue and will
+    // complete them in service order; this guard suppresses only obsolete WK UI
+    // bookkeeping from earlier clicks.
+    if (requestId !== workflowOpenUiRequestId) {
+      finishTotal({
+        outcome: "superseded-ui",
+        source: state.isOfficialRoot ? "official-command" : "local-root",
+      }, "superseded");
       return false;
     }
 
-    finishQueueWait({ outcome: "started" });
-    workflowOpenState.captureOfficialDirtyState();
-    state.workflowLoadInProgress = true;
-    clearCurrentWorkflowDirtyState();
-    let officialOpen = { opened: false, initializeCleanState: false };
-    try {
-      try {
-        officialOpen = await openWorkflowFromOfficialStore(path, requestId);
-      } catch (error) {
-        console.debug("[Workspace2] Official workflow open failed; using fallback", error);
-      }
-
-      if (!officialOpen.opened) {
-        const data = await measurePromise(
-          "workflows.open.fallback-read",
-          () => fetchJson(`/workspace2/workflow/read?path=${encodeURIComponent(path)}`),
-          { path, requestId },
-        );
-        await measurePromise(
-          "workflows.open.graph-load",
-          () => app.loadGraphData(data.workflow),
-          { path, requestId, source: "fallback" },
-        );
-      }
-      // The load that was already in progress may have been superseded. Leave
-      // its canvas result alone; the queued latest request starts next.
-      if (requestId !== workflowOpenRequestId) {
-        finishTotal({ outcome: "superseded-in-flight" }, "superseded");
-        return false;
-      }
-      state.selectedPath = path;
-      // Only a first official open establishes a clean baseline. Calling this
-      // after every tab activation used to erase the dirty marker for 99 in
-      // `99 (edited) -> 100 (edited) -> 99`; keep the stored path state when
-      // returning to an already open official workflow.
-      if (!state.isOfficialRoot || !officialOpen.opened || officialOpen.initializeCleanState) {
-        setCurrentWorkflowCleanState();
-      }
-      recordRecentWorkflow(path);
-      finishTotal({ outcome: "opened", source: officialOpen.opened ? "official" : "fallback" });
-      return true;
-    } catch (error) {
-      // A superseded request must not leave an obsolete error in the footer.
-      if (requestId !== workflowOpenRequestId) {
-        finishTotal({ outcome: "superseded-in-flight" }, "superseded");
-        return false;
-      }
-      finishTotal({ error: error?.message || String(error) }, "error");
-      throw error;
-    } finally {
-      state.workflowLoadInProgress = false;
-      if (requestId === workflowOpenRequestId) {
-        state.pendingWorkflowPath = "";
-      }
+    state.selectedPath = path;
+    if (!state.isOfficialRoot) {
+      setCurrentWorkflowCleanState();
+    } else if (officialOpen.initializeCleanState && !initializedOfficialBaseline) {
+      setCurrentWorkflowCleanState(undefined, path);
     }
-  };
-
-  const queued = workflowOpenQueue.catch(() => {}).then(open);
-  // Keep subsequent workflow clicks alive after an individual load failure.
-  workflowOpenQueue = queued.catch(() => {});
-  return queued;
+    recordRecentWorkflow(path);
+    finishTotal({
+      outcome: "opened",
+      source: state.isOfficialRoot ? "official-command" : "local-root",
+    });
+    return true;
+  } catch (error) {
+    // A superseded request must not leave an obsolete error in the footer.
+    if (requestId !== workflowOpenUiRequestId) {
+      finishTotal({ outcome: "superseded-ui" }, "superseded");
+      return false;
+    }
+    finishTotal({ error: error?.message || String(error) }, "error");
+    throw error;
+  } finally {
+    if (localLoadInProgress) {
+      state.workflowLoadInProgress = false;
+    }
+    if (requestId === workflowOpenUiRequestId) {
+      state.pendingWorkflowPath = "";
+    }
+  }
 }
 
 async function openWorkflowFileFromPicker(el) {
@@ -6989,9 +6974,33 @@ function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
       await opening;
       renderPanel(el);
     },
-    onSave: (entry) => saveCurrentWorkflowToPath(el, entry.path),
+    onSave: (entry) => (
+      entry.isOfficialWorkflow
+        ? saveWorkspaceTopbarWorkflow()
+        : saveCurrentWorkflowToPath(el, entry.path)
+    ),
     onStartRename: (entry) => beginWorkflowRename(el, entry.path, "open"),
     onCloseOfficial: async (entry) => {
+      if (entry.isActive) {
+        // The active tab must close through ComfyUI's workflow service so its
+        // pending-load drain, replacement selection, ChangeTracker and recovery
+        // all stay official. The command owns its dirty confirmation.
+        const closed = await closeOfficialWorkflow(app, entry.officialWorkflow);
+        if (closed) {
+          workflowOpenState.removeOfficialWorkflowPathState(entry.path);
+          renderPanel(el);
+        }
+        return;
+      }
+
+      // Inactive tabs need no canvas transition. Avoid detaching one while a
+      // WorkspaceKit-triggered official navigation is still draining.
+      if (state.pendingWorkflowPath) {
+        state.status = t("workflows.switching");
+        renderPanel(el);
+        return;
+      }
+
       if (entry.isDirty) {
         const choice = await workspace2ConfirmDirtyWorkflowClose(entry.displayName);
         if (!choice) return;

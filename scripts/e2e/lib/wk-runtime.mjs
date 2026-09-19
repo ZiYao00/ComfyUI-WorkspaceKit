@@ -51,13 +51,14 @@ export function attachErrorCollector(page) {
 }
 
 /**
- * Waits for ComfyUI to fully mount: canvas attached, window.app.extensionManager
- * ready, and the WorkspaceKit extension registered.
+ * Waits for ComfyUI to fully mount: canvas attached, the public app shim ready,
+ * and the WorkspaceKit extension registered. Newer frontends no longer
+ * guarantee a global window.app, so accept window.comfyAPI.app.app as well.
  */
 export async function waitForWorkspaceKitReady(page, { timeout = 40_000, settleMs = 3_000 } = {}) {
   await page.waitForSelector('canvas', { state: 'attached', timeout: 20_000 });
   await page.waitForFunction(() => {
-    const a = window.app;
+    const a = window.app || window.comfyAPI?.app?.app;
     return a && a.extensionManager && Array.isArray(a.extensions)
       && a.extensions.some(e => e && e.name === 'comfyui.workspace2');
   }, null, { timeout, polling: 500 });

@@ -17,6 +17,37 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 900 
 const page = await context.newPage();
 const errors = attachErrorCollector(page);
 
+async function workflowUiSnapshot() {
+  return page.evaluate(() => {
+    const app = window.app || window.comfyAPI?.app?.app;
+    const pathFromInfo = (row) => row?.querySelector?.(".workspace2-current-workflow-info")?.getAttribute("title") || "";
+    return {
+      activePath: app?.extensionManager?.workflow?.activeWorkflow?.path || "",
+      pendingOpenPaths: [...document.querySelectorAll(".workspace2-current-workflow.is-pending")].map(pathFromInfo),
+      activeOpenPaths: [...document.querySelectorAll(".workspace2-current-workflow.is-selected")].map(pathFromInfo),
+      activeBrowsePaths: [...document.querySelectorAll(".workspace2-row.is-active-workflow")]
+        .map((row) => row.getAttribute("data-workspace2-item-path") || ""),
+      activeBrowseFolders: [...document.querySelectorAll(".workspace2-row.is-active-workflow-path")]
+        .map((row) => row.getAttribute("data-workspace2-item-path") || ""),
+    };
+  });
+}
+
+async function waitForWorkflowUiSettled(timeoutMs = 5_000) {
+  const startedAt = Date.now();
+  let first = null;
+  let last = null;
+  while (Date.now() - startedAt <= timeoutMs) {
+    last = await workflowUiSnapshot();
+    first ??= last;
+    if (last.pendingOpenPaths.length === 0) {
+      return { settled: true, elapsedMs: Date.now() - startedAt, first, last };
+    }
+    await page.waitForTimeout(25);
+  }
+  return { settled: false, elapsedMs: Date.now() - startedAt, first, last };
+}
+
 try {
   await installReadOnlyGuard(page);
   await page.goto(BASE_URL, { waitUntil: "load", timeout: 30_000 });
@@ -102,11 +133,49 @@ try {
     errors.all().filter((message) => /Cannot read properties of undefined \(reading ['"]path['"]\)/i.test(message)),
     [],
   );
-  assert.equal(
-    await page.locator(".workspace2-current-workflow.is-pending").count(),
-    0,
-    "pending UI must clear after the official queue drains",
+
+  const uiSettle = await waitForWorkflowUiSettled();
+  if (!uiSettle.settled) {
+    console.log(JSON.stringify({ workflowUiSettle: uiSettle }, null, 2));
+  }
+  assert.equal(uiSettle.settled, true, "pending UI must clear after the official queue drains");
+  assert.equal(uiSettle.last?.activePath, lastPath, "settled UI snapshot must match the official active workflow");
+  assert.deepEqual(
+    uiSettle.last?.activeOpenPaths,
+    [relativeTargets.at(-1)],
+    "Open section must highlight only the official active workflow",
   );
+
+  const finalRelativePath = relativeTargets.at(-1);
+  const expectedRootFolder = finalRelativePath?.split("/")[0] || "";
+  if (expectedRootFolder && finalRelativePath?.includes("/")) {
+    assert.ok(
+      uiSettle.last?.activeBrowseFolders.includes(expectedRootFolder),
+      "Browse must highlight the visible ancestor folder of the official active workflow",
+    );
+
+    const fileAlreadyVisible = uiSettle.last?.activeBrowsePaths.includes(finalRelativePath);
+    if (!fileAlreadyVisible) {
+      await page.evaluate((folderPath) => {
+        const folder = [...document.querySelectorAll(".workspace2-row.is-folder")]
+          .find((row) => row.getAttribute("data-workspace2-item-path") === folderPath);
+        if (!folder) throw new Error("Missing active workflow ancestor folder: " + folderPath);
+        folder.click();
+      }, expectedRootFolder);
+      await page.waitForFunction((expectedPath) => (
+        [...document.querySelectorAll(".workspace2-row.is-active-workflow")]
+          .some((row) => row.getAttribute("data-workspace2-item-path") === expectedPath)
+      ), finalRelativePath, { timeout: 5_000 });
+    }
+
+    const activeBrowsePaths = await page.locator(".workspace2-row.is-active-workflow")
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-workspace2-item-path") || ""));
+    assert.deepEqual(
+      activeBrowsePaths,
+      [finalRelativePath],
+      "Browse must highlight the official active workflow file once its folder is visible",
+    );
+  }
 
   console.log(JSON.stringify({
     rounds: ROUNDS,

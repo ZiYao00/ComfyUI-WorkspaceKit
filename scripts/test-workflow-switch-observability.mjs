@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [source, adapter, en, zh] = await Promise.all([
+const [source, adapter, dispatcher, en, zh] = await Promise.all([
   readFile(new URL("../entry/entry.js", import.meta.url), "utf8"),
   readFile(new URL("../entry/workflows/official-adapter.js", import.meta.url), "utf8"),
+  readFile(new URL("../entry/workflows/navigation-dispatcher.js", import.meta.url), "utf8"),
   readFile(new URL("../entry/locales/en-US.json", import.meta.url), "utf8").then(JSON.parse),
   readFile(new URL("../entry/locales/zh-CN.json", import.meta.url), "utf8").then(JSON.parse),
 ]);
@@ -13,9 +14,16 @@ assert.match(source, /let workflowOpenUiRequestId = 0/, "WorkspaceKit may retain
 assert.doesNotMatch(source, /let workflowOpenQueue\s*=/, "official workflow loads must not be serialized by a WorkspaceKit queue");
 assert.doesNotMatch(source, /let workflowOpenRequestId\s*=/, "the retired WorkspaceKit load-queue request id must not return");
 assert.doesNotMatch(source, /workflows\.open\.queue-wait/, "queue-wait timing belonged to the retired WorkspaceKit load queue");
-assert.doesNotMatch(source, /outcome: "superseded-before-start"/, "WorkspaceKit must not discard official load requests before they reach ComfyUI");
+assert.match(source, /createLatestWorkflowNavigationDispatcher/, "rapid UI intents may be coalesced before official command dispatch");
+assert.match(source, /dispatchOfficialWorkflowNavigation\(path, requestId\)/, "official-root opening must use the latest-intent command dispatcher");
+assert.match(dispatcher, /superseded-before-dispatch/, "the command dispatcher must supersede only intents that have not reached ComfyUI");
+assert.doesNotMatch(dispatcher, /app\.loadGraphData/, "the command dispatcher must never load a graph");
+assert.doesNotMatch(dispatcher, /\.load\s*\(/, "the command dispatcher must never load workflow content");
 assert.match(source, /workflows\.open\.official-command/, "official workflow delegation must have its own observable timing span");
 assert.match(source, /openOfficialWorkflowThroughService\(app, workflow\)/, "official-root opening must delegate through the narrow adapter");
+assert.match(source, /renderWorkflowPanelAfterAsync/, "workflow callbacks must guard against stale panel elements after await");
+assert.match(source, /if \(el\?\.isConnected\)/, "connected workflow panels may render directly after async navigation");
+assert.match(source, /workflowOpenState\.scheduleOfficialPanelRender\(\)/, "stale workflow panels must re-render through the current mounted target");
 assert.match(source, /Official workflow navigation failed/, "an unavailable official navigation path must fail closed instead of falling back to a second lifecycle");
 
 const officialOpenStart = source.indexOf("async function openWorkflowFromOfficialStore");

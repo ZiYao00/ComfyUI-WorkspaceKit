@@ -148,6 +148,7 @@ import {
 } from "./workflows/official-adapter.js";
 import { createWorkflowRecentStore } from "./workflows/recents.js";
 import { createWorkflowOpenState } from "./workflows/open-state.js";
+import { createLatestWorkflowNavigationDispatcher } from "./workflows/navigation-dispatcher.js";
 import { createActiveWorkflowTrail, activeTrailRole } from "./workflows/active-trail.js";
 import { createWorkflowSectionRenderer } from "./workflows/sections.js";
 import { attachOpenHistoryResize } from "./workflows/open-history-resize.js";
@@ -2482,6 +2483,16 @@ async function openWorkflowFromOfficialStore(path, requestId) {
 // cannot be cleared by an older completion. It does not queue graph loads.
 let workflowOpenUiRequestId = 0;
 
+// ComfyUI 1.53+ serializes real workflow loads, but every dispatched command is
+// still preserved. Rapid Browse/Open clicks can therefore build a long official
+// backlog and leave WK's latest pending intent visible long after the canvas has
+// already visited that path once. Coalesce only command dispatch: the first
+// official navigation runs, one newest intent may wait behind it, and all graph
+// loading remains exclusively inside ComfyUI's workflow service.
+const dispatchOfficialWorkflowNavigation = createLatestWorkflowNavigationDispatcher(
+  (path, requestId) => openWorkflowFromOfficialStore(path, requestId),
+);
+
 function officialWorkflowBaselineData(path) {
   const workflow = getOfficialWorkflowByPath(app, officialWorkflowPath(path));
   if (!workflow) return null;
@@ -2506,7 +2517,7 @@ async function openWorkflow(path) {
   let localLoadInProgress = false;
   try {
     if (state.isOfficialRoot) {
-      officialOpen = await openWorkflowFromOfficialStore(path, requestId);
+      officialOpen = await dispatchOfficialWorkflowNavigation(path, requestId);
       if (!officialOpen.opened) {
         throw new Error(`Official workflow navigation failed (${officialOpen.reason || "unknown"})`);
       }
@@ -2576,6 +2587,14 @@ async function openWorkflow(path) {
     }
     if (requestId === workflowOpenUiRequestId) {
       state.pendingWorkflowPath = "";
+      // Store-driven renders can replace the panel while an async click handler
+      // is still awaiting navigation. Its captured `el` may therefore be stale
+      // when that handler resumes. Re-render through the current mounted target
+      // after clearing the latest pending intent so "Switching…" and active-trail
+      // presentation always converge on the official active workflow.
+      if (state.isOfficialRoot) {
+        workflowOpenState.scheduleOfficialPanelRender();
+      }
     }
   }
 }
@@ -6849,6 +6868,17 @@ function currentActiveWorkflowTrail() {
   return createActiveWorkflowTrail(relativeWorkflowPathFromOfficial(active?.path || ""));
 }
 
+function renderWorkflowPanelAfterAsync(el) {
+  if (el?.isConnected) {
+    renderPanel(el);
+    return;
+  }
+  // Official Store updates may replace the mounted module while a click handler
+  // is awaiting navigation. Never let that stale element become workflowsTarget
+  // again; redraw through the current mounted target instead.
+  workflowOpenState.scheduleOfficialPanelRender();
+}
+
 function renderNode(el, list, node, depth, activeTrail = null) {
   // Keep the narrow adapter here: this is evaluated only while Browse renders,
   // never while entry.js registers the sidebar. All callbacks preserve their
@@ -6883,7 +6913,7 @@ function renderNode(el, list, node, depth, activeTrail = null) {
       // pending marker never claims that the singleton canvas has switched.
       renderPanel(target);
       await opening;
-      renderPanel(target);
+      renderWorkflowPanelAfterAsync(target);
     },
     onOpenContextMenu: openContextMenu,
     onPointerDrag: beginPointerDrag,
@@ -6972,7 +7002,7 @@ function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
       const opening = openWorkflow(entry.path);
       renderPanel(el);
       await opening;
-      renderPanel(el);
+      renderWorkflowPanelAfterAsync(el);
     },
     onSave: (entry) => (
       entry.isOfficialWorkflow

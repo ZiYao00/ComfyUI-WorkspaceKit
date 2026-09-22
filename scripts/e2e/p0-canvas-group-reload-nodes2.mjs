@@ -5,8 +5,12 @@ const BASE_URL = "http://127.0.0.1:8190/";
 const NODES2_SETTING = "Comfy.VueNodes.Enabled";
 
 async function waitForGroups(page) {
-  await page.waitForFunction(() => window.app?.extensionManager?.setting && window.Workspace2CanvasGroups?.overlay, null, {
-    timeout: 15_000,
+  await page.waitForFunction(() => (
+    window.app?.extensionManager?.setting
+    && window.Workspace2CanvasGroups?.initialized
+    && window.Workspace2CanvasGroups?.overlay
+  ), null, {
+    timeout: 60_000,
     polling: 250,
   });
 }

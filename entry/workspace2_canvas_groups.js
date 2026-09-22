@@ -63,6 +63,11 @@ import {
     setNodeGraphPositionFromStart,
 } from "./canvas-groups/node-position-sync.js?v=20260818_nodes2_group_layout_bridge_r1";
 import { createCanvasMarqueeGradient, drawCanvasGroupFrame } from "./canvas-groups/canvas-frame-paint.js?v=20260825_t042_frame_r2";
+import {
+    createGroupRecoveryEnvelope,
+    parseGroupRecoveryEnvelope,
+    recoverableGroupsForScope,
+} from "./canvas-groups/persistence-policy.js?v=20260922_group_refresh_recovery_r1";
 
 const MODE_ALWAYS = 0;
 const MODE_BYPASS = 4;
@@ -352,6 +357,11 @@ const Workspace2CanvasGroups = {
     // T-036: monotonic z-index counter for bringToFront. See `bringToFront` in
     // buildGroupEl for why stacking can no longer be done by re-appending.
     _frontZ: 5,
+    _restoreReady: false,
+    _recoveryBackupEnvelope: null,
+    _bootRecoveryOpen: true,
+    _allowScopedRecovery: false,
+    _restoreRetryTimer: null,
 
     setNoticeHandler(handler) {
         this.noticeHandler = typeof handler === 'function' ? handler : null;
@@ -4297,7 +4307,55 @@ const Workspace2CanvasGroups = {
             }
         }
     },
-    /* ── 持久化：同步到 app.graph.extra + localStorage ── */
+    _currentRecoveryScope() {
+        const store = app?.extensionManager?.workflow;
+        const activePath = typeof store?.activeWorkflow?.path === 'string'
+            ? store.activeWorkflow.path
+            : '';
+        const openWorkflows = Array.isArray(store?.openWorkflows)
+            ? store.openWorkflows.filter(Boolean)
+            : [];
+        const fallbackPath = !activePath && openWorkflows.length === 1 && typeof openWorkflows[0]?.path === 'string'
+            ? openWorkflows[0].path
+            : '';
+        const nodeSignature = (app?.graph?._nodes || [])
+            .map((node) => `${String(node?.id ?? '')}:${String(node?.type ?? node?.constructor?.type ?? '')}`)
+            .sort()
+            .join('|');
+        return {
+            workflowPath: activePath || fallbackPath,
+            nodeSignature,
+        };
+    },
+
+    _readRecoveryBackup() {
+        try {
+            return parseGroupRecoveryEnvelope(localStorage.getItem('xzg_groups_backup'));
+        } catch(e) {
+            return null;
+        }
+    },
+
+    _matchingRecoveryGroups() {
+        const envelope = this._recoveryBackupEnvelope || this._readRecoveryBackup();
+        if (!envelope || this._nativeRepresentation) return null;
+        return recoverableGroupsForScope(envelope, this._currentRecoveryScope());
+    },
+
+    _writeRecoveryBackup(groupData) {
+        try {
+            if (!groupData || !Object.keys(groupData).length || this._nativeRepresentation) {
+                localStorage.removeItem('xzg_groups_backup');
+                this._recoveryBackupEnvelope = null;
+                return;
+            }
+            const envelope = createGroupRecoveryEnvelope(groupData, this._currentRecoveryScope());
+            localStorage.setItem('xzg_groups_backup', JSON.stringify(envelope));
+            this._recoveryBackupEnvelope = envelope;
+        } catch(e) {}
+    },
+
+    /* ── 持久化：同步到 app.graph.extra + scoped local recovery ── */
     syncGroupsToExtra() {
         if (!app?.graph) return;
         const gd = {};
@@ -4307,14 +4365,7 @@ const Workspace2CanvasGroups = {
         app.graph.extra = app.graph.extra || {};
         app.graph.extra.xzgGroups = gd;
         this.writeGroupDataToNodes(gd);
-        // 立即写入 localStorage 兜底
-        try {
-            if (Object.keys(gd).length) {
-                localStorage.setItem('xzg_groups_backup', JSON.stringify(gd));
-            } else {
-                localStorage.removeItem('xzg_groups_backup');
-            }
-        } catch(e) {}
+        this._writeRecoveryBackup(gd);
     },
 
     setupSerializationHooks(retryCount = 0) {
@@ -4413,7 +4464,7 @@ const Workspace2CanvasGroups = {
                     LG.LGraph.prototype.configure = function(d) {
                         const nativeRepresentation = d?.extra?.workspacekit?.groupRepresentation === 'native';
                         self._nativeRepresentation = nativeRepresentation;
-                        const pendingFromTop = nativeRepresentation ? null : (d?._xzgGroups || d?.extra?.xzgGroups || null);
+                        const pendingFromTop = nativeRepresentation ? null : (d?._xzgGroups ?? d?.extra?.xzgGroups ?? null);
                         if (pendingFromTop) console.log('[Workspace2 Canvas Groups] LGraph.configure检测到编组数据:', Object.keys(pendingFromTop).length, '个');
                         c.apply(this, arguments);
                         if (app?.graph !== this) return;
@@ -4453,11 +4504,21 @@ const Workspace2CanvasGroups = {
 
                         for (const gid of Object.keys(self.groups)) self.killGroup(gid);
                         self.groups = {};
+                        self._restoreReady = false;
                         self._needRestore = true;
+                        const hasSavedGroups = Boolean(pendingFromTop && Object.keys(pendingFromTop).length);
+                        const recoveryEnvelope = self._recoveryBackupEnvelope || self._readRecoveryBackup();
+                        if (recoveryEnvelope) self._recoveryBackupEnvelope = recoveryEnvelope;
+                        self._allowScopedRecovery = Boolean(
+                            self._bootRecoveryOpen
+                            && !nativeRepresentation
+                            && !hasSavedGroups
+                            && recoveryEnvelope
+                        );
                         self._pendingGroups = pendingFromTop;
-                        if (app.graph._nodes?.length) {
-                            console.log('[Workspace2 Canvas Groups] LGraph.configure立即恢复');
-                            self.restoreGroups();
+                        if (app.graph._nodes?.length || self._allowScopedRecovery) {
+                            console.log('[Workspace2 Canvas Groups] LGraph.configure调度恢复');
+                            self._restoreAfterLoad();
                         }
                     };
                 }
@@ -4531,42 +4592,58 @@ const Workspace2CanvasGroups = {
         };
         tryHookLoadGraphData();
 
-        // ── 方案3：localStorage 兜底（每10秒保存一次） ──
+        // ── 方案3：scoped local recovery（初始恢复完成后才允许周期写回） ──
         if (!this._extraSyncInterval) {
             this._extraSyncInterval = setInterval(() => {
+                if (!self._restoreReady) return;
                 self.syncGroupsToExtra();
-                // 同时备份到 localStorage
-                try {
-                    const gd = self._nativeRepresentation ? {} : serializeGroups();
-                    if (Object.keys(gd).length && !self._nativeRepresentation) {
-                        localStorage.setItem('xzg_groups_backup', JSON.stringify(gd));
-                    } else {
-                        localStorage.removeItem('xzg_groups_backup');
-                    }
-                } catch(e) {}
             }, 5000);
         }
 
-        // ── 方案4：从 localStorage 恢复（兜底） ──
-        try {
-            const backup = localStorage.getItem('xzg_groups_backup');
-            if (backup && !this._nativeRepresentation) {
-                const gd = JSON.parse(backup);
-                if (gd && Object.keys(gd).length && !this._pendingGroups) {
-                    this._pendingGroups = gd;
-                    this._needRestore = true;
-                }
+        // ── 方案4：读取 scoped recovery；实际是否可用要等 workflow/graph 身份明确后判断 ──
+        this._recoveryBackupEnvelope = this._readRecoveryBackup();
+    },
+
+    _restoreAfterLoad(retryCount = 0) {
+        if (!this._needRestore) return;
+        if (!app?.graph) {
+            if (retryCount < 30) {
+                clearTimeout(this._restoreRetryTimer);
+                this._restoreRetryTimer = setTimeout(() => this._restoreAfterLoad(retryCount + 1), 100);
             }
-        } catch(e) {}
+            return;
+        }
+
+        if (this._allowScopedRecovery && this._recoveryBackupEnvelope) {
+            const recoveredGroups = this._matchingRecoveryGroups();
+            if (recoveredGroups) {
+                this._pendingGroups = recoveredGroups;
+                this._allowScopedRecovery = false;
+                this.restoreGroups();
+                return;
+            }
+
+            const savedSignature = this._recoveryBackupEnvelope?.scope?.nodeSignature || '';
+            const currentScope = this._currentRecoveryScope();
+            const nodesMatch = Boolean(savedSignature && currentScope.nodeSignature === savedSignature);
+            if (nodesMatch && retryCount < 30) {
+                clearTimeout(this._restoreRetryTimer);
+                this._restoreRetryTimer = setTimeout(() => this._restoreAfterLoad(retryCount + 1), 100);
+                return;
+            }
+        }
+
+        this._allowScopedRecovery = false;
+        this.restoreGroups();
     },
 
     waitForGraph() {
         let n = 0; const self = this;
         const ck = () => {
             n++;
-            if (app?.graph?._nodes?.length && self._needRestore && self._pendingGroups) {
+            if (app?.graph?._nodes?.length && self._needRestore && (self._pendingGroups || self._allowScopedRecovery)) {
                 console.log('[Workspace2 Canvas Groups] waitForGraph触发恢复');
-                self.restoreGroups();
+                self._restoreAfterLoad();
                 return;
             }
             if (n < 60) setTimeout(ck, 250);
@@ -4582,12 +4659,16 @@ const Workspace2CanvasGroups = {
             this._nativeRepresentation = true;
             this._pendingGroups = null;
             this.groups = {};
+            this._writeRecoveryBackup({});
             // Native groups are now the only active representation.  Clear
             // stale WorkspaceKit node markers before rebuilding the overlay;
             // otherwise the legacy fallback scan below can resurrect the old
             // DOM group after a reload.
             for (const node of app.graph._nodes || []) this._clearNodeGroupData(node);
             this.rebuildAllEls();
+            this._restoreReady = true;
+            this._bootRecoveryOpen = false;
+            this._allowScopedRecovery = false;
             return;
         }
 
@@ -4611,6 +4692,9 @@ const Workspace2CanvasGroups = {
 
         if (!app.graph._nodes?.length) {
             this.rebuildAllEls();
+            this._restoreReady = true;
+            this._bootRecoveryOpen = false;
+            this._allowScopedRecovery = false;
             return;
         }
 
@@ -4683,6 +4767,9 @@ const Workspace2CanvasGroups = {
         }
         this.rebuildAllEls();
         this.applyBypassStates();
+        this._restoreReady = true;
+        this._bootRecoveryOpen = false;
+        this._allowScopedRecovery = false;
         window.Workspace2CanvasGroupsLastRestore = {
             at: Date.now(),
             groupCount: Object.keys(this.groups).length,

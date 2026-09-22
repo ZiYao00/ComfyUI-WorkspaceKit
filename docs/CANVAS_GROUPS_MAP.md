@@ -393,12 +393,33 @@ a bug in T-102), `createConversionArchive`, `getGroupRepresentation`,
 `canvas-groups/{conversion-archive,conversion-result,reverse-conversion-plan}.js`.
 
 ### Persistence — L3658–3920
-`syncGroupsToExtra` (writes `app.graph.extra` + localStorage),
-`setupSerializationHooks`, `_setupExtraBasedPersistence`.
+`syncGroupsToExtra` writes `app.graph.extra.xzgGroups`, node-level compatibility
+markers, and a **scoped recovery envelope** in `xzg_groups_backup`. The recovery
+record is versioned and carries both the current workflow path (when available)
+and a stable node id/type signature. A legacy bare group map is deliberately not
+accepted as recovery data because it has no workflow identity and could leak a
+group from workflow A into workflow B.
+
+The local record is a crash/F5 recovery layer, not a second workflow database.
+A normal saved workflow still restores from its serialized group data. During
+page boot, a matching recovery record may recover an unsaved group when the
+disk/draft snapshot contains no saved groups; deleting the last group clears the
+recovery record synchronously. Once the first workflow restore finishes,
+`_bootRecoveryOpen` closes and later workflow switches cannot consume the boot
+recovery record. The periodic sync is also blocked until `_restoreReady` so a
+temporary empty startup state cannot erase recovery data.
+
+`setupSerializationHooks`, `_setupExtraBasedPersistence`, and the pure
+`canvas-groups/persistence-policy.js` own this contract.
 
 ### Startup restore — L3921–4071
-`waitForGraph`, `restoreGroups` (also back-fills missing style fields on old
-workflows — the migration point for new style defaults), `applyBypassStates`.
+`_restoreAfterLoad`, `waitForGraph`, `restoreGroups` coordinate startup
+restore. The bounded retry in `_restoreAfterLoad` exists because current
+ComfyUI can configure the graph before the official Workflow Store exposes a
+stable active/open workflow identity. Recovery never relaxes the scope check; it
+waits for identity instead. `restoreGroups` also back-fills missing style
+fields on old workflows — the migration point for new style defaults — then
+closes the boot-recovery window. `applyBypassStates` replays controlled modes.
 
 ---
 

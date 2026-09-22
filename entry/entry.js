@@ -4,7 +4,7 @@ import { pinyin as pinyinPro } from "./pinyin-pro.esm.js";
 // browser can retain a failed ES-module evaluation for the old query key; a
 // fresh key lets a normal page refresh fetch the repaired module and preserves
 // the independent sidebar-registration boundary in this entry module.
-import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260830_post_l1_groups_r1";
+import { workspace2CanvasGroups } from "./workspace2_canvas_groups.js?v=20260922_group_refresh_recovery_r1";
 import { installRgthreeFastGroupsBridge } from "./integrations/rgthree-fast-groups.js?v=20260804_native_group_color_r1";
 import { publishWorkspaceKitPanelApi, registerPendingWorkspaceKitPanelProviders } from "./integrations/panel-api.js";
 import { getBuiltinWorkspaceKitProviders } from "./integrations/builtin-provider-registration.js";

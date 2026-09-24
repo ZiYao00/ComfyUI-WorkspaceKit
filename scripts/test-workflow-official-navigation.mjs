@@ -4,280 +4,185 @@ import {
   openOfficialWorkflowThroughService,
 } from "../entry/workflows/official-adapter.js";
 
-function workflow(path) {
-  return { path, filename: path.split("/").at(-1) };
+function workflow(path, { loaded = false } = {}) {
+  return {
+    path,
+    filename: path.split("/").at(-1),
+    isLoaded: loaded,
+    activeState: loaded ? { id: path, nodes: [], links: [], groups: [], extra: {} } : null,
+    loadCalls: 0,
+    async load() {
+      this.loadCalls += 1;
+      this.isLoaded = true;
+      this.activeState = { id: path, nodes: [], links: [], groups: [], extra: {} };
+      return this;
+    },
+  };
 }
 
-function createHarness({ open = ["workflows/A.json"], active = "workflows/A.json" } = {}) {
+function createHarness({
+  open = ["workflows/A.json"],
+  active = "workflows/A.json",
+  failPath = "",
+} = {}) {
   const catalog = new Map([
-    ["workflows/A.json", workflow("workflows/A.json")],
+    ["workflows/A.json", workflow("workflows/A.json", { loaded: true })],
     ["workflows/B.json", workflow("workflows/B.json")],
     ["workflows/C.json", workflow("workflows/C.json")],
   ]);
-  const listeners = new Set();
+
   const store = {
-    openWorkflows: open.map((path) => catalog.get(path)),
-    activeWorkflow: catalog.get(active),
-    get modifiedWorkflows() {
-      return [];
-    },
+    openWorkflows: open.map((path) => catalog.get(path)).filter(Boolean),
+    activeWorkflow: active ? catalog.get(active) : null,
+    modifiedWorkflows: [],
     getWorkflowByPath(path) {
       return catalog.get(path) || null;
     },
     isActive(target) {
       return this.activeWorkflow?.path === target?.path;
     },
-    createTemporary(_path, graphState) {
-      const path = "workflows/Unsaved Workflow.json";
-      const target = {
-        ...workflow(path),
-        isTemporary: true,
-        isPersisted: false,
-        isLoaded: true,
-        activeState: graphState,
-      };
-      catalog.set(path, target);
-      return target;
+    // Store.openWorkflow is intentionally not the canvas transition API. Any
+    // use here means the adapter regressed to the misleading public store call.
+    async openWorkflow() {
+      throw new Error("store.openWorkflow must not drive WorkspaceKit switching");
     },
-    async openWorkflow(target) {
-      if (!this.openWorkflows.some((entry) => entry?.path === target?.path)) {
-        this.openWorkflows.push(target);
-      }
-      this.activate(target);
-      return target;
+    openWorkflowsInBackground() {
+      throw new Error("legacy background-tab bridge must not run");
     },
-    openWorkflowsInBackground({ left = [], right = [] } = {}) {
-      for (const path of [...left].reverse()) {
-        if (!this.openWorkflows.some((entry) => entry?.path === path)) {
-          const target = catalog.get(path);
-          if (target) this.openWorkflows.unshift(target);
-        }
-      }
-      for (const path of right) {
-        if (!this.openWorkflows.some((entry) => entry?.path === path)) {
-          const target = catalog.get(path);
-          if (target) this.openWorkflows.push(target);
-        }
-      }
-    },
-    reorderWorkflows(from, to) {
-      const [item] = this.openWorkflows.splice(from, 1);
-      this.openWorkflows.splice(to, 0, item);
+    reorderWorkflows() {
+      throw new Error("legacy tab-reorder bridge must not run");
     },
     async closeWorkflow(target) {
       this.openWorkflows = this.openWorkflows.filter((entry) => entry?.path !== target?.path);
-    },
-    openedWorkflowIndexShift(shift) {
-      const index = this.openWorkflows.findIndex((entry) => entry?.path === this.activeWorkflow?.path);
-      if (index < 0 || !this.openWorkflows.length) return undefined;
-      const next = (index + shift + this.openWorkflows.length) % this.openWorkflows.length;
-      return this.openWorkflows[next];
-    },
-    $subscribe(callback) {
-      listeners.add(callback);
-      return () => listeners.delete(callback);
-    },
-    activate(target) {
-      this.activeWorkflow = target;
-      for (const callback of [...listeners]) callback();
+      if (this.activeWorkflow?.path === target?.path) this.activeWorkflow = null;
     },
   };
 
-  const pending = [];
-  const captured = [];
-  const command = {
-    execute(commandId) {
-      assert.equal(commandId, "Workspace.NextOpenedWorkflow");
-      const target = store.openedWorkflowIndexShift(1);
-      captured.push(target?.path || "");
-      return new Promise((resolve) => {
-        pending.push({
-          target,
-          resolve() {
-            if (target) store.activate(target);
-            resolve();
-          },
-        });
-      });
-    },
-  };
-
-  return {
-    app: {
-      graph: {
-        serialize: () => ({ version: 0.4, nodes: [], links: [], groups: [], extra: {} }),
-      },
-      extensionManager: { workflow: store, command },
-    },
-    store,
-    catalog,
-    captured,
-    pending,
-    paths: () => store.openWorkflows.filter(Boolean).map((entry) => entry.path),
-  };
-}
-
-{
-  const harness = createHarness({ open: [], active: null });
-  const opening = openOfficialWorkflowThroughService(
-    harness.app,
-    harness.catalog.get("workflows/B.json"),
-  );
-
-  // The adapter first registers the already-painted canvas as an official
-  // temporary tab, then routes B through the official Next command.
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(harness.store.activeWorkflow?.path, "workflows/Unsaved Workflow.json");
-  assert.deepEqual(
-    harness.paths(),
-    ["workflows/Unsaved Workflow.json", "workflows/B.json"],
-    "empty official startup must gain a temporary navigation anchor before routing the first persisted workflow",
-  );
-  assert.deepEqual(
-    harness.captured,
-    ["workflows/B.json"],
-    "first persisted open from active=null must still be captured by the official command",
-  );
-
-  harness.pending[0].resolve();
-  const result = await opening;
-  assert.equal(result.opened, true);
-  assert.equal(result.initializeCleanState, true);
-  assert.equal(harness.store.activeWorkflow?.path, "workflows/B.json");
-}
-
-{
-  const harness = createHarness({ open: [], active: "workflows/A.json" });
-  const opening = openOfficialWorkflowThroughService(
-    harness.app,
-    harness.catalog.get("workflows/B.json"),
-  );
-  assert.deepEqual(
-    harness.paths(),
-    ["workflows/A.json", "workflows/B.json"],
-    "an active workflow missing from openWorkflows must be re-anchored through the official background-tab API",
-  );
-  assert.deepEqual(harness.captured, ["workflows/B.json"]);
-  harness.pending[0].resolve();
-  assert.equal((await opening).opened, true);
-}
-
-{
-  const harness = createHarness();
-  const openB = openOfficialWorkflowThroughService(harness.app, harness.catalog.get("workflows/B.json"));
-  assert.deepEqual(harness.paths(), ["workflows/A.json", "workflows/B.json"], "routing must restore visible tab order before the official load settles");
-  assert.deepEqual(harness.captured, ["workflows/B.json"], "first request must synchronously capture B");
-
-  const openC = openOfficialWorkflowThroughService(harness.app, harness.catalog.get("workflows/C.json"));
-  assert.deepEqual(harness.paths(), ["workflows/A.json", "workflows/B.json", "workflows/C.json"], "second routing must also restore the normal tab order immediately");
-  assert.deepEqual(harness.captured, ["workflows/B.json", "workflows/C.json"], "rapid requests must independently capture B then C without a WorkspaceKit load queue");
-
-  harness.pending[0].resolve();
-  const resultB = await openB;
-  assert.equal(resultB.opened, true);
-  assert.equal(resultB.initializeCleanState, true);
-  assert.equal(harness.store.activeWorkflow.path, "workflows/B.json");
-
-  harness.pending[1].resolve();
-  const resultC = await openC;
-  assert.equal(resultC.opened, true);
-  assert.equal(resultC.initializeCleanState, true);
-  assert.equal(harness.store.activeWorkflow.path, "workflows/C.json", "the last official request must finish as the active workflow");
-  assert.deepEqual(harness.paths(), ["workflows/A.json", "workflows/B.json", "workflows/C.json"]);
-}
-
-{
-  const harness = createHarness({ open: ["workflows/A.json", "workflows/B.json"] });
-  const opening = openOfficialWorkflowThroughService(harness.app, harness.catalog.get("workflows/B.json"));
-  assert.deepEqual(harness.captured, ["workflows/B.json"]);
-  harness.pending[0].resolve();
-  const result = await opening;
-  assert.equal(result.opened, true);
-  assert.equal(result.initializeCleanState, false, "revisiting an existing official tab must not reset its WK dirty baseline");
-}
-
-{
-  const harness = createHarness();
-  const result = await openOfficialWorkflowThroughService(harness.app, harness.catalog.get("workflows/A.json"));
-  assert.deepEqual(result, {
-    opened: true,
-    initializeCleanState: false,
-    reason: "already-active",
-  });
-  assert.deepEqual(harness.captured, [], "already-active workflow is an official no-op");
-}
-
-{
-  const a = workflow("workflows/A.json");
-  const b = workflow("workflows/B.json");
-  let activeCloseCommands = 0;
-  const store = {
-    activeWorkflow: a,
-    openWorkflows: [a, b],
-    modifiedWorkflows: [],
-    getWorkflowByPath(path) {
-      return this.openWorkflows.find((entry) => entry.path === path) || null;
-    },
-    isActive(target) {
-      return this.activeWorkflow?.path === target?.path;
-    },
-    openWorkflow: async () => {},
-    async closeWorkflow(target) {
-      this.openWorkflows = this.openWorkflows.filter((entry) => entry.path !== target.path);
-      if (this.activeWorkflow?.path === target.path) this.activeWorkflow = null;
-    },
-  };
+  const loadCalls = [];
   const app = {
     extensionManager: {
       workflow: store,
       command: {
         async execute(commandId) {
-          assert.equal(commandId, "Workspace.CloseWorkflow");
-          activeCloseCommands += 1;
-          await store.closeWorkflow(store.activeWorkflow);
+          if (commandId === "Workspace.CloseWorkflow") {
+            await store.closeWorkflow(store.activeWorkflow);
+            return;
+          }
+          throw new Error("legacy navigation command must not run: " + commandId);
         },
       },
     },
+    async loadGraphData(data, clean, restoreView, target, options) {
+      loadCalls.push({ data, clean, restoreView, target, options });
+      if (target?.path === failPath) return false;
+      if (!store.openWorkflows.some((entry) => entry?.path === target?.path)) {
+        store.openWorkflows.push(target);
+      }
+      store.activeWorkflow = target;
+      return target;
+    },
   };
 
-  assert.equal(await closeOfficialWorkflow(app, a), true);
-  assert.equal(activeCloseCommands, 1, "active close must delegate to the official Workspace.CloseWorkflow command");
-  assert.deepEqual(store.openWorkflows.map((entry) => entry.path), ["workflows/B.json"]);
+  return { app, store, catalog, loadCalls };
 }
 
 {
-  const a = workflow("workflows/A.json");
-  const b = workflow("workflows/B.json");
-  let commandCalls = 0;
-  const store = {
-    activeWorkflow: a,
-    openWorkflows: [a, b],
-    modifiedWorkflows: [],
-    getWorkflowByPath(path) {
-      return this.openWorkflows.find((entry) => entry.path === path) || null;
-    },
-    isActive(target) {
-      return this.activeWorkflow?.path === target?.path;
-    },
-    openWorkflow: async () => {},
-    async closeWorkflow(target) {
-      this.openWorkflows = this.openWorkflows.filter((entry) => entry.path !== target.path);
-    },
-  };
-  const app = {
-    extensionManager: {
-      workflow: store,
-      command: {
-        async execute() {
-          commandCalls += 1;
-        },
-      },
-    },
-  };
-
-  assert.equal(await closeOfficialWorkflow(app, b), true);
-  assert.equal(commandCalls, 0, "inactive close must not activate or reload the workflow just to detach its tab");
-  assert.deepEqual(store.openWorkflows.map((entry) => entry.path), ["workflows/A.json"]);
+  const harness = createHarness();
+  const result = await openOfficialWorkflowThroughService(
+    harness.app,
+    harness.catalog.get("workflows/A.json"),
+  );
+  assert.deepEqual(result, {
+    opened: true,
+    initializeCleanState: false,
+    reason: "already-active",
+  });
+  assert.equal(harness.loadCalls.length, 0, "already-active official workflow must be a no-op");
 }
 
-console.log("official workflow navigation delegation contract passed");
+{
+  const harness = createHarness();
+  const target = harness.catalog.get("workflows/B.json");
+  const result = await openOfficialWorkflowThroughService(harness.app, target);
+
+  assert.equal(target.loadCalls, 1, "cold official workflow must load its ComfyWorkflow object once");
+  assert.equal(harness.loadCalls.length, 1);
+  assert.equal(harness.loadCalls[0].target, target);
+  assert.equal(harness.loadCalls[0].clean, true);
+  assert.equal(harness.loadCalls[0].restoreView, true);
+  assert.deepEqual(harness.loadCalls[0].options, {
+    checkForRerouteMigration: false,
+    deferWarnings: false,
+    skipAssetScans: false,
+    silentAssetErrors: false,
+  });
+  assert.deepEqual(result, {
+    opened: true,
+    initializeCleanState: true,
+    reason: "opened",
+  });
+  assert.equal(harness.store.activeWorkflow, target);
+}
+
+{
+  const harness = createHarness({ open: ["workflows/A.json", "workflows/B.json"] });
+  const target = harness.catalog.get("workflows/B.json");
+  await target.load();
+  target.loadCalls = 0;
+
+  const result = await openOfficialWorkflowThroughService(harness.app, target);
+  assert.equal(target.loadCalls, 0, "warm switch must reuse the loaded official workflow state");
+  assert.equal(harness.loadCalls.length, 1);
+  assert.equal(harness.loadCalls[0].options.skipAssetScans, true, "warm switch must mirror native asset-scan skipping");
+  assert.equal(harness.loadCalls[0].options.silentAssetErrors, true);
+  assert.equal(result.opened, true);
+  assert.equal(result.initializeCleanState, false, "revisiting an open tab must retain its WorkspaceKit baseline");
+}
+
+{
+  const harness = createHarness({ failPath: "workflows/B.json" });
+  const previous = harness.catalog.get("workflows/A.json");
+  const target = harness.catalog.get("workflows/B.json");
+  const result = await openOfficialWorkflowThroughService(harness.app, target);
+
+  assert.deepEqual(result, {
+    opened: false,
+    initializeCleanState: false,
+    reason: "official-load-failed",
+  });
+  assert.equal(harness.loadCalls.length, 2, "failed target load must repaint the retained official workflow");
+  assert.equal(harness.loadCalls[0].target, target);
+  assert.equal(harness.loadCalls[1].target, previous);
+  assert.equal(harness.loadCalls[1].options.skipAssetScans, true);
+  assert.equal(harness.store.activeWorkflow, previous);
+}
+
+{
+  const harness = createHarness();
+  delete harness.app.loadGraphData;
+  const result = await openOfficialWorkflowThroughService(
+    harness.app,
+    harness.catalog.get("workflows/B.json"),
+  );
+  assert.equal(result.opened, false);
+  assert.equal(result.reason, "official-load-unavailable");
+}
+
+{
+  const harness = createHarness({ open: ["workflows/A.json", "workflows/B.json"] });
+  const a = harness.catalog.get("workflows/A.json");
+  assert.equal(await closeOfficialWorkflow(harness.app, a), true);
+  assert.deepEqual(harness.store.openWorkflows.map((entry) => entry.path), ["workflows/B.json"]);
+}
+
+{
+  const harness = createHarness({ open: ["workflows/A.json", "workflows/B.json"] });
+  const b = harness.catalog.get("workflows/B.json");
+  let commandCalls = 0;
+  harness.app.extensionManager.command.execute = async () => { commandCalls += 1; };
+  assert.equal(await closeOfficialWorkflow(harness.app, b), true);
+  assert.equal(commandCalls, 0, "inactive close must stay a lightweight official Store detach");
+  assert.deepEqual(harness.store.openWorkflows.map((entry) => entry.path), ["workflows/A.json"]);
+}
+
+console.log("official workflow direct-native navigation contract passed");

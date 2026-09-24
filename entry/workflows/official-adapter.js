@@ -47,74 +47,15 @@ function workflowPath(workflow) {
   return typeof workflow?.path === "string" ? workflow.path : "";
 }
 
-function restoreOfficialWorkflowOrder(store, stableOrder) {
-  if (typeof store?.reorderWorkflows !== "function" || !Array.isArray(stableOrder)) return;
-  for (let index = 0; index < stableOrder.length; index += 1) {
-    const currentPaths = (store.openWorkflows || []).filter(Boolean).map(workflowPath);
-    const from = currentPaths.indexOf(stableOrder[index]);
-    if (from >= 0 && from !== index) {
-      store.reorderWorkflows(from, index);
-    }
-  }
-}
-
-function ensureOfficialWorkflowNavigationAnchor(app, store) {
-  let activePath = workflowPath(store?.activeWorkflow);
-  if (activePath) {
-    const activeIsOpen = (store.openWorkflows || []).filter(Boolean)
-      .some((entry) => workflowPath(entry) === activePath);
-    if (!activeIsOpen) {
-      store.openWorkflowsInBackground({ left: [activePath] });
-    }
-    const anchored = (store.openWorkflows || []).filter(Boolean)
-      .some((entry) => workflowPath(entry) === activePath);
-    return anchored
-      ? { anchored: true, activePath, bootstrapCreated: false }
-      : { anchored: false, activePath, bootstrapCreated: false, reason: "official-active-not-open" };
-  }
-
-  // ComfyUI can start with a painted default graph while the Workflow Store
-  // still has activeWorkflow=null/openWorkflows=[] (reproduced on the 0.34.0
-  // test package with frontend 1.52.7). Register that existing canvas as an
-  // official temporary workflow before using NextOpenedWorkflow. This does not
-  // load or replace a graph; it only gives the official workflow service an
-  // anchor from which its own queue can navigate to the requested target.
-  if (
-    typeof store?.createTemporary !== "function"
-    || typeof store?.openWorkflow !== "function"
-  ) {
-    return { anchored: false, activePath: "", bootstrapCreated: false, reason: "official-navigation-anchor-unavailable" };
-  }
-
-  const graph = app?.graph || app?.canvas?.graph;
-  if (typeof graph?.serialize !== "function") {
-    return { anchored: false, activePath: "", bootstrapCreated: false, reason: "official-current-graph-unavailable" };
-  }
-
-  const bootstrap = store.createTemporary(undefined, graph.serialize());
-  return Promise.resolve(store.openWorkflow(bootstrap)).then((loadedBootstrap) => {
-    activePath = workflowPath(loadedBootstrap || store.activeWorkflow || bootstrap);
-    const anchored = Boolean(activePath)
-      && (store.openWorkflows || []).filter(Boolean)
-        .some((entry) => workflowPath(entry) === activePath);
-
-    return anchored
-      ? { anchored: true, activePath, bootstrapCreated: true }
-      : { anchored: false, activePath, bootstrapCreated: true, reason: "official-navigation-bootstrap-failed" };
-  });
-}
-
 /**
- * Route a direct WorkspaceKit target through the ComfyUI workflow service.
+ * Open an official workflow through ComfyUI's public workflow object plus
+ * app.loadGraphData() lifecycle.
  *
- * ComfyUI does not currently expose workflowService.openWorkflow(target) on the
- * extension API. Its public Workspace.NextOpenedWorkflow command does delegate
- * to that service, including the official load queue, ChangeTracker lifecycle,
- * navigation intent and failure recovery. Temporarily place the requested
- * target beside the active official tab, invoke that command, then restore the
- * visible tab order immediately. The command captures its target synchronously
- * before its first await, so concurrent user clicks remain owned and serialized
- * by ComfyUI rather than by a second WorkspaceKit load queue.
+ * The private workflowService.openWorkflow(target) is not exposed to custom
+ * extensions, but app.loadGraphData() itself calls the official
+ * beforeLoadNewGraph()/afterLoadNewGraph() hooks. This mirrors the native
+ * service's public-object core without the old temporary-tab/reorder/Next-command
+ * bridge. Warm switches also preserve the native skipAssetScans optimization.
  */
 export async function openOfficialWorkflowThroughService(app, workflow) {
   const store = getOfficialWorkflowStore(app);
@@ -130,89 +71,63 @@ export async function openOfficialWorkflowThroughService(app, workflow) {
     return { opened: true, initializeCleanState: false, reason: "already-active" };
   }
 
-  const execute = app?.extensionManager?.command?.execute;
-  if (
-    typeof execute !== "function"
-    || typeof store.openWorkflowsInBackground !== "function"
-    || typeof store.reorderWorkflows !== "function"
-  ) {
-    return { opened: false, initializeCleanState: false, reason: "official-navigation-unavailable" };
-  }
-
-  const anchorResult = ensureOfficialWorkflowNavigationAnchor(app, store);
-  const anchor = typeof anchorResult?.then === "function"
-    ? await anchorResult
-    : anchorResult;
-  if (!anchor.anchored) {
-    return {
-      opened: false,
-      initializeCleanState: false,
-      reason: anchor.reason || "official-navigation-anchor-failed",
-    };
+  if (typeof app?.loadGraphData !== "function" || typeof workflow?.load !== "function") {
+    return { opened: false, initializeCleanState: false, reason: "official-load-unavailable" };
   }
 
   const wasAlreadyOpen = (store.openWorkflows || []).filter(Boolean)
     .some((entry) => workflowPath(entry) === targetPath);
-  if (!wasAlreadyOpen) {
-    store.openWorkflowsInBackground({ right: [targetPath] });
+  const previousWorkflow = store.activeWorkflow || null;
+  const loadFromRemote = !workflow.isLoaded;
+
+  if (loadFromRemote) {
+    await workflow.load();
   }
 
-  const stableOrder = (store.openWorkflows || []).filter(Boolean).map(workflowPath);
-  const activePath = anchor.activePath;
-  const activeIndex = stableOrder.indexOf(activePath);
-  const targetIndex = stableOrder.indexOf(targetPath);
-  if (activeIndex < 0 || targetIndex < 0) {
-    if (!wasAlreadyOpen && typeof store.closeWorkflow === "function") {
-      await store.closeWorkflow(workflow);
+  const loaded = await app.loadGraphData(
+    workflow.activeState,
+    true,
+    true,
+    workflow,
+    {
+      checkForRerouteMigration: false,
+      deferWarnings: false,
+      skipAssetScans: !loadFromRemote,
+      silentAssetErrors: !loadFromRemote,
+    },
+  );
+
+  if (loaded === false) {
+    // Match ComfyUI's workflow service failure policy without copying the
+    // service itself: repaint the retained, already-loaded workflow so the
+    // selected tab and canvas cannot diverge after a configure failure.
+    if (
+      previousWorkflow
+      && previousWorkflow !== workflow
+      && previousWorkflow.isLoaded
+      && previousWorkflow.activeState
+    ) {
+      await app.loadGraphData(
+        previousWorkflow.activeState,
+        true,
+        true,
+        previousWorkflow,
+        {
+          checkForRerouteMigration: false,
+          deferWarnings: true,
+          skipAssetScans: true,
+          silentAssetErrors: true,
+        },
+      );
     }
-    return { opened: false, initializeCleanState: false, reason: "official-navigation-state-mismatch" };
+    return { opened: false, initializeCleanState: false, reason: "official-load-failed" };
   }
 
-  const desiredIndex = (activeIndex + 1) % stableOrder.length;
-  if (targetIndex !== desiredIndex) {
-    store.reorderWorkflows(targetIndex, desiredIndex);
-  }
-
-  let activated = false;
-  const noteActivation = () => {
-    if (workflowPath(store.activeWorkflow) === targetPath) activated = true;
-  };
-  const unsubscribe = typeof store.$subscribe === "function"
-    ? store.$subscribe(noteActivation, { detached: true, flush: "sync" })
-    : () => {};
-
-  let commandPromise;
-  try {
-    commandPromise = execute("Workspace.NextOpenedWorkflow");
-  } finally {
-    // Restore immediately: the official command has already captured the
-    // adjacent target before its first await, while later rapid clicks see the
-    // normal tab order instead of this routing-only arrangement.
-    restoreOfficialWorkflowOrder(store, stableOrder);
-  }
-
-  try {
-    await commandPromise;
-    noteActivation();
-  } catch (error) {
-    noteActivation();
-    if (!wasAlreadyOpen && !activated && typeof store.closeWorkflow === "function") {
-      const current = getOfficialWorkflowByPath(app, targetPath) || workflow;
-      await store.closeWorkflow(current);
-    }
-    throw error;
-  } finally {
-    unsubscribe?.();
-  }
-
-  const current = getOfficialWorkflowByPath(app, targetPath) || workflow;
-  if (!activated && !wasAlreadyOpen && typeof store.closeWorkflow === "function") {
-    await store.closeWorkflow(current);
-  }
+  const activated = workflowPath(store.activeWorkflow) === targetPath;
   return {
     opened: activated,
     initializeCleanState: activated && !wasAlreadyOpen,
-    reason: activated ? "opened" : "official-navigation-did-not-activate",
+    reason: activated ? "opened" : "official-load-did-not-activate",
   };
 }
 

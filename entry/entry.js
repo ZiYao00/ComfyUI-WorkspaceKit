@@ -1191,13 +1191,12 @@ function setupWorkspacePanelProviderLifecycle(api) {
 
 // Browse scroll position lives in state, not only in a per-render snapshot.
 //
-// A snapshot taken inside renderPanel() cannot survive every path: opening a
-// workflow for the first time calls setCurrentWorkflowCleanState(), which
-// schedules a settle re-render 300ms later. By then the tree has already been
-// cleared and rebuilt once, and clearing a scroll container makes the browser
-// reset scrollTop to 0 on its own — no code assigns it, so the value that later
-// render would save is already 0. state.browseScrollTop is written directly from
-// the tree's scroll event, so it predates any rebuild.
+// A snapshot taken inside renderPanel() cannot survive every path: official-store
+// notifications and deferred state reconciliation can rebuild the tree after the
+// original click handler has returned. Clearing a scroll container makes the
+// browser reset scrollTop to 0 on its own — no code assigns it, so the value a
+// later render would save may already be 0. state.browseScrollTop is written
+// directly from the tree's scroll event, so it predates any rebuild.
 function scrollSnapshot(el) {
   const tree = el?.querySelector?.(".workspace2-tree");
   const active = document.activeElement;
@@ -2472,7 +2471,7 @@ async function openWorkflowFromOfficialStore(path, requestId) {
   }
 
   return measurePromise(
-    "workflows.open.official-command",
+    "workflows.open.official-native",
     () => openOfficialWorkflowThroughService(app, workflow),
     { path, requestId, indexHit },
   );
@@ -2483,12 +2482,10 @@ async function openWorkflowFromOfficialStore(path, requestId) {
 // cannot be cleared by an older completion. It does not queue graph loads.
 let workflowOpenUiRequestId = 0;
 
-// ComfyUI 1.53+ serializes real workflow loads, but every dispatched command is
-// still preserved. Rapid Browse/Open clicks can therefore build a long official
-// backlog and leave WK's latest pending intent visible long after the canvas has
-// already visited that path once. Coalesce only command dispatch: the first
-// official navigation runs, one newest intent may wait behind it, and all graph
-// loading remains exclusively inside ComfyUI's workflow service.
+// Keep direct native graph loads serialized at the WorkspaceKit intent boundary.
+// The first navigation runs to completion; while it is active, only the newest
+// not-yet-started target is retained. The adapter owns no parallel load queue and
+// each dispatched navigation still enters ComfyUI's public loadGraphData lifecycle.
 const dispatchOfficialWorkflowNavigation = createLatestWorkflowNavigationDispatcher(
   (path, requestId) => openWorkflowFromOfficialStore(path, requestId),
 );
@@ -2509,7 +2506,8 @@ async function openWorkflow(path) {
   const requestId = ++workflowOpenUiRequestId;
   state.pendingWorkflowPath = path;
   const finishTotal = startPerformanceSpan("workflows.open.total", { path, requestId });
-  workflowOpenState.captureOfficialDirtyState();
+  // Official workflow switching must stay on the native hot path. Dirty-state
+  // reconciliation is event/idle driven and must not serialize the current graph here.
   clearCurrentWorkflowDirtyState();
 
   let officialOpen = { opened: false, initializeCleanState: false, reason: "" };
@@ -2529,7 +2527,7 @@ async function openWorkflow(path) {
       if (officialOpen.initializeCleanState) {
         const baseline = officialWorkflowBaselineData(path);
         if (baseline) {
-          setCurrentWorkflowCleanState(baseline, path);
+          scheduleOfficialWorkflowCleanBaseline(baseline, path);
           initializedOfficialBaseline = true;
         }
       }
@@ -2550,13 +2548,13 @@ async function openWorkflow(path) {
       );
     }
 
-    // Official loads are not cancelled here. ComfyUI owns their queue and will
-    // complete them in service order; this guard suppresses only obsolete WK UI
+    // A started native load is not cancelled here. The dispatcher only coalesces
+    // not-yet-started intents; this guard suppresses obsolete WorkspaceKit UI
     // bookkeeping from earlier clicks.
     if (requestId !== workflowOpenUiRequestId) {
       finishTotal({
         outcome: "superseded-ui",
-        source: state.isOfficialRoot ? "official-command" : "local-root",
+        source: state.isOfficialRoot ? "official-native" : "local-root",
       }, "superseded");
       return false;
     }
@@ -2565,12 +2563,13 @@ async function openWorkflow(path) {
     if (!state.isOfficialRoot) {
       setCurrentWorkflowCleanState();
     } else if (officialOpen.initializeCleanState && !initializedOfficialBaseline) {
-      setCurrentWorkflowCleanState(undefined, path);
+      const baseline = officialWorkflowBaselineData(path);
+      if (baseline) scheduleOfficialWorkflowCleanBaseline(baseline, path);
     }
     recordRecentWorkflow(path);
     finishTotal({
       outcome: "opened",
-      source: state.isOfficialRoot ? "official-command" : "local-root",
+      source: state.isOfficialRoot ? "official-native" : "local-root",
     });
     return true;
   } catch (error) {
@@ -2643,6 +2642,10 @@ function clearCurrentWorkflowDirtyState() {
 
 function setCurrentWorkflowCleanState(workflow = serializeCurrentWorkflow(), officialPath = "") {
   workflowOpenState.setCleanState(workflow, officialPath);
+}
+
+function scheduleOfficialWorkflowCleanBaseline(workflow, officialPath = "") {
+  workflowOpenState.scheduleOfficialCleanBaseline(workflow, officialPath);
 }
 
 function setupWorkflowDirtyTracking() {

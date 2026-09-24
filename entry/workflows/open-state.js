@@ -31,6 +31,7 @@ export function createWorkflowOpenState({
   let dirtyTrackingReady = false;
   let officialSyncReady = false;
   const officialBaselineTimers = new Map();
+  const officialBaselineInitTasks = new Map();
   const officialQueueTransactions = new Map();
   const provisionalOfficialGraphChanges = [];
   const MAX_QUEUE_TRANSACTIONS = 32;
@@ -64,6 +65,51 @@ export function createWorkflowOpenState({
   function clearDirtyState() {
     state.workflowDirty = false;
     state.workflowSnapshot = "";
+  }
+
+  function cancelOfficialBaselineInitTask(path) {
+    const task = officialBaselineInitTasks.get(path);
+    if (!task) return;
+    officialBaselineInitTasks.delete(path);
+    if (task.kind === "idle" && typeof window.cancelIdleCallback === "function") {
+      window.cancelIdleCallback(task.id);
+    } else {
+      window.clearTimeout(task.id);
+    }
+  }
+
+  function scheduleOfficialBaselineTask(path, callback) {
+    cancelOfficialBaselineInitTask(path);
+    if (typeof window.requestIdleCallback === "function") {
+      // Do not provide a timeout: a large semantic snapshot must never be forced
+      // into an active interaction window merely because the user kept working.
+      const id = window.requestIdleCallback(callback);
+      officialBaselineInitTasks.set(path, { kind: "idle", id });
+      return;
+    }
+    // Chromium (ComfyUI's primary runtime) supports requestIdleCallback. Keep a
+    // conservative fallback for older hosts, but well outside the switch turn.
+    const id = window.setTimeout(callback, 500);
+    officialBaselineInitTasks.set(path, { kind: "timeout", id });
+  }
+
+  function scheduleOfficialCleanBaseline(workflow, officialPath = "") {
+    if (!state.isOfficialRoot || !workflow) return;
+    const path = relativeWorkflowPathFromOfficial(officialPath || workflow?.path || "");
+    if (!path) return;
+
+    // Opening an official workflow is a hot path. Build WorkspaceKit's optional
+    // semantic baseline only when the browser is idle instead of blocking the
+    // canvas transition with graph sorting/stable JSON work.
+    state.officialWorkflowDirtyPaths.delete(path);
+    scheduleOfficialBaselineTask(path, () => {
+      officialBaselineInitTasks.delete(path);
+      const baseline = officialSnapshot(workflow);
+      if (!baseline) return;
+      state.officialWorkflowSnapshots.set(path, baseline);
+      state.officialWorkflowDirtyPaths.delete(path);
+      renderIfWorkflowsActive();
+    });
   }
 
   function setCleanState(workflow = serializeCurrentWorkflow(), officialPath = "") {
@@ -235,6 +281,7 @@ export function createWorkflowOpenState({
   }
 
   function remapOfficialWorkflowPathState(oldPath, newPath) {
+    cancelOfficialBaselineInitTask(oldPath);
     const snapshotValue = state.officialWorkflowSnapshots.get(oldPath);
     if (snapshotValue !== undefined) {
       state.officialWorkflowSnapshots.delete(oldPath);
@@ -252,6 +299,7 @@ export function createWorkflowOpenState({
   }
 
   function removeOfficialWorkflowPathState(path) {
+    cancelOfficialBaselineInitTask(path);
     const timer = officialBaselineTimers.get(path);
     if (timer) window.clearTimeout(timer);
     officialBaselineTimers.delete(path);
@@ -361,6 +409,7 @@ export function createWorkflowOpenState({
     snapshot,
     clearDirtyState,
     setCleanState,
+    scheduleOfficialCleanBaseline,
     captureOfficialDirtyState,
     isOfficialWorkflowDirty,
     remapOfficialWorkflowPathState,

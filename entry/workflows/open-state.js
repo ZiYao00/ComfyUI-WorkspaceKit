@@ -30,8 +30,9 @@ export function createWorkflowOpenState({
 }) {
   let dirtyTrackingReady = false;
   let officialSyncReady = false;
-  const officialBaselineTimers = new Map();
   const officialBaselineInitTasks = new Map();
+  const officialBaselinePendingPaths = new Set();
+  const officialBaselinePendingDirtyPaths = new Set();
   const officialQueueTransactions = new Map();
   const provisionalOfficialGraphChanges = [];
   const MAX_QUEUE_TRANSACTIONS = 32;
@@ -98,17 +99,43 @@ export function createWorkflowOpenState({
     const path = relativeWorkflowPathFromOfficial(officialPath || workflow?.path || "");
     if (!path) return;
 
-    // Opening an official workflow is a hot path. Build WorkspaceKit's optional
-    // semantic baseline only when the browser is idle instead of blocking the
-    // canvas transition with graph sorting/stable JSON work.
+    officialBaselinePendingPaths.add(path);
+    if (workflow.isModified) officialBaselinePendingDirtyPaths.add(path);
+    else officialBaselinePendingDirtyPaths.delete(path);
     state.officialWorkflowDirtyPaths.delete(path);
+
+    // Opening an official workflow is a hot path. Build the expensive canonical
+    // snapshot only when the browser is idle. A pending edit is detected through
+    // ComfyUI's ChangeTracker, so load-time migrations may settle into the clean
+    // baseline without swallowing a real edit made immediately after opening.
     scheduleOfficialBaselineTask(path, () => {
       officialBaselineInitTasks.delete(path);
-      const baseline = officialSnapshot(workflow);
-      if (!baseline) return;
+      const changedWhilePending = officialBaselinePendingDirtyPaths.has(path)
+        || Boolean(workflow.isModified);
+      officialBaselinePendingPaths.delete(path);
+      officialBaselinePendingDirtyPaths.delete(path);
+
+      if (changedWhilePending) {
+        state.officialWorkflowSnapshots.delete(path);
+        state.officialWorkflowDirtyPaths.add(path);
+        refreshSaveSurfaces();
+        return;
+      }
+
+      const baselineSource = activeOfficialPath() === path
+        ? serializeCurrentWorkflow()
+        : workflow.activeState;
+      const baseline = officialSnapshot(baselineSource);
+      if (!baseline) {
+        state.officialWorkflowSnapshots.delete(path);
+        state.officialWorkflowDirtyPaths.delete(path);
+        refreshSaveSurfaces();
+        return;
+      }
+
       state.officialWorkflowSnapshots.set(path, baseline);
       state.officialWorkflowDirtyPaths.delete(path);
-      renderIfWorkflowsActive();
+      refreshSaveSurfaces();
     });
   }
 
@@ -123,23 +150,11 @@ export function createWorkflowOpenState({
       officialPath || activeWorkflow?.path || "",
     );
     if (state.isOfficialRoot && activePath && state.workflowSnapshot) {
+      cancelOfficialBaselineInitTask(activePath);
+      officialBaselinePendingPaths.delete(activePath);
+      officialBaselinePendingDirtyPaths.delete(activePath);
       state.officialWorkflowSnapshots.set(activePath, officialSnapshot(workflow));
       state.officialWorkflowDirtyPaths.delete(activePath);
-      const existingTimer = officialBaselineTimers.get(activePath);
-      if (existingTimer) window.clearTimeout(existingTimer);
-      // Some ComfyUI extensions finish normalizing a loaded graph after
-      // loadGraphData() resolves. Re-capture once after that short settle
-      // window so these load-only changes do not become a false dirty dot.
-      const timer = window.setTimeout(() => {
-        officialBaselineTimers.delete(activePath);
-        if (activeOfficialPath() !== activePath) return;
-        const settledSnapshot = officialSnapshot();
-        if (!settledSnapshot) return;
-        state.officialWorkflowSnapshots.set(activePath, settledSnapshot);
-        state.officialWorkflowDirtyPaths.delete(activePath);
-        renderIfWorkflowsActive();
-      }, 300);
-      officialBaselineTimers.set(activePath, timer);
     }
   }
 
@@ -151,8 +166,14 @@ export function createWorkflowOpenState({
   function captureOfficialDirtyState() {
     if (!state.isOfficialRoot) return;
     const path = activeOfficialPath();
+    if (!path) return;
+    if (officialBaselinePendingPaths.has(path)) {
+      const workflow = getActiveOfficialWorkflow(app);
+      if (workflow?.isModified) officialBaselinePendingDirtyPaths.add(path);
+      return;
+    }
     const baseline = state.officialWorkflowSnapshots.get(path);
-    if (!path || !baseline) return;
+    if (!baseline) return;
 
     const currentSnapshot = officialSnapshot();
     const isClean = currentSnapshot === baseline;
@@ -163,12 +184,34 @@ export function createWorkflowOpenState({
     }
   }
 
-  function isOfficialWorkflowDirty(workflow) {
+  function getOfficialWorkflowSaveState(workflow) {
     const path = relativeWorkflowPathFromOfficial(workflow?.path || "");
-    if (!path || !state.officialWorkflowSnapshots.has(path)) {
-      return Boolean(workflow?.isModified);
+    const temporary = workflow?.isTemporary === true || workflow?.isPersisted === false;
+    if (temporary) {
+      return { status: "temporary", needsSave: true, dirty: true, pending: false };
     }
-    return state.officialWorkflowDirtyPaths.has(path);
+    if (!path) {
+      return { status: "clean", needsSave: false, dirty: false, pending: false };
+    }
+    if (officialBaselinePendingPaths.has(path)) {
+      const dirty = officialBaselinePendingDirtyPaths.has(path);
+      return {
+        status: dirty ? "dirty" : "baseline-pending",
+        needsSave: dirty,
+        dirty,
+        pending: true,
+      };
+    }
+    if (state.officialWorkflowSnapshots.has(path)) {
+      const dirty = state.officialWorkflowDirtyPaths.has(path);
+      return { status: dirty ? "dirty" : "clean", needsSave: dirty, dirty, pending: false };
+    }
+    const dirty = Boolean(workflow?.isModified);
+    return { status: dirty ? "dirty" : "clean", needsSave: dirty, dirty, pending: false };
+  }
+
+  function isOfficialWorkflowDirty(workflow) {
+    return getOfficialWorkflowSaveState(workflow).dirty;
   }
 
   function queueRequestId(event) {
@@ -192,12 +235,18 @@ export function createWorkflowOpenState({
     const path = activeOfficialPath();
     const baseline = state.officialWorkflowSnapshots.get(path);
     const beforeSnapshot = officialSnapshot();
-    if (!path || !baseline || !beforeSnapshot) return;
+    if (!path || !beforeSnapshot) return;
+
+    const workflow = getActiveOfficialWorkflow(app);
+    const pendingClean = officialBaselinePendingPaths.has(path)
+      && !officialBaselinePendingDirtyPaths.has(path)
+      && !workflow?.isModified;
+    if (!baseline && !pendingClean) return;
 
     officialQueueTransactions.set(requestId, {
       path,
       beforeSnapshot,
-      startedClean: beforeSnapshot === baseline,
+      startedClean: baseline ? beforeSnapshot === baseline : pendingClean,
       tainted: false,
     });
     trimQueueTransactions();
@@ -276,12 +325,18 @@ export function createWorkflowOpenState({
     // graph edit was observed. Treat the post-queue graph as the new effective
     // clean baseline for WorkspaceKit only. ComfyUI's own isModified,
     // undo/redo and draft state are intentionally left untouched.
+    cancelOfficialBaselineInitTask(transaction.path);
+    officialBaselinePendingPaths.delete(transaction.path);
+    officialBaselinePendingDirtyPaths.delete(transaction.path);
     state.officialWorkflowSnapshots.set(transaction.path, afterSnapshot);
     state.officialWorkflowDirtyPaths.delete(transaction.path);
+    refreshSaveSurfaces();
   }
 
   function remapOfficialWorkflowPathState(oldPath, newPath) {
     cancelOfficialBaselineInitTask(oldPath);
+    officialBaselinePendingPaths.delete(oldPath);
+    officialBaselinePendingDirtyPaths.delete(oldPath);
     const snapshotValue = state.officialWorkflowSnapshots.get(oldPath);
     if (snapshotValue !== undefined) {
       state.officialWorkflowSnapshots.delete(oldPath);
@@ -300,9 +355,8 @@ export function createWorkflowOpenState({
 
   function removeOfficialWorkflowPathState(path) {
     cancelOfficialBaselineInitTask(path);
-    const timer = officialBaselineTimers.get(path);
-    if (timer) window.clearTimeout(timer);
-    officialBaselineTimers.delete(path);
+    officialBaselinePendingPaths.delete(path);
+    officialBaselinePendingDirtyPaths.delete(path);
     state.officialWorkflowSnapshots.delete(path);
     state.officialWorkflowDirtyPaths.delete(path);
     for (const [requestId, transaction] of officialQueueTransactions) {
@@ -314,6 +368,11 @@ export function createWorkflowOpenState({
     if (workspaceState.activeModule === "workflows" && state.workflowsTarget?.isConnected) {
       renderWorkflowsPanel(state.workflowsTarget);
     }
+  }
+
+  function refreshSaveSurfaces() {
+    renderIfWorkflowsActive();
+    workspaceState.topbarSaveButton?.refresh?.();
   }
 
   function setupDirtyTracking() {
@@ -342,7 +401,7 @@ export function createWorkflowOpenState({
         state.workflowDirtyCheckTimer = null;
         if (state.isOfficialRoot) {
           captureOfficialDirtyState();
-          renderIfWorkflowsActive();
+          refreshSaveSurfaces();
           return;
         }
         if (
@@ -411,6 +470,7 @@ export function createWorkflowOpenState({
     setCleanState,
     scheduleOfficialCleanBaseline,
     captureOfficialDirtyState,
+    getOfficialWorkflowSaveState,
     isOfficialWorkflowDirty,
     remapOfficialWorkflowPathState,
     removeOfficialWorkflowPathState,

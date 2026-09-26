@@ -353,12 +353,16 @@ assert.ok(
   "a successful persisted save must clear the shared dirty baseline and schedule the Open list to re-render",
 );
 
-// Topbar and Open rows must consume one semantic save signal. Temporary state
-// remains a save need, while persisted dirty state comes from WorkspaceKit's
-// queue-aware baseline instead of ComfyUI's raw isModified flag.
+// Topbar and Open rows must consume the exact same unified save-state accessor.
+// Temporary, baseline-pending and semantic dirty policy belong to open-state;
+// neither presentation surface may reconstruct that policy independently.
 assert.match(
   source,
-  /needsActiveWorkflowSave: \(\) => \{[\s\S]*?isOfficialWorkflowTemporary\(workflow\)[\s\S]*?workflowOpenState\.isOfficialWorkflowDirty\(workflow\)/,
+  /needsActiveWorkflowSave: \(\) => \{[\s\S]*?workflowOpenState\.getOfficialWorkflowSaveState\(workflow\)\.needsSave/,
+);
+assert.match(
+  source,
+  /isDirty: isOfficialWorkflow[\s\S]*?workflowOpenState\.getOfficialWorkflowSaveState\(entry\.officialWorkflow\)\.needsSave/,
 );
 assert.doesNotMatch(source, /isActiveWorkflowModified:/);
 // graphChanged resolves WorkspaceKit's semantic dirty state on a zero-delay

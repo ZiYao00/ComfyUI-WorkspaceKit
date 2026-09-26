@@ -2491,15 +2491,7 @@ const dispatchOfficialWorkflowNavigation = createLatestWorkflowNavigationDispatc
 );
 
 function officialWorkflowBaselineData(path) {
-  const workflow = getOfficialWorkflowByPath(app, officialWorkflowPath(path));
-  if (!workflow) return null;
-  if (workflow.activeState) return workflow.activeState;
-  if (!workflow.content) return null;
-  try {
-    return JSON.parse(workflow.content);
-  } catch {
-    return null;
-  }
+  return getOfficialWorkflowByPath(app, officialWorkflowPath(path)) || null;
 }
 
 async function openWorkflow(path) {
@@ -2521,9 +2513,9 @@ async function openWorkflow(path) {
       }
 
       // A first official open needs a WorkspaceKit display baseline even when a
-      // later click has already superseded its UI intent. Use the target's own
-      // official activeState instead of whichever graph happens to be visible
-      // when the official queue advances to the next request.
+      // later click has already superseded its UI intent. Pass the target's own
+      // ComfyWorkflow so open-state can track its ChangeTracker while deferring the
+      // expensive live-canvas baseline until the browser is idle.
       if (officialOpen.initializeCleanState) {
         const baseline = officialWorkflowBaselineData(path);
         if (baseline) {
@@ -6988,7 +6980,7 @@ function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
       isOfficialWorkflow,
       isActive,
       isDirty: isOfficialWorkflow
-        ? workflowOpenState.isOfficialWorkflowDirty(entry.officialWorkflow)
+        ? workflowOpenState.getOfficialWorkflowSaveState(entry.officialWorkflow).needsSave
         : isActive && state.workflowDirty,
       isPending: entry.path === state.pendingWorkflowPath,
       isRenaming: state.editingPath === entry.path && state.editingSurface === "open",
@@ -9189,10 +9181,8 @@ function installWorkspaceTopbarSaveButton() {
       hasActiveWorkflow: () => Boolean(getActiveOfficialWorkflow(app)),
       needsActiveWorkflowSave: () => {
         const workflow = getActiveOfficialWorkflow(app);
-        return Boolean(workflow) && (
-          isOfficialWorkflowTemporary(workflow)
-          || workflowOpenState.isOfficialWorkflowDirty(workflow)
-        );
+        return Boolean(workflow)
+          && workflowOpenState.getOfficialWorkflowSaveState(workflow).needsSave;
       },
       saveActiveWorkflow: saveWorkspaceTopbarWorkflow,
       translate: t,
@@ -9209,12 +9199,11 @@ function installWorkspaceTopbarSaveButton() {
   if (installWorkspaceTopbarSaveButton.ready) return;
   installWorkspaceTopbarSaveButton.ready = true;
 
-  // Both Save surfaces consume the same WorkspaceKit semantic dirty state.
-  // open-state resolves graphChanged through a zero-delay dirty check so queue
-  // reconciliation can finish first. Refresh this button one turn later as well:
-  // the dirty set is then authoritative for both real edits and run-only widget
-  // mutations. Switching tabs still needs the Store subscription because it
-  // does not emit graphChanged.
+  // open-state commits semantic dirty state and then refreshes both Save surfaces
+  // together. Keep this lightweight listener as a defensive refresh for frontend
+  // event-order changes; it reads the same unified save-state accessor and cannot
+  // create an independent dirty decision. Tab switches still need the Store
+  // subscription because they do not emit graphChanged.
   app.api?.addEventListener?.("graphChanged", () => {
     window.setTimeout(() => button.refresh(), 0);
   });

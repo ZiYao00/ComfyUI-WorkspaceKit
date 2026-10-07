@@ -1,11 +1,11 @@
-// Real-page acceptance for WK Resolution Preset / Video Duration.
+// Real-page acceptance for WK Video Resolution / Video Duration.
 // Uses only in-memory graphs and API prompts; never saves a user workflow or image.
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
 const BASE_URL = process.env.WK_TEST_URL || "http://127.0.0.1:8190/";
 const NODES2_SETTING = "Comfy.VueNodes.Enabled";
-const TYPES = ["WKResolutionPreset", "WKVideoDuration"];
+const TYPES = ["WKVideoResolution", "WKVideoDuration"];
 
 async function waitForApp(page) {
   await page.waitForFunction(() => window.app?.graph && window.LiteGraph?.createNode
@@ -33,18 +33,17 @@ async function apiPromptProbe(page) {
   return page.evaluate(async () => {
     const prompt = {
       "1": {
-        class_type: "WKResolutionPreset",
+        class_type: "WKVideoResolution",
         inputs: {
           aspect_ratio: "▯ 2:3",
-          resolution_level: "2K",
-          use_custom: false,
-          custom_width: 1024,
-          custom_height: 1024,
+          megapixels: 1.0,
+          multiple: 32,
+          scale: "2.0",
         },
       },
       "2": {
         class_type: "ShowText|pysssss",
-        inputs: { text: ["1", 2] },
+        inputs: { text: ["1", 4] },
       },
       "3": {
         class_type: "WKVideoDuration",
@@ -100,7 +99,7 @@ async function rendererProbe(page) {
     app.graph.clear();
     const nodes = [];
     try {
-      for (const type of ["WKResolutionPreset", "WKVideoDuration"]) {
+      for (const type of ["WKVideoResolution", "WKVideoDuration"]) {
         const node = window.LiteGraph.createNode(type);
         if (!node) throw new Error(`Could not create ${type}`);
         app.graph.add(node);
@@ -112,7 +111,9 @@ async function rendererProbe(page) {
       const duration = nodes[1];
 
       resolution.widgets.find((w) => w.name === "aspect_ratio").value = "▭ 16:9";
-      resolution.widgets.find((w) => w.name === "resolution_level").value = "3K";
+      resolution.widgets.find((w) => w.name === "megapixels").value = 1.5;
+      resolution.widgets.find((w) => w.name === "multiple").value = 32;
+      resolution.widgets.find((w) => w.name === "scale").value = "2.5";
       duration.widgets.find((w) => w.name === "profile").value = "MiniMax H3 Local · 17n+5";
       duration.widgets.find((w) => w.name === "duration_seconds").value = 15.0;
 
@@ -152,19 +153,23 @@ async function main() {
     await waitForApp(page);
 
     const info = await objectInfoProbe(page);
-    assert.ok(info.WKResolutionPreset);
+    assert.ok(info.WKVideoResolution);
     assert.ok(info.WKVideoDuration);
     assert.equal(info.WKFrameCountRetired, true);
-    assert.deepEqual(info.WKResolutionPreset.output, ["INT", "INT", "STRING"]);
+    assert.deepEqual(info.WKVideoResolution.output, ["INT", "INT", "INT", "INT", "STRING"]);
     assert.deepEqual(info.WKVideoDuration.output, ["INT", "FLOAT", "FLOAT", "STRING"]);
 
-    const resolutionInputs = info.WKResolutionPreset.input.required;
+    const resolutionInputs = info.WKVideoResolution.input.required;
     assert.deepEqual(resolutionInputs.aspect_ratio[0], [
       "▯ 4:5", "▯ 3:4", "▯ 2:3", "▯ 9:16",
       "■ 1:1",
-      "▭ 5:4", "▭ 4:3", "▭ 3:2", "▭ 16:9", "▭ 2:1",
+      "▭ 5:4", "▭ 4:3", "▭ 3:2", "▭ 16:9", "▭ 2:1", "▭ 21:9",
     ]);
-    assert.deepEqual(resolutionInputs.resolution_level[0], ["1K", "2K", "3K", "4K", "6K", "8K"]);
+    assert.equal(resolutionInputs.megapixels[0], "FLOAT");
+    assert.equal(resolutionInputs.megapixels[1].step, 0.1);
+    assert.equal(resolutionInputs.multiple[0], "INT");
+    assert.equal(resolutionInputs.multiple[1].default, 8);
+    assert.deepEqual(resolutionInputs.scale[0], ["0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "4.0", "6.0", "8.0"]);
 
     const durationInputs = info.WKVideoDuration.input.required;
     assert.equal(durationInputs.duration_seconds[1].step, 0.1);
@@ -183,30 +188,31 @@ async function main() {
       await waitForApp(page);
       const result = await rendererProbe(page);
 
-      const resolution = result.find((item) => item.type === "WKResolutionPreset");
+      const resolution = result.find((item) => item.type === "WKVideoResolution");
       const duration = result.find((item) => item.type === "WKVideoDuration");
 
-      assert.deepEqual(resolution.outputs, ["INT", "INT", "STRING"]);
+      assert.deepEqual(resolution.outputs, ["INT", "INT", "INT", "INT", "STRING"]);
       assert.deepEqual(duration.outputs, ["INT", "FLOAT", "FLOAT", "STRING"]);
 
       assert.deepEqual(resolution.widgets, [
         "aspect_ratio",
-        "resolution_level",
-        "use_custom",
-        "custom_width",
-        "custom_height",
+        "megapixels",
+        "multiple",
+        "scale",
       ]);
       assert.deepEqual(duration.widgets, ["profile", "duration_seconds"]);
 
       assert.equal(resolution.restored.aspect_ratio, "▭ 16:9");
-      assert.equal(resolution.restored.resolution_level, "3K");
+      assert.equal(resolution.restored.megapixels, 1.5);
+      assert.equal(resolution.restored.multiple, 32);
+      assert.equal(resolution.restored.scale, "2.5");
       assert.equal(duration.restored.duration_seconds, 15);
 
       reports.push({ nodes2: enabled, result });
     }
 
     assert.equal(
-      errors.filter((error) => /WKResolutionPreset|WKVideoDuration|WKFrameCount/i.test(error)).length,
+      errors.filter((error) => /WKResolutionPreset|WKVideoResolution|WKVideoDuration|WKFrameCount/i.test(error)).length,
       0,
       JSON.stringify(errors),
     );

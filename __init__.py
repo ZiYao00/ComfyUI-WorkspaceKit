@@ -12,7 +12,7 @@ from aiohttp import web
 
 from .wk_nodes.latent_size import WKLatentSize
 from .wk_nodes.number_generators import WKFloatGenerator, WKIntegerGenerator
-from .wk_nodes.resolution_presets import WKResolutionPreset
+from .wk_nodes.resolution_presets import WKResolutionPreset, WKVideoResolution
 from .wk_nodes.video_timing import WKVideoDuration
 
 from .service.folder_meta_service import read_folder_meta, write_folder_meta
@@ -73,6 +73,7 @@ NODE_CLASS_MAPPINGS = {
     "WKIntegerGenerator": WKIntegerGenerator,
     "WKFloatGenerator": WKFloatGenerator,
     "WKResolutionPreset": WKResolutionPreset,
+    "WKVideoResolution": WKVideoResolution,
     "WKVideoDuration": WKVideoDuration,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -82,7 +83,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "WKLatentSize": "WK Latent Size",
     "WKIntegerGenerator": "WK Integer Generator",
     "WKFloatGenerator": "WK Float Generator",
-    "WKResolutionPreset": "WK Resolution Preset",
+    "WKResolutionPreset": "WK Resolution Preset (Legacy)",
+    "WKVideoResolution": "WK Video Resolution",
     "WKVideoDuration": "WK Video Duration",
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]

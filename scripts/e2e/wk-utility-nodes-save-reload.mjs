@@ -1,4 +1,4 @@
-// Persisted-workflow acceptance for WK Resolution Preset / Video Duration.
+// Persisted-workflow acceptance for WK Video Resolution / Video Duration.
 // Creates exactly one __WK_TEST__ workflow, refreshes it, verifies clean restore,
 // then removes only that test file through WorkspaceKit trash APIs.
 import assert from "node:assert/strict";
@@ -83,7 +83,7 @@ async function openTestWorkflow(page) {
 
 async function utilityState(page) {
   return page.evaluate(() => {
-    const wanted = new Set(["WKResolutionPreset", "WKVideoDuration"]);
+    const wanted = new Set(["WKVideoResolution", "WKVideoDuration"]);
     return (window.app?.graph?._nodes || [])
       .filter((node) => wanted.has(node.type))
       .map((node) => ({
@@ -121,7 +121,7 @@ const context = await browser.newContext({ viewport: { width: 1440, height: 900 
 const page = await context.newPage();
 const errors = [];
 page.on("pageerror", (error) => {
-  if (/workspacekit|workspace2|WKResolutionPreset|WKVideoDuration|WKFrameCount/i.test(error.message || "")) {
+  if (/workspacekit|workspace2|WKResolutionPreset|WKVideoResolution|WKVideoDuration|WKFrameCount/i.test(error.message || "")) {
     errors.push(error.message);
   }
 });
@@ -137,14 +137,16 @@ try {
     const app = window.app;
     const workflow = app?.extensionManager?.workflow?.activeWorkflow;
     const tracker = workflow?.changeTracker;
-    const resolution = window.LiteGraph.createNode("WKResolutionPreset");
+    const resolution = window.LiteGraph.createNode("WKVideoResolution");
     const duration = window.LiteGraph.createNode("WKVideoDuration");
     if (!resolution || !duration) throw new Error("Utility nodes unavailable");
 
     resolution.pos = [80, 100];
     duration.pos = [500, 100];
     resolution.widgets.find((w) => w.name === "aspect_ratio").value = "▯ 2:3";
-    resolution.widgets.find((w) => w.name === "resolution_level").value = "8K";
+    resolution.widgets.find((w) => w.name === "megapixels").value = 2.0;
+    resolution.widgets.find((w) => w.name === "multiple").value = 32;
+    resolution.widgets.find((w) => w.name === "scale").value = "8.0";
     duration.widgets.find((w) => w.name === "profile").value = "MiniMax H3 Local · 17n+5";
     duration.widgets.find((w) => w.name === "duration_seconds").value = 15;
 

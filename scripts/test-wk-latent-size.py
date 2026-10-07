@@ -22,6 +22,7 @@ width, height = module.calculate_dimensions(1.0, "16:9", 64)
 assert (width, height) == (1344, 768)
 assert width % 64 == 0 and height % 64 == 0
 assert module.calculate_dimensions(0.5, "3:4", 32)[0] % 32 == 0
+assert module.calculate_dimensions(0.2, "16:9", 32) == (608, 352)
 assert set(module.ASPECT_RATIOS) == {
     "1:1", "2:3", "3:4", "3:5", "4:5", "5:7", "5:8", "7:9",
     "9:16", "9:19", "9:21", "9:32", "3:2", "4:3", "5:3", "5:4",

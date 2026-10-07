@@ -66,7 +66,7 @@ def calculate_dimensions(megapixels: float, aspect_ratio: str, divisible_by: int
         raise ValueError("Divisible By must be a multiple of 8.")
 
     ratio_width, ratio_height = parse_aspect_ratio(aspect_ratio)
-    target_pixels = megapixels * 1_000_000
+    target_pixels = megapixels * 1024 * 1024
     width = round_dimension(math.sqrt(target_pixels * ratio_width / ratio_height), divisible_by)
     height = round_dimension(math.sqrt(target_pixels * ratio_height / ratio_width), divisible_by)
     if width > MAX_DIMENSION or height > MAX_DIMENSION:

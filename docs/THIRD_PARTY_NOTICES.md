@@ -1,5 +1,27 @@
 # Third-party notices
 
+## WK Video Frame Picker references (2026-10-07)
+
+`WK Video Frame Picker` is an independent WorkspaceKit implementation. No
+third-party node source, preview code, thumbnail code, or frame-decoding code was
+copied.
+
+The product behaviour was compared with the MIT-licensed
+[Slartibart23/ComfyUI-VideoFramePicker](https://github.com/Slartibart23/ComfyUI-VideoFramePicker),
+notably its in-node scrubbing, 1-based frame numbering, and current-frame IMAGE
+output. WorkspaceKit deliberately uses a smaller V1 surface: MP4/WebM input-folder
+preview, sparse browser Filmstrip, one draggable Playhead, one-frame stepping, and
+one `frame_image` output. Marker/batch behaviour is deferred while the backend is
+already multi-frame capable.
+
+Implementation conventions were also checked against current public ComfyUI /
+ComfyUI_frontend behaviour: PyAV is used by the current video stack, DOM widgets
+are attached through the extension API, widget writes use the official value
+setter, and DOM-originated mutations are bracketed with the normal graph/canvas
+change transaction so undo/dirty tracking follows the same path as human widget
+edits. WorkspaceKit does not import private Vue stores or patch LiteGraph
+prototypes.
+
 ## WK utility-node behaviour references (2026-10-07)
 
 `WK Resolution Preset` and `WK Video Duration` are independent WorkspaceKit

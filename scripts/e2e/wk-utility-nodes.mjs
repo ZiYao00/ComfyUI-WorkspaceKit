@@ -93,50 +93,44 @@ async function apiPromptProbe(page) {
 }
 
 async function rendererProbe(page) {
-  return page.evaluate(async () => {
-    const app = window.app;
-    const original = app.graph.serialize();
-    app.graph.clear();
+  return page.evaluate(() => {
+    // These backend-only utility nodes do not need the live app graph for
+    // creation, serialization, or configure/restore checks. Keeping the probe
+    // detached avoids reconfiguring whatever large user/test workflow happens
+    // to be open in the isolated browser profile.
     const nodes = [];
-    try {
-      for (const type of ["WKVideoResolution", "WKVideoDuration"]) {
-        const node = window.LiteGraph.createNode(type);
-        if (!node) throw new Error(`Could not create ${type}`);
-        app.graph.add(node);
-        nodes.push(node);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const resolution = nodes[0];
-      const duration = nodes[1];
-
-      resolution.widgets.find((w) => w.name === "aspect_ratio").value = "▭ 16:9";
-      resolution.widgets.find((w) => w.name === "megapixels").value = 1.5;
-      resolution.widgets.find((w) => w.name === "multiple").value = 32;
-      resolution.widgets.find((w) => w.name === "scale").value = "2.5";
-      duration.widgets.find((w) => w.name === "profile").value = "MiniMax H3 Local · 17n+5";
-      duration.widgets.find((w) => w.name === "duration_seconds").value = 15.0;
-
-      const report = [];
-      for (const node of nodes) {
-        const serialized = node.serialize();
-        const copy = window.LiteGraph.createNode(node.type);
-        if (!copy) throw new Error(`Could not create copy of ${node.type}`);
-        copy.configure(serialized);
-        report.push({
-          type: node.type,
-          title: node.title,
-          outputs: (node.outputs || []).map((output) => output.type),
-          widgets: (node.widgets || []).map((widget) => widget.name),
-          values: Object.fromEntries((node.widgets || []).map((widget) => [widget.name, widget.value])),
-          restored: Object.fromEntries((copy.widgets || []).map((widget) => [widget.name, widget.value])),
-        });
-      }
-      return report;
-    } finally {
-      app.graph.clear();
-      app.graph.configure(original);
+    for (const type of ["WKVideoResolution", "WKVideoDuration"]) {
+      const node = window.LiteGraph.createNode(type);
+      if (!node) throw new Error(`Could not create ${type}`);
+      nodes.push(node);
     }
+
+    const resolution = nodes[0];
+    const duration = nodes[1];
+
+    resolution.widgets.find((w) => w.name === "aspect_ratio").value = "▭ 16:9";
+    resolution.widgets.find((w) => w.name === "megapixels").value = 1.5;
+    resolution.widgets.find((w) => w.name === "multiple").value = 32;
+    resolution.widgets.find((w) => w.name === "scale").value = "2.5";
+    duration.widgets.find((w) => w.name === "profile").value = "MiniMax H3 Local · 17n+5";
+    duration.widgets.find((w) => w.name === "duration_seconds").value = 15.0;
+
+    const report = [];
+    for (const node of nodes) {
+      const serialized = node.serialize();
+      const copy = window.LiteGraph.createNode(node.type);
+      if (!copy) throw new Error(`Could not create copy of ${node.type}`);
+      copy.configure(serialized);
+      report.push({
+        type: node.type,
+        title: node.title,
+        outputs: (node.outputs || []).map((output) => output.type),
+        widgets: (node.widgets || []).map((widget) => widget.name),
+        values: Object.fromEntries((node.widgets || []).map((widget) => [widget.name, widget.value])),
+        restored: Object.fromEntries((copy.widgets || []).map((widget) => [widget.name, widget.value])),
+      });
+    }
+    return report;
   });
 }
 

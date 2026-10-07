@@ -228,6 +228,8 @@ flow.json
 
 **WK 实用节点：**`WK Video Resolution` 按 ComfyUI 官方公式（`target_pixels = megapixels × 1024 × 1024`）结合画面比例与像素倍数对齐，计算基础 `width` / `height`。节点另外提供视频常用倍率 `0.5`、`1.0`、`1.5`、`2.0`、`2.5`、`3.0`、`4.0`、`6.0`、`8.0`，并严格按倍率得到第二组 `scale_width` / `scale_height`，不做二次对齐。`resolution` 同时包含两套完整信息，例如 `1376 × 768 → 2064 × 1152 · scale 1.5`。`WK Video Duration` 直接输入秒数并换算为模型合法 `length`，秒数输入按 `0.1s` 精度取整，`actual_seconds` 也固定返回 1 位小数。首批 Timing Profile 为 `WAN 2.x Local · 4n+1`（16 FPS）、`LTX 2.5 Local · 8n+1`（24 FPS）、`MiniMax H3 Local · 17n+5`（24 FPS）。FPS 完全属于所选 Profile，只作为输出提供给下游，不再暴露用户可覆盖的输入。帧网格校正保留为 Duration 的内部能力，不再公开单独的 `WK Frame Count` 节点。
 
+**WK Video Frame Picker（V1）：**从 ComfyUI `input` 目录选择 MP4/WebM，通过轻量 12 张缩略图 Filmstrip 快速了解整段视频；可直接拖动 Playhead 快速找帧，再用 `◀ 1` / `1 ▶` 做逐帧微调。帧号统一采用 1-based（Frame 1 = 第一帧）。拖动过程中只更新浏览器预览，不在每次 pointer move 修改工作流；松手时才一次性提交最终帧，因此选帧状态可以正常触发 dirty、保存并在刷新后恢复。V1 只公开一个稳定输出 `frame_image`（`IMAGE`）。后端从第一版就按“多个帧索引 → Comfy IMAGE Batch”设计，未来加入 Marker 后的 `batch_key_image` 可直接复用，不需要改变 `frame_image` 合同。
+
 ### WK 模板
 
 ![WK 模板](Preview/005.jpg)

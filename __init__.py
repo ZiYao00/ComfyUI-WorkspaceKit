@@ -14,6 +14,7 @@ from .wk_nodes.latent_size import WKLatentSize
 from .wk_nodes.number_generators import WKFloatGenerator, WKIntegerGenerator
 from .wk_nodes.resolution_presets import WKResolutionPreset, WKVideoResolution
 from .wk_nodes.video_timing import WKVideoDuration
+from .wk_nodes.video_frame_picker import WKVideoFramePicker, resolve_input_video
 
 from .service.folder_meta_service import read_folder_meta, write_folder_meta
 from .service.folder_dissolve_service import dissolve_folder, flatten_folder
@@ -38,6 +39,7 @@ from .service.template_library_service import read_template_library, write_templ
 from .service.theme_storage import MAX_REQUEST_BYTES, ThemeStorage, ThemeStorageError
 from .service.workflow_favorites_service import read_workflow_favorites, write_workflow_favorites
 from .service.workflow_copy_service import copy_workflow_file
+from .service.video_frame_service import probe_video
 from .service.workspace_data_bundle import build_workspace_data_bundle, import_workspace_data_bundle
 from .service.trash_service import (
     empty_trash_to_system_trash,
@@ -75,6 +77,7 @@ NODE_CLASS_MAPPINGS = {
     "WKResolutionPreset": WKResolutionPreset,
     "WKVideoResolution": WKVideoResolution,
     "WKVideoDuration": WKVideoDuration,
+    "WKVideoFramePicker": WKVideoFramePicker,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     # The mapping key remains legacy-compatible; this string is what users see
@@ -86,6 +89,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "WKResolutionPreset": "WK Resolution Preset (Legacy)",
     "WKVideoResolution": "WK Video Resolution",
     "WKVideoDuration": "WK Video Duration",
+    "WKVideoFramePicker": "WK Video Frame Picker",
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 
@@ -309,6 +313,20 @@ def scan_workflow_subtree(relative_path):
 
 def _json_error(message, status=400):
     return _json_response({"ok": False, "error": message}, status=status)
+
+
+@server.PromptServer.instance.routes.get("/workspacekit/video-frame/metadata")
+async def workspacekit_video_frame_metadata(request):
+    try:
+        video = request.query.get("video", "")
+        path = resolve_input_video(video)
+        metadata = await asyncio.to_thread(probe_video, path)
+        return _json_response({"ok": True, "video": video, "metadata": metadata})
+    except (ValueError, FileNotFoundError) as exc:
+        return _json_error(str(exc), status=400)
+    except Exception as exc:
+        print(f"[WorkspaceKit] Video frame metadata failed: {exc}")
+        return _json_error("Video frame metadata failed.", status=500)
 
 
 @server.PromptServer.instance.routes.post("/workspacekit-theme/save")

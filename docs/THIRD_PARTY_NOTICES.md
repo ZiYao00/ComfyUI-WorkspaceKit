@@ -1,5 +1,27 @@
 # Third-party notices
 
+## WK utility-node behaviour references (2026-10-07)
+
+`WK Resolution Preset` and `WK Video Duration` are independent WorkspaceKit
+implementations. No third-party source code was copied.
+
+Resolution-preset product behaviour was reviewed from
+[zscxjpk/ComfyUI-QZ_plugins](https://github.com/zscxjpk/ComfyUI-QZ_plugins),
+notably `QZ_ResolutionPreset.py`. WorkspaceKit keeps only the convenience concept
+while using an independent ratio-first design: portrait / square / landscape
+Unicode markers, 1K/2K/3K/4K/6K/8K long-edge levels, nearest-x8 short-edge alignment, and
+optional exact custom dimensions. The QZ project is retained only as a
+behavioural/product reference.
+
+Video timing profiles are based on current public ComfyUI / Comfy-Org behaviour:
+WAN 2.x uses a `4n+1` frame grid with the workflow baseline
+`floor(seconds * fps + 1)`; LTX 2.5 uses an `8n+1` grid with
+`seconds * fps + 1`; MiniMax H3 uses a fixed 24 FPS timing rule with a `17n+5`
+grid and the official workflow's `round(seconds * 24)` baseline before alignment.
+Frame-grid alignment is an internal helper used by `WK Video Duration`, not a
+separate public node. These rules are represented as profile data and pure
+calculations; no ComfyUI or workflow-template implementation code is copied.
+
 ## WK Latent Size references (2026-08-17)
 
 `WK Latent Size` independently implements a compact backend-only node after

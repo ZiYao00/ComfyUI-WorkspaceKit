@@ -226,6 +226,8 @@ flow.json
 
 **WK 数字生成节点：**`WK Integer Generator` 同时输出 `INT` 和对应数字文本 `STRING`；`WK Float Generator` 同时输出 `FLOAT` 和对应数字文本 `STRING`。两者可设置当前值、最小值、最大值和步长；浮点节点还可设置 1–6 位小数。节点界面的英文 `control before generate` 位于 `value` 下方第 2 行，默认 `randomize`，并可选 `fixed`、`increment`、`decrement`；第一次排队前就会更新数值。增加／减少到边界后停住；整数随机包含两端（`-4～2` 共 7 个候选值）。浮点随机从所选小数位可表示的数值中抽取，步长仅用于增加／减少。仅通过 API 提交工作流时直接使用传入的 `value`，不会执行浏览器里的自动控制。
 
+**WK 实用节点：**`WK Resolution Preset` 改为与模型无关的「比例 + K 等级」选择。比例菜单使用 `▯` 表示竖屏（`4:5`、`3:4`、`2:3`、`9:16`），中间用实心 `■` 表示方屏（`1:1`），使用 `▭` 表示宽屏（`5:4`、`4:3`、`3:2`、`16:9`、`2:1`）；不再显示 WAN / Qwen 等模型前缀。K 等级按 ComfyUI 长边口径计算：`1K ≈ 1024`、`2K ≈ 2048`、`3K ≈ 3072`、`4K ≈ 4096`、`6K ≈ 6144`、`8K ≈ 8192`，短边按比例反算后取最近的 8 倍数；仍保留精确自定义宽高。`WK Video Duration` 直接输入秒数并换算为模型合法 `length`，秒数输入按 `0.1s` 精度取整，`actual_seconds` 也固定返回 1 位小数。首批 Timing Profile 为 `WAN 2.x Local · 4n+1`（16 FPS）、`LTX 2.5 Local · 8n+1`（24 FPS）、`MiniMax H3 Local · 17n+5`（24 FPS）。FPS 完全属于所选 Profile，只作为输出提供给下游，不再暴露用户可覆盖的输入。帧网格校正保留为 Duration 的内部能力，不再公开单独的 `WK Frame Count` 节点。
+
 ### WK 模板
 
 ![WK 模板](Preview/005.jpg)

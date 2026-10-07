@@ -1,5 +1,14 @@
 # WorkspaceKit Testing Log
 
+## 2026-10-07 - WK Resolution Preset / Video Duration final surface
+
+- Finalized two standard backend utility nodes with no renderer-specific frontend code: `WK Resolution Preset` and `WK Video Duration`. The previously prototyped public `WK Frame Count` node was removed before commit/release; its frame-grid helper remains internal to video-duration calculation.
+- `WK Resolution Preset` is ratio-first and model-agnostic. Its serialized aspect-ratio options are `▯ 4:5`, `▯ 3:4`, `▯ 2:3`, `▯ 9:16`, solid-square `■ 1:1`, then `▭ 5:4`, `▭ 4:3`, `▭ 3:2`, `▭ 16:9`, `▭ 2:1`. K levels are `1K/2K/3K/4K/6K/8K` with long edges `1024/2048/3072/4096/6144/8192`; the short edge is ratio-derived and rounded to the nearest multiple of 8. Exact custom dimensions remain available.
+- Pure-Python contracts lock representative results including `▯ 2:3 + 1K → 680×1024`, `▯ 2:3 + 2K → 1368×2048`, `▭ 16:9 + 3K → 3072×1728`, `▯ 4:5 + 4K → 3280×4096`, `▭ 16:9 + 6K → 6144×3456`, and `▯ 2:3 + 8K → 5464×8192`.
+- Video timing remains centralized in `wk_nodes/video_timing.py`. Each profile now owns a single authoritative FPS: `WAN 2.x Local · 4n+1` uses 16 FPS, `LTX 2.5 Local · 8n+1` uses 24 FPS, and `MiniMax H3 Local · 17n+5` uses 24 FPS. The former `default_fps`, `fps_policy`, `resolve_fps`, and `custom_fps` override path were removed. `duration_seconds` uses `step=0.1` plus ComfyUI `round=0.1`; `actual_seconds` is returned to one decimal place, e.g. H3 `5.0s → length 124 → 5.2s`.
+- Final acceptance verifies that `WK Video Duration` exposes exactly two inputs (`profile`, `duration_seconds`), `/prompt` execution uses the profile-owned FPS, Legacy and Nodes 2.0 serialize/configure correctly, and `scripts/e2e/wk-utility-nodes-save-reload.mjs` preserves `resolution_level=8K` plus the duration profile/value across save → refresh while remaining clean.
+- Existing Number Generator Legacy/Nodes 2.0 queue tests, saved-workflow dirty-state test, and `T-058` top-bar save synchronization all passed after the utility-node changes. The main `:8188` instance was not restarted.
+
 ## 2026-10-07 - Number Generator saved-workflow dirty-state closure
 
 - Added `scripts/e2e/wk-number-generator-save-dirty.mjs` against the isolated `:8190` test package. A persisted workflow containing `WK Integer Generator → Show Text` is saved clean, the first `increment` queue submits `value=1`, and WorkspaceKit's top-bar Save treatment plus Open-row dirty dot remain clean after the queue-time widget mutation.

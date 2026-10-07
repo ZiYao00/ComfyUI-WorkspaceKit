@@ -12,6 +12,8 @@ from aiohttp import web
 
 from .wk_nodes.latent_size import WKLatentSize
 from .wk_nodes.number_generators import WKFloatGenerator, WKIntegerGenerator
+from .wk_nodes.resolution_presets import WKResolutionPreset
+from .wk_nodes.video_timing import WKVideoDuration
 
 from .service.folder_meta_service import read_folder_meta, write_folder_meta
 from .service.folder_dissolve_service import dissolve_folder, flatten_folder
@@ -70,6 +72,8 @@ NODE_CLASS_MAPPINGS = {
     "WKLatentSize": WKLatentSize,
     "WKIntegerGenerator": WKIntegerGenerator,
     "WKFloatGenerator": WKFloatGenerator,
+    "WKResolutionPreset": WKResolutionPreset,
+    "WKVideoDuration": WKVideoDuration,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     # The mapping key remains legacy-compatible; this string is what users see
@@ -78,6 +82,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "WKLatentSize": "WK Latent Size",
     "WKIntegerGenerator": "WK Integer Generator",
     "WKFloatGenerator": "WK Float Generator",
+    "WKResolutionPreset": "WK Resolution Preset",
+    "WKVideoDuration": "WK Video Duration",
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 

@@ -224,6 +224,8 @@ flow.json
 | Sort | Change the node display order. |
 | Favorite Manager | Import, export, back up, and restore official and WorkspaceKit favorites. |
 
+**WK number generators:** `WK Integer Generator` outputs `INT` and matching numeric `STRING`; `WK Float Generator` outputs `FLOAT` and matching numeric `STRING`. Both expose value, minimum, maximum, and step. The float node also exposes decimal places (1–6). The browser-only **control before generate** widget is directly below `value`, defaults to `randomize`, and offers mutually exclusive `fixed`, `increment`, `decrement`, and `randomize` modes. It updates the value before the first queued generation. Increment/decrement stop at the selected bound; randomize includes both bounds (`-4` through `2` gives seven possible integers). Float randomization chooses from the values representable at the selected decimal precision; step applies only to increment/decrement. An API-only prompt supplies `value` directly and does not advance the browser control.
+
 ### WK Templates
 
 ![WK Templates](Preview/005.jpg)

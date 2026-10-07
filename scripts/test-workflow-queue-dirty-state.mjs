@@ -173,6 +173,7 @@ try {
   );
 
   // Saving establishes a clean baseline synchronously and cancels pending state.
+  activeWorkflow.isModified = false;
   openState.setCleanState(graph, "demo.json");
   assert.equal(openState.getOfficialWorkflowSaveState(activeWorkflow).needsSave, false);
 
@@ -207,6 +208,7 @@ try {
   // A queue that starts clean but sees a real graphChanged before promptQueued
   // is tainted. This models a user/third-party edit while authentication or a
   // queue request is still in flight.
+  activeWorkflow.isModified = false;
   openState.setCleanState(graph, "demo.json");
   api.dispatch("promptQueueing", { requestId: 3, batchCount: 1 });
   graph = clone(graph);
@@ -225,6 +227,7 @@ try {
   // Rapid queue requests may overlap. The first execution reconciliation must
   // not taint the later request when its graphChanged matches the newly
   // advanced effective baseline.
+  activeWorkflow.isModified = false;
   openState.setCleanState(graph, "demo.json");
   api.dispatch("promptQueueing", { requestId: 4, batchCount: 1 });
   api.dispatch("promptQueueing", { requestId: 5, batchCount: 1 });
@@ -257,6 +260,7 @@ try {
   // Older frontends without requestId cannot be proven safe. They must fall
   // back to ordinary dirty detection rather than guessing that a change was
   // execution-only.
+  activeWorkflow.isModified = false;
   openState.setCleanState(graph, "demo.json");
   api.dispatch("promptQueueing", { batchCount: 1 });
   graph = clone(graph);

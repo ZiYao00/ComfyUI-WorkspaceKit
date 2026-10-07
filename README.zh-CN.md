@@ -224,6 +224,8 @@ flow.json
 | 排序 | 调整节点显示顺序。 |
 | 收藏管理 | 导入、导出、备份和恢复官方收藏与 WorkspaceKit 收藏。 |
 
+**WK 数字生成节点：**`WK Integer Generator` 同时输出 `INT` 和对应数字文本 `STRING`；`WK Float Generator` 同时输出 `FLOAT` 和对应数字文本 `STRING`。两者可设置当前值、最小值、最大值和步长；浮点节点还可设置 1–6 位小数。节点界面的英文 `control before generate` 位于 `value` 下方第 2 行，默认 `randomize`，并可选 `fixed`、`increment`、`decrement`；第一次排队前就会更新数值。增加／减少到边界后停住；整数随机包含两端（`-4～2` 共 7 个候选值）。浮点随机从所选小数位可表示的数值中抽取，步长仅用于增加／减少。仅通过 API 提交工作流时直接使用传入的 `value`，不会执行浏览器里的自动控制。
+
 ### WK 模板
 
 ![WK 模板](Preview/005.jpg)

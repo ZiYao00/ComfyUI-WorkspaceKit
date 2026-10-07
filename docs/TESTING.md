@@ -1,5 +1,26 @@
 # WorkspaceKit Testing Log
 
+## 2026-10-07 - Number Generator saved-workflow dirty-state closure
+
+- Added `scripts/e2e/wk-number-generator-save-dirty.mjs` against the isolated `:8190` test package. A persisted workflow containing `WK Integer Generator → Show Text` is saved clean, the first `increment` queue submits `value=1`, and WorkspaceKit's top-bar Save treatment plus Open-row dirty dot remain clean after the queue-time widget mutation.
+- The probe exposed a queue-start false negative in WorkspaceKit's semantic reconciliation: the live graph may contain runtime-injected metadata such as empty `extra.ue_links` even while ComfyUI's official workflow reports `isModified=false`. Queue transactions now treat ComfyUI-clean state plus the absence of a WorkspaceKit-confirmed dirty marker as a clean start instead of requiring the live semantic snapshot to byte-match the stored baseline. Existing taint handling still fails closed for an actual graph edit during queueing.
+- Validation passed: `npm.cmd test` (118 JavaScript contracts, 10 Python contracts, release-version `0.2.6`), `scripts/e2e/wk-number-generators.mjs` in Legacy and Nodes 2.0 with real submitted values `1 → 2`, the new saved-workflow dirty-state E2E, and `scripts/e2e/t058-topbar-save-sync.mjs`. The main `:8188` instance was not restarted.
+
+## 2026-09-28 - WK number control English label, second row, random default
+
+- Before this independent adjustment, created and opened `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-number-control-english-order-default-20260928-225821.zip`: 507 source entries, 23,527,472 bytes, SHA-256 `6EE096CBBC316F52E78F94206F100FA3310B78E0C6767AC2337198362976918D`.
+- The two WK number nodes now show `control before generate` immediately under `value`, default to `randomize`, and retain the existing before-first-queue behavior. Existing workflows saved with the former last-row control position are restored by their legacy positional order; the node's type and numeric input names are unchanged.
+- `npm.cmd test` passed: 118 JavaScript contracts, 10 Python contracts, release-version check `0.2.6`. `scripts/e2e/wk-number-generators.mjs` passed on test instance `:8190` for Legacy and Nodes 2.0, including the English label, widget order, default randomize, both random endpoints, current and former save-order restoration, and two real queued values `1 → 2`. The existing WK Latent Size Legacy smoke also passed. The main `:8188` instance was not restarted.
+
+## 2026-09-28 - WK Integer / Float Generator (test package :8190)
+
+- Before editing, created and opened `.codex-backups/40-templates-nodes/ComfyUI-WorkspaceKit-before-wk-number-generators-20260928-211257.zip`: 501 source entries, 23,518,535 bytes, no excluded directory entries, SHA-256 `135CDF2CC7EBCEAB63B299ADB51956E16039E8FA32B1BE8F3CFAD000D76A9661`.
+- `npm.cmd test` passed after the final floating-point artifact tolerance update: 118 JavaScript contracts, 10 Python contracts, release-version check `0.2.6`.
+- Restarted only the CPU test instance on `:8190`; `:8188` main instance was not restarted. Test instance used WorkspaceKit's Junction to this repository. `/object_info/WKIntegerGenerator` exposed `INT, STRING`, and `/object_info/WKFloatGenerator` exposed `FLOAT, STRING`.
+- `scripts/e2e/wk-number-generators.mjs` passed in isolated browser contexts with Legacy and Nodes 2.0 (ComfyUI frontend `1.53.6`). Both nodes were created and removed in memory; widget modes survived serialize/configure; deterministic random boundary probes returned `-4` and `2`; float increase from `0.3` returned `0.4`; no WK-related page error was observed. A temporary `WK Integer Generator → Show Text` graph was queued twice in each renderer, and the actual `/api/prompt` requests contained values `1` then `2`. The original in-memory graph and Nodes 2.0 setting were restored.
+- Two isolated `/prompt` calls using only a WK generator and `ShowText|pysssss` completed successfully: integer `-4` produced text `-4`, float `2.0` produced text `2.0`. No image or workflow file was written. These API calls do not exercise browser-side automatic control.
+- The clean *saved* workflow case is now covered by `scripts/e2e/wk-number-generator-save-dirty.mjs`; see the 2026-10-07 closure entry above for the real-page result and the queue-start compatibility correction.
+
 ## 2026-09-22 - Canvas Group natural-refresh recovery
 
 - User-facing defect: a WorkspaceKit canvas group could be created successfully and exist in `groups`, `graph.extra.xzgGroups`, `LGraph.serialize()`, and the local fallback, but disappear after a normal browser refresh. A controlled `:8190` reproduction showed the next page loading a disk/draft snapshot with zero saved groups; the old `LGraph.configure` path replaced the pending local recovery with that empty snapshot, restored zero groups, then the 5-second sync deleted the only remaining fallback.

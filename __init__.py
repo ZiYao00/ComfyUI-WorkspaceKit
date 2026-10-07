@@ -11,6 +11,7 @@ import server
 from aiohttp import web
 
 from .wk_nodes.latent_size import WKLatentSize
+from .wk_nodes.number_generators import WKFloatGenerator, WKIntegerGenerator
 
 from .service.folder_meta_service import read_folder_meta, write_folder_meta
 from .service.folder_dissolve_service import dissolve_folder, flatten_folder
@@ -67,12 +68,16 @@ class Workspace2Title:
 NODE_CLASS_MAPPINGS = {
     "Workspace2Title": Workspace2Title,
     "WKLatentSize": WKLatentSize,
+    "WKIntegerGenerator": WKIntegerGenerator,
+    "WKFloatGenerator": WKFloatGenerator,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     # The mapping key remains legacy-compatible; this string is what users see
     # in the ComfyUI node menu and can follow the new public brand.
     "Workspace2Title": "WK Transparent Title",
     "WKLatentSize": "WK Latent Size",
+    "WKIntegerGenerator": "WK Integer Generator",
+    "WKFloatGenerator": "WK Float Generator",
 }
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 

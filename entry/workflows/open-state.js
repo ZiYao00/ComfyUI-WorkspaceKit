@@ -243,10 +243,19 @@ export function createWorkflowOpenState({
       && !workflow?.isModified;
     if (!baseline && !pendingClean) return;
 
+    // The live graph can contain runtime-injected metadata that ComfyUI does
+    // not consider an edit (for example an empty extra.ue_links array). Queue
+    // start cleanliness therefore follows ComfyUI's own isModified flag plus
+    // WorkspaceKit's already-confirmed dirty state, rather than requiring the
+    // live semantic snapshot to byte-match the stored clean baseline.
+    const startedClean = !workflow?.isModified
+      && !state.officialWorkflowDirtyPaths.has(path)
+      && !officialBaselinePendingDirtyPaths.has(path);
+
     officialQueueTransactions.set(requestId, {
       path,
       beforeSnapshot,
-      startedClean: baseline ? beforeSnapshot === baseline : pendingClean,
+      startedClean,
       tainted: false,
     });
     trimQueueTransactions();

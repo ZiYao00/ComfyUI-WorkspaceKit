@@ -17,6 +17,40 @@ verbatim minified source, so single letters are minifier-renamed locals.
 > package's frontend version changes, re-verify anything you depend on before
 > trusting it. Record the new version alongside the old rather than overwriting.
 
+## Verified supplement — 2026-10-08, ComfyUI 0.38.0 / Frontend 1.53.10
+
+**Scope:** Canvas Groups workflow metadata lifecycle and dirty/undo/save integration.
+The older 1.45.20 drawing/geometry facts below have **not** been automatically
+promoted to 1.53.10. This supplement is independently supported by the 8190
+runtime tests and the version-tagged official source:
+
+- [ChangeTracker.ts at v1.53.10](https://github.com/Comfy-Org/ComfyUI_frontend/blob/v1.53.10/src/scripts/changeTracker.ts):
+  `captureCanvasState()` clones `app.rootGraph.serialize()`, compares workflow
+  `extra` (except viewport `ds`), pushes undo and updates modified state.
+  A plain repaint/graph `change()` is **not** a substitute for an explicit
+  state capture after a WorkspaceKit-only group metadata edit. During an active
+  transaction or graph loading, the tracker guards against capturing a partial
+  state. The active-workflow tracker is the only valid owner.
+- [Workflow Service at v1.53.10](https://github.com/Comfy-Org/ComfyUI_frontend/blob/v1.53.10/src/platform/workflow/core/services/workflowService.ts):
+  official Save/Save As uses the Workflow Store and ChangeTracker preparation;
+  workflow switching handles draft capture and activation. Saving exclusively
+  through a `graphToPrompt` wrapper is insufficient for the official Save path.
+- [Extension lifecycle at v1.53.10](https://github.com/Comfy-Org/ComfyUI_frontend/blob/v1.53.10/docs/extensions/core.md):
+  `init()` is an early extension lifecycle stage; the `setup()` stage runs
+  later, and `beforeConfigureGraph`/`afterConfigureGraph` apply to loads.
+  WorkspaceKit now installs its group core via idempotent `init()` with a
+  `setup()` fallback, while the remaining root-only `LGraph.configure`
+  compatibility hook is still separately regression-tested.
+- **Observed failure before the fix:** global `LGraph.serialize` injected
+  current overlay groups into a foreign graph and erased saved groups when UI
+  projection was temporarily empty. New real-page regression first failed on
+  both conditions, then passed after making `graph.extra.xzgGroups` canonical.
+  ComfyUI's official Save → disk → F5 → official Open, Undo/Redo and A/B
+  workflow-switching tests also passed at `:8190`. See `docs/TESTING.md`.
+
+Do **not** generalize this supplement to a different frontend release or use
+it to justify returning to multi-authority graph/node/local backup writes.
+
 **How to extract more cheaply than grep:**
 
 ```bash

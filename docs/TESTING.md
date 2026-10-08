@@ -1,5 +1,21 @@
 # WorkspaceKit Testing Log
 
+## 2026-10-08 - Canvas Groups persistent-state root-cause repair (:8190 only)
+
+- **Target runtime:** ComfyUI Core `0.38.0`, Frontend `1.53.10`. The user's main `:8188` instance was not restarted or modified. All persisted fixture work was confined to uniquely named `__WK_TEST__` workflows on `:8190`; successful fixtures were moved to the test-package trash, not permanently deleted.
+- **Pre-fix reproduction:** `scripts/e2e/wk-group-lifecycle-regression.mjs` first failed because `LGraph.prototype.serialize` projected the *active* WorkspaceKit overlay into an unrelated graph (`unrelatedCount=1`) and overwrote an existing serialized `extra.xzgGroups` during pre-restore empty in-memory state (`persistedCount=1`, `partialSerializedCount=0`). Additional checks reproduced old-style attributes overriding an incoming workflow and an explicit empty canonical map resurrecting stale node markers.
+- **Root repair:** `graph.extra.xzgGroups` is the canonical workflow representation. Removed the global `LGraph.serialize` override, duplicate `graphToPrompt` and `loadGraphData` wrappers, and the unconditional five-second writeback. Restricted remaining compatibility `LGraph.configure` handling to the live root; never merge outgoing group style/title into incoming workflow data. Legacy top-level/node fields only migrate when canonical `extra.xzgGroups` is absent; `{}` explicitly means no groups. Removed stale node markers after ungroup/delete. Scoped recovery remains initial-boot-only and is promoted to `graph.extra` immediately if used.
+- **Official lifecycle:** `entry/entry.js` registers the group manager in the early extension `init()` lifecycle with an idempotent `setup()` fallback. Explicit user changes persist into `graph.extra` **before** `commitGroupChange()` calls the active workflow ChangeTracker's `captureCanvasState()`. This makes group creation, rename, style/global style, drag, resize, execution mode and removal visible to the official Save/Undo/Redo paths. Existing Layout-owned ChangeTracker transactions remain authoritative.
+- **Real-browser acceptance:**
+  - `node scripts/e2e/wk-group-lifecycle-regression.mjs`: PASS (foreign graph isolation, safe pre-restore serialization, exact incoming title, explicit canonical empty, legacy migration/promote).
+  - `node scripts/e2e/wk-group-official-save-refresh.mjs`: PASS (official top-bar Save to disk, F5 and official Open recover matching group ID/title/DOM, UI rename marks dirty, Undo/Redo both restore exact titles, delete/Undo/Redo, save empty and F5 without resurrection).
+  - `node scripts/e2e/wk-group-workflow-switch.mjs`: PASS (identical-node workflow B → A → B → A, exact graph/overlay isolation; no A groups appear in B).
+  - `node scripts/e2e/canvas-group-natural-refresh.mjs`: PASS (unsaved group natural F5 without assisted initialization).
+  - `node scripts/e2e/p0-canvas-group-reload-nodes2.mjs` and `node scripts/e2e/p0-canvas-group-conversion-nodes2.mjs`: PASS (Nodes 2.0 bounds/members/positions preservation; WK/native bidirectional conversion).
+  - `node scripts/e2e/wk-group-module-singleton.mjs`: PASS (versioned/unversioned manager import maps to the same instance in the tested runtime).
+- **Full contracts:** `npm.cmd test` PASS — 120 JavaScript contracts, 13 Python contracts, release-version check `0.2.6`. This is a `:8190` automated browser acceptance, **not** a claim that the user's ongoing `:8188` workspaces have been manually verified.
+- **Remaining compatibility boundary:** `LGraphNode.serialize/configure` and root `LGraph.configure` still exist for legacy workflow migration. They should not be removed without a separate target-version migration review and old-file fixtures. Do not reintroduce graph-wide serialization monkey-patching or periodic empty-map writeback.
+
 ## 2026-10-08 - WK Video Frame Picker V2
 
 - V2 extends the existing `WK Video Frame Picker` rather than adding a second node. The V1 positional inputs remain first (`video`, 1-based `frame_index`); a hidden persisted `key_frames` STRING is appended as input 3. Marker JSON is normalized to sorted, unique, 1-based integers and serialized canonically (for example `[123,223]`). A simulated V1 workflow containing only the original two positional `widgets_values` restores without migration and receives the V2 default `key_frames="[]"`.

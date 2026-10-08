@@ -361,6 +361,7 @@ const Workspace2CanvasGroups = {
     _recoveryBackupEnvelope: null,
     _bootRecoveryOpen: true,
     _allowScopedRecovery: false,
+    _restoreFromRecovery: false,
     _restoreRetryTimer: null,
 
     setNoticeHandler(handler) {
@@ -962,7 +963,10 @@ const Workspace2CanvasGroups = {
 
         if (Object.keys(this.groups).length === 0) {
             const graph = app?.graph;
-            if (graph?._nodes?.length) {
+            // An explicit canonical empty group map means the workflow was
+            // ungrouped. Legacy node markers must not resurrect those groups.
+            if (graph?._nodes?.length
+                    && !Object.prototype.hasOwnProperty.call(graph.extra || {}, 'xzgGroups')) {
                 let hasGroupData = false;
                 for (const n of graph._nodes) {
                     if (n._xzgGroupId || n._xzgGroupData || n.properties?._xzgGroup) {
@@ -1743,9 +1747,8 @@ const Workspace2CanvasGroups = {
         });
 
         this.renderGroup(gid);
-        app.graph?.setDirtyCanvas?.(true, true);
-        app.graph?.change?.();
         this.syncGroupsToExtra();
+        this.commitGroupChange();
         console.log('[Workspace2 Canvas Groups] 创建:', gid, directNodeIds.length, '直接节点', childGroupIds.size, '子编组');
     },
 
@@ -1779,9 +1782,8 @@ const Workspace2CanvasGroups = {
         };
         this.renderGroup(gid);
         this.selectOnlyGroup(gid);
-        app.graph?.setDirtyCanvas?.(true, true);
-        app.graph?.change?.();
         this.syncGroupsToExtra();
+        this.commitGroupChange();
         console.log('[Workspace2 Canvas Groups] 创建空白编组:', gid);
         return true;
     },
@@ -2852,9 +2854,9 @@ const Workspace2CanvasGroups = {
             this.syncGroupsToExtra();
             this.writeGroupDataToNodes();
 
-            // 先同步新数据，再触发 graph.change，避免恢复链路读到旧编组数据。
-            app.graph?.setDirtyCanvas?.(true, true);
-            app.graph?.change?.();
+            // Capture committed group appearance and geometry in the official
+            // workflow history, not only the canvas repaint queue.
+            this.commitGroupChange();
             window.Workspace2CanvasGroupsLastApply = {
                 at: Date.now(),
                 groupId: currentGroup.id,
@@ -2979,11 +2981,9 @@ const Workspace2CanvasGroups = {
             }
             this.rebuildAllEls();
 
-            // 标记工作流已修改
-            app.graph?.setDirtyCanvas?.(true, true);
-            app.graph?.change?.();
+            // Persist first, then create exactly one official state snapshot.
             this.syncGroupsToExtra();
-            this.writeGroupDataToNodes();
+            this.commitGroupChange();
             // Keep the dialog open for further refinement, but do not let a
             // later Cancel falsely undo only the current group after a global
             // operation has already committed every group.
@@ -3038,9 +3038,7 @@ const Workspace2CanvasGroups = {
             const newTitle = rawTitle || this.uniqueGroupTitle(undefined, group.id);
             group.title = this.uniqueGroupTitle(newTitle, group.id);
             this.syncGroupsToExtra();
-            this.writeGroupDataToNodes();
-            app.graph?.setDirtyCanvas?.(true, true);
-            app.graph?.change?.();
+            this.commitGroupChange();
             const ns = document.createElement('span');
             ns.className = 'xzg-group-title-text';
             // Rebuild the span with the same style contract buildGroupEl uses.
@@ -3217,7 +3215,7 @@ const Workspace2CanvasGroups = {
             const el = self.groupEls[group.id];
             if (el) el._xzgSyncFrame = 10;
             self.syncGroupsToExtra();
-            graph.change?.();
+            self.commitGroupChange(graph);
         });
         this._suspendMembershipSync = true;
         // Nodes 2.0 owns pointer-captured gestures.  In that renderer a
@@ -3292,7 +3290,7 @@ const Workspace2CanvasGroups = {
                 if (el) el._xzgSyncFrame = 10;
             });
             self.syncGroupsToExtra();
-            graph.change?.();
+            self.commitGroupChange(graph);
         });
         DRAG_MOVE_EVENT_NAMES.forEach((name) => document.addEventListener(name, onMove, true));
         DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.addEventListener(name, onUp, true));
@@ -3368,7 +3366,7 @@ const Workspace2CanvasGroups = {
                     if (el) el._xzgSyncFrame = 10;
                 });
                 self.syncGroupsToExtra();
-                graph.change?.();
+                self.commitGroupChange(graph);
             });
         });
         DRAG_MOVE_EVENT_NAMES.forEach((name) => {
@@ -3417,7 +3415,7 @@ const Workspace2CanvasGroups = {
             // reconciled immediately from the final visible bounds.
             self.syncNodeMembership(group, group.bounds);
             self.syncGroupsToExtra();
-            app.graph?.change?.();
+            self.commitGroupChange();
         });
         DRAG_MOVE_EVENT_NAMES.forEach((name) => document.addEventListener(name, onMove, true));
         DRAG_TEARDOWN_EVENT_NAMES.forEach((name) => document.addEventListener(name, onUp, true));
@@ -3590,9 +3588,7 @@ const Workspace2CanvasGroups = {
         }
 
         this.syncGroupsToExtra();
-        this.writeGroupDataToNodes();
-        graph.setDirtyCanvas?.(true, true);
-        graph.change?.();
+        this.commitGroupChange(graph);
     },
 
     _getGroupOutputNodes(group, graph = app?.graph) {
@@ -3704,9 +3700,9 @@ const Workspace2CanvasGroups = {
             }
         }
 
-        // 先保存当前状态到 extra，再触发 graph.change（防止 configure 钩子读取旧数据）
+        // Save the committed group state before notifying ChangeTracker.
         this.syncGroupsToExtra();
-        graph.setDirtyCanvas?.(true, true); graph.change?.();
+        this.commitGroupChange(graph);
     },
 
     /* 计算子编组被父编组覆盖的面积比例 (0~1) */
@@ -3805,8 +3801,8 @@ const Workspace2CanvasGroups = {
         }
         this.activeGroupId = this.groups[this.activeGroupId] ? this.activeGroupId : null;
         this.refreshGroupSelection();
-        graph?.setDirtyCanvas?.(true, true); graph?.change?.();
         this.syncGroupsToExtra();
+        this.commitGroupChange(graph);
         return true;
     },
 
@@ -3876,9 +3872,8 @@ const Workspace2CanvasGroups = {
         }
 
         this.activeGroupId = null;
-        graph.setDirtyCanvas?.(true, true);
-        graph.change?.();
         this.syncGroupsToExtra();
+        this.commitGroupChange(graph);
         console.log('[Workspace2 Canvas Groups] 取消编组:', [...groupIds]);
         return true;
     },
@@ -4140,8 +4135,6 @@ const Workspace2CanvasGroups = {
             this._needRestore = false;
             this._nativeRepresentation = true;
             this.rebuildAllEls();
-            graph.setDirtyCanvas?.(true, true);
-            graph.change?.();
             this.syncGroupsToExtra();
             this.verifyNativeConversionResult({
                 graph,
@@ -4150,6 +4143,7 @@ const Workspace2CanvasGroups = {
                 nativeGroupIds,
                 archive,
             });
+            this.commitGroupChange(graph);
             console.log('[Workspace2 Canvas Groups] 已转换为 ComfyUI 原生编组:', addedGroups.length);
             return {
                 converted: addedGroups.length,
@@ -4249,9 +4243,8 @@ const Workspace2CanvasGroups = {
             this.rebuildAllEls();
             this.writeGroupDataToNodes(mergedGroups);
             this.syncGroupsToExtra();
-            graph.setDirtyCanvas?.(true, true);
-            graph.change?.();
             this.verifyWorkspaceKitConversionResult({ graph, plan, existingIds, removedNativeGroups: originalNativeGroups });
+            this.commitGroupChange(graph);
             console.log('[Workspace2 Canvas Groups] 已转换回 WorkspaceKit 编组:', Object.keys(plan.groups).length, '合并后共', Object.keys(mergedGroups).length);
             return {
                 converted: Object.keys(plan.groups).length,
@@ -4302,7 +4295,9 @@ const Workspace2CanvasGroups = {
                 node._xzgGroupData = JSON.parse(JSON.stringify(match.groupData));
                 node.properties = node.properties || {};
                 node.properties._xzgGroup = JSON.parse(JSON.stringify(match.groupData));
-            } else if (node._xzgGroupId && !data[node._xzgGroupId]) {
+            } else if (node._xzgGroupId || node._xzgGroupData
+                    || node._xzgGroup || node.properties?._xzgGroup) {
+                // Clear every legacy copy after an explicit ungroup/delete.
                 this._clearNodeGroupData(node);
             }
         }
@@ -4353,6 +4348,15 @@ const Workspace2CanvasGroups = {
             localStorage.setItem('xzg_groups_backup', JSON.stringify(envelope));
             this._recoveryBackupEnvelope = envelope;
         } catch(e) {}
+    },
+
+    // A canvas repaint (graph.change) does not create a ChangeTracker
+    // snapshot on current ComfyUI. Explicit user group commits must enter
+    // the official workflow history so Save, Undo and Redo see the change.
+    commitGroupChange(graph = app?.graph) {
+        graph?.setDirtyCanvas?.(true, true);
+        graph?.change?.();
+        app?.extensionManager?.workflow?.activeWorkflow?.changeTracker?.captureCanvasState?.();
     },
 
     /* ── 持久化：同步到 app.graph.extra + scoped local recovery ── */
@@ -4421,87 +4425,31 @@ const Workspace2CanvasGroups = {
             } catch(e) {}
         }
         if (LG.LGraph) {
-            try {
-                const s = LG.LGraph.prototype.serialize;
-                if (s) {
-                    LG.LGraph.prototype.serialize = function() {
-                        const d = s.apply(this, arguments);
-                        const gd = {};
-                        for (const [id, g] of Object.entries(self.groups)) {
-                            gd[id] = self.serializeGroup(g);
-                        }
-                        if (Object.keys(gd).length) {
-                            console.log('[Workspace2 Canvas Groups] LGraph.serialize写入编组数据:', Object.keys(gd).length, '个');
-                            d._xzgGroups = gd;
-                        }
-                        d.extra = d.extra || {};
-                        d.extra.xzgGroups = gd;
-
-                        if (d.nodes && d.nodes.length) {
-                            const nodeGroupMap = {};
-                            for (const [gid, g] of Object.entries(self.groups)) {
-                                const groupData = gd[gid];
-                                for (const nid of g.nodeIds) {
-                                    nodeGroupMap[nid] = { groupId: gid, groupData: groupData };
-                                }
-                            }
-                            for (const nd of d.nodes) {
-                                const nid = nd.id;
-                                const match = nodeGroupMap[nid] || Object.entries(nodeGroupMap).find(([k]) => k == nid)?.[1];
-                                if (match) {
-                                    nd._xzgGroupId = match.groupId;
-                                    nd._xzgGroup = JSON.parse(JSON.stringify(match.groupData));
-                                }
-                            }
-                        }
-                        return d;
-                    };
-                }
-            } catch(e) {}
+            // The graph itself owns workflow-level group persistence through
+            // graph.extra.xzgGroups. Never override LGraph.serialize globally:
+            // it serializes root graphs, subgraphs, inactive snapshots, and
+            // clipboard graphs. Reading self.groups here injected the *active*
+            // overlay into unrelated graphs and erased saved metadata while
+            // a workflow was loading (before the overlay was rehydrated).
+            // Node compatibility markers remain available via LGraphNode.serialize.
             try {
                 const c = LG.LGraph.prototype.configure;
                 if (c) {
                     LG.LGraph.prototype.configure = function(d) {
+                        // LGraph.configure also runs on subgraphs and detached graphs.
+                        // Only the live root graph may transition WorkspaceKit state.
+                        const root = app?.rootGraph || app?.graph;
+                        if (root && this !== root) return c.apply(this, arguments);
                         const nativeRepresentation = d?.extra?.workspacekit?.groupRepresentation === 'native';
                         self._nativeRepresentation = nativeRepresentation;
-                        const pendingFromTop = nativeRepresentation ? null : (d?._xzgGroups ?? d?.extra?.xzgGroups ?? null);
+                        // Canonical metadata takes precedence over the old top-level
+                        // _xzgGroups field (including an intentional empty object).
+                        const pendingFromTop = nativeRepresentation ? null : (d?.extra?.xzgGroups ?? d?._xzgGroups ?? null);
                         if (pendingFromTop) console.log('[Workspace2 Canvas Groups] LGraph.configure检测到编组数据:', Object.keys(pendingFromTop).length, '个');
-                        c.apply(this, arguments);
-                        if (app?.graph !== this) return;
+                        const result = c.apply(this, arguments);
 
-                        // 保存当前用户自定义属性（颜色、标题、效果等）
-                        const savedCustomProps = {};
-                        for (const [gid, g] of Object.entries(self.groups)) {
-                            savedCustomProps[gid] = {
-                                title: g.title,
-                                fontSize: g.fontSize,
-                                colorHue: g.colorHue,
-                                colorSat: g.colorSat,
-                                colorLit: g.colorLit,
-                                effect: g.effect,
-                                effectSpeed: g.effectSpeed,
-                                borderWidth: g.borderWidth,
-                                borderOpacity: g.borderOpacity,
-                                cornerRadius: g.cornerRadius,
-                                shadowSize: g.shadowSize,
-                                shadowColor: g.shadowColor,
-                                contentPadding: g.contentPadding,
-                                headerBgColor: g.headerBgColor,
-                                backgroundFillEnabled: Boolean(g.backgroundFillEnabled),
-                                backgroundOpacity: g.backgroundOpacity,
-                                titleColor: g.titleColor,
-                            };
-                        }
-
-                        // 将自定义属性合并到序列化数据中，确保 restoreGroups 读取正确值
-                        if (pendingFromTop) {
-                            for (const [gid, props] of Object.entries(savedCustomProps)) {
-                                if (pendingFromTop[gid]) {
-                                    Object.assign(pendingFromTop[gid], props);
-                                }
-                            }
-                        }
-
+                        // Incoming workflow data is authoritative. Never merge
+                        // outgoing group title/style over an undo, redo or switch.
                         for (const gid of Object.keys(self.groups)) self.killGroup(gid);
                         self.groups = {};
                         self._restoreReady = false;
@@ -4520,87 +4468,22 @@ const Workspace2CanvasGroups = {
                             console.log('[Workspace2 Canvas Groups] LGraph.configure调度恢复');
                             self._restoreAfterLoad();
                         }
+                        return result;
                     };
                 }
             } catch(e) {}
         }
 
-        // 额外保障：基于 extra 的持久化（新版 ComfyUI 前端兼容）
+        // Graph serialization is owned by LiteGraph and the ComfyUI Workflow
+        // Store. Only read the optional recovery envelope here; do not wrap
+        // graphToPrompt/loadGraphData or periodically write active UI state over
+        // an unrelated graph or a failed/unfinished workflow restore.
         this._setupExtraBasedPersistence();
     },
 
-    /* ── 基于 extra 的持久化（兼容新版 ComfyUI 前端） ── */
     _setupExtraBasedPersistence() {
         if (this._extraPersistenceReady) return;
         this._extraPersistenceReady = true;
-        const self = this;
-
-        // ── 辅助：序列化所有编组数据 ──
-        const serializeGroups = () => {
-            const gd = {};
-            for (const [id, g] of Object.entries(self.groups)) {
-                gd[id] = self.serializeGroup(g);
-            }
-            return gd;
-        };
-
-        // ── 方案1：Hook graphToPrompt（保存时注入编组数据） ──
-        const tryHookGraphToPrompt = () => {
-            if (!app?.graphToPrompt) {
-                setTimeout(tryHookGraphToPrompt, 200);
-                return;
-            }
-            const orig = app.graphToPrompt;
-            app.graphToPrompt = async function() {
-                const result = await orig.apply(this, arguments);
-                // 直接修改序列化输出，确保编组数据被写入工作流 JSON
-                if (result?.workflow) {
-                    const gd = serializeGroups();
-                    console.log('[Workspace2 Canvas Groups] graphToPrompt写入编组数据:', Object.keys(gd).length, '个');
-                    result.workflow.extra = result.workflow.extra || {};
-                    result.workflow.extra.xzgGroups = gd;
-                    // 也同步到 app.graph.extra（用于 loadGraphData 钩子恢复）
-                    self.syncGroupsToExtra();
-                }
-                return result;
-            };
-            console.log('[Workspace2 Canvas Groups] graphToPrompt 钩子已安装');
-        };
-        tryHookGraphToPrompt();
-
-        // ── 方案2：Hook loadGraphData（加载时恢复编组数据） ──
-        const tryHookLoadGraphData = () => {
-            if (!app?.loadGraphData) {
-                setTimeout(tryHookLoadGraphData, 200);
-                return;
-            }
-            const origLoad = app.loadGraphData;
-            app.loadGraphData = async function(data, ...args) {
-                // 从加载的数据中提取编组信息
-                const nativeRepresentation = data?.extra?.workspacekit?.groupRepresentation === 'native';
-                self._nativeRepresentation = nativeRepresentation;
-                const groups = nativeRepresentation ? null : (data?.extra?.xzgGroups || data?._xzgGroups || null);
-                if (groups && Object.keys(groups).length) {
-                    self._pendingGroups = groups;
-                    self._needRestore = true;
-                    console.log('[Workspace2 Canvas Groups] loadGraphData检测到编组数据:', Object.keys(groups).length, '个');
-                }
-                const result = await origLoad.apply(this, arguments);
-                return result;
-            };
-            console.log('[Workspace2 Canvas Groups] loadGraphData 钩子已安装');
-        };
-        tryHookLoadGraphData();
-
-        // ── 方案3：scoped local recovery（初始恢复完成后才允许周期写回） ──
-        if (!this._extraSyncInterval) {
-            this._extraSyncInterval = setInterval(() => {
-                if (!self._restoreReady) return;
-                self.syncGroupsToExtra();
-            }, 5000);
-        }
-
-        // ── 方案4：读取 scoped recovery；实际是否可用要等 workflow/graph 身份明确后判断 ──
         this._recoveryBackupEnvelope = this._readRecoveryBackup();
     },
 
@@ -4618,6 +4501,7 @@ const Workspace2CanvasGroups = {
             const recoveredGroups = this._matchingRecoveryGroups();
             if (recoveredGroups) {
                 this._pendingGroups = recoveredGroups;
+                this._restoreFromRecovery = true;
                 this._allowScopedRecovery = false;
                 this.restoreGroups();
                 return;
@@ -4654,6 +4538,13 @@ const Workspace2CanvasGroups = {
     restoreGroups() {
         if (!app?.graph) return;
         this._needRestore = false;
+        const recoveredFromBackup = this._restoreFromRecovery;
+        this._restoreFromRecovery = false;
+        const hasCanonicalGroupData = Object.prototype.hasOwnProperty.call(app.graph.extra || {}, 'xzgGroups');
+        const hasIncomingGroupData = this._pendingGroups !== null && this._pendingGroups !== undefined;
+        // Node-level fields are a one-way migration source only. Once an
+        // explicit workflow group map exists, even {} means "no groups".
+        const allowLegacyNodeRecovery = !hasCanonicalGroupData && !hasIncomingGroupData && !recoveredFromBackup;
 
         if (this._nativeRepresentation || app.graph.extra?.workspacekit?.groupRepresentation === 'native') {
             this._nativeRepresentation = true;
@@ -4691,6 +4582,7 @@ const Workspace2CanvasGroups = {
         }
 
         if (!app.graph._nodes?.length) {
+            if (recoveredFromBackup) this.syncGroupsToExtra();
             this.rebuildAllEls();
             this._restoreReady = true;
             this._bootRecoveryOpen = false;
@@ -4700,7 +4592,7 @@ const Workspace2CanvasGroups = {
 
         // 多重冗余恢复：从节点的多个备份位置恢复编组数据
         const groupDataMap = {};
-        app.graph._nodes.forEach(n => {
+        if (allowLegacyNodeRecovery) app.graph._nodes.forEach(n => {
             // 备份位置1：节点实例上的 _xzgGroupData（最新序列化时写入）
             let pg = n._xzgGroupData;
             // 备份位置2：节点序列化数据直接字段 _xzgGroup（configure时恢复到_xzgGroupData，这里再查一次）
@@ -4731,7 +4623,7 @@ const Workspace2CanvasGroups = {
 
         // 根据节点上的 groupId 校正/补充 nodeIds（兼容旧工作流或节点恢复场景）
         const map = {};
-        app.graph._nodes.forEach(n => { if (n._xzgGroupId) (map[n._xzgGroupId] ??= []).push(n.id); });
+        if (allowLegacyNodeRecovery) app.graph._nodes.forEach(n => { if (n._xzgGroupId) (map[n._xzgGroupId] ??= []).push(n.id); });
         for (const [gid, nids] of Object.entries(map)) {
             if (!this.groups[gid]) {
                 // 优先从 extra 恢复完整数据（含用户自定义颜色等），仅作兜底才用默认值
@@ -4765,6 +4657,15 @@ const Workspace2CanvasGroups = {
             const group = this.groups[gid];
             if ((!group.nodeIds || !group.nodeIds.length) && !group.allowEmpty) delete this.groups[gid];
         }
+        if (recoveredFromBackup || (allowLegacyNodeRecovery && Object.keys(this.groups).length)) {
+            // Promote recovered data into the workflow graph immediately.
+            // Otherwise the official Save/ChangeTracker can capture an empty map
+            // before the old five-second fallback sync has a chance to run.
+            this.syncGroupsToExtra();
+        } else if (hasCanonicalGroupData && !Object.keys(this.groups).length) {
+            // An intentionally empty workflow must discard stale node markers.
+            this.writeGroupDataToNodes({});
+        }
         this.rebuildAllEls();
         this.applyBypassStates();
         this._restoreReady = true;
@@ -4796,5 +4697,12 @@ const Workspace2CanvasGroups = {
     }
 };
 
-window.Workspace2CanvasGroups = Workspace2CanvasGroups;
-export { Workspace2CanvasGroups as workspace2CanvasGroups };
+// Different import query strings create distinct ESM evaluations in browsers.
+// All import paths and the global debugging/bridge API must share one manager.
+// Otherwise a late import can overwrite window.Workspace2CanvasGroups with an
+// uninitialized duplicate while another copy owns the real DOM overlay/hooks.
+const workspace2CanvasGroups = globalThis.__workspaceKitCanvasGroupsSingleton
+    || Workspace2CanvasGroups;
+globalThis.__workspaceKitCanvasGroupsSingleton = workspace2CanvasGroups;
+window.Workspace2CanvasGroups = workspace2CanvasGroups;
+export { workspace2CanvasGroups };

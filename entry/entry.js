@@ -9396,6 +9396,12 @@ app.registerExtension({
     }
     return items;
   },
+  // Register the canvas-group restore hooks at the official early lifecycle
+  // boundary. Waiting for setup() makes group availability depend on every
+  // preceding third-party setup hook completing successfully.
+  init() {
+    workspace2CanvasGroups.init();
+  },
   async setup() {
     installPerformanceDebugApi();
     globalThis.__workspace2ProbeNodePresentation = probeNodePresentation;
@@ -9448,7 +9454,8 @@ app.registerExtension({
     await runWorkspaceStartupStage("official-workflow-sync", () => setupOfficialWorkflowStateSync());
     await runWorkspaceStartupStage("canvas-groups", () => {
       workspace2CanvasGroups.setNoticeHandler?.(workspace2Notice);
-      workspace2CanvasGroups.init();
+      // Retain the idempotent legacy fallback for frontends without init().
+      if (!workspace2CanvasGroups.initialized) workspace2CanvasGroups.init();
       installRgthreeFastGroupsBridge(workspace2CanvasGroups);
       registerWorkspace2CanvasGroupCommands();
     });

@@ -1,7 +1,7 @@
 # workspace2_canvas_groups.js Structure Map
 
 Navigation index for the **internals** of `entry/workspace2_canvas_groups.js`
-(~4,070 lines). Its purpose is to let anyone (human or AI) jump straight to the
+(~4,700 lines). Its purpose is to let anyone (human or AI) jump straight to the
 relevant region instead of reading or scanning the whole file. See the
 large-file rules in `CLAUDE.md` / `AGENTS.md`.
 
@@ -392,34 +392,60 @@ a bug in T-102), `createConversionArchive`, `getGroupRepresentation`,
 `writeGroupDataToNodes`. Pure halves live in
 `canvas-groups/{conversion-archive,conversion-result,reverse-conversion-plan}.js`.
 
-### Persistence — L3658–3920
-`syncGroupsToExtra` writes `app.graph.extra.xzgGroups`, node-level compatibility
-markers, and a **scoped recovery envelope** in `xzg_groups_backup`. The recovery
-record is versioned and carries both the current workflow path (when available)
-and a stable node id/type signature. A legacy bare group map is deliberately not
-accepted as recovery data because it has no workflow identity and could leak a
-group from workflow A into workflow B.
+### Persistence and official history — search by symbol
+**Canonical owner:** the active workflow's `app.rootGraph.extra.xzgGroups`
+(`app.graph.extra` at the root). `groups` and `groupEls` are runtime
+state/view projections, **not alternate serialized authorities**.
+`syncGroupsToExtra()` writes committed changes to the root graph, then updates
+legacy node markers and the scoped `xzg_groups_backup` recovery envelope.
+`commitGroupChange()` notifies the official active-workflow ChangeTracker
+*after* the root graph contains the new data, enabling dirty status, Undo/Redo
+and the normal ComfyUI Save path. User operations commit once at completion;
+paint loops and preview-only updates must not create history.
 
-The local record is a crash/F5 recovery layer, not a second workflow database.
-A normal saved workflow still restores from its serialized group data. During
-page boot, a matching recovery record may recover an unsaved group when the
-disk/draft snapshot contains no saved groups; deleting the last group clears the
-recovery record synchronously. Once the first workflow restore finishes,
-`_bootRecoveryOpen` closes and later workflow switches cannot consume the boot
-recovery record. The periodic sync is also blocked until `_restoreReady` so a
-temporary empty startup state cannot erase recovery data.
+**Serialization guard:** never replace `LGraph.prototype.serialize` with a
+projection of the active `groups` map. That method serializes unrelated
+subgraphs, detached graphs and official workflow snapshots too; overriding it
+caused cross-graph group leakage and erased an existing `extra.xzgGroups`
+when the UI had not yet rehydrated. Do not independently wrap `graphToPrompt`
+or `app.loadGraphData` to rewrite group data, and do not restore the removed
+five-second unconditional writeback. `setupSerializationHooks()` retains
+compatibility wrappers for node legacy fields and the root-graph
+`LGraph.configure` load boundary; non-root configure must be transparent.
+These remaining prototype patches need version-aware regression coverage.
 
-`setupSerializationHooks`, `_setupExtraBasedPersistence`, and the pure
-`canvas-groups/persistence-policy.js` own this contract.
+**Migration:** a present canonical `extra.xzgGroups` is authoritative,
+**including `{}` as an intentional deletion**. Legacy top-level
+`_xzgGroups` is read only when that canonical field is absent. Node-level
+`_xzgGroupData`, `_xzgGroup` and `properties._xzgGroup` are one-way
+migration sources only when no workflow group map exists. Clear all node
+markers on ungroup/delete; otherwise deleted groups can be resurrected.
+Native representation takes precedence over all WorkspaceKit backups.
 
-### Startup restore — L3921–4071
-`_restoreAfterLoad`, `waitForGraph`, `restoreGroups` coordinate startup
-restore. The bounded retry in `_restoreAfterLoad` exists because current
-ComfyUI can configure the graph before the official Workflow Store exposes a
-stable active/open workflow identity. Recovery never relaxes the scope check; it
-waits for identity instead. `restoreGroups` also back-fills missing style
-fields on old workflows — the migration point for new style defaults — then
-closes the boot-recovery window. `applyBypassStates` replays controlled modes.
+**F5 recovery:** `xzg_groups_backup` is an optional versioned recovery
+envelope, scoped to workflow path plus node-ID/type signature, not a second
+workflow database. An old unscoped bare map is rejected. Recovery is only
+eligible during initial page boot and never during later A/B workflow switches.
+`_restoreAfterLoad()` waits for workflow identity; a successfully recovered
+group is promoted into `graph.extra.xzgGroups` immediately. No periodic
+empty-state overwrite is permitted.
+
+### Startup restore — search by symbol
+`entry/entry.js` installs the idempotent group initialization in the
+official extension `init()` stage (with a guarded `setup()` fallback), so
+other extensions' late setup cannot postpone the group lifecycle unnecessarily.
+`_restoreAfterLoad`, `waitForGraph` and `restoreGroups` handle loading.
+`restoreGroups` derives overlay and migrated legacy state from incoming
+workflow data; it must never merge outgoing title/style over Undo/Redo.
+`applyBypassStates` replays only explicitly controlled execution modes.
+
+**Acceptance scripts:** `scripts/e2e/wk-group-lifecycle-regression.mjs`
+(serialization isolation, empty canonical data, legacy migration);
+`wk-group-official-save-refresh.mjs` (official Save/F5, rename, Undo/Redo,
+delete/F5); `wk-group-workflow-switch.mjs` (A/B isolation);
+`canvas-group-natural-refresh.mjs` (unsaved group/F5); and
+`p0-canvas-group-{reload,conversion}-nodes2.mjs` (Nodes 2.0 compatibility).
+Use `:8190` and disposable `__WK_TEST__` workflows, never a user's file.
 
 ---
 

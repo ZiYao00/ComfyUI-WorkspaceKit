@@ -1,15 +1,29 @@
 import assert from "node:assert/strict";
 import {
   DEFAULT_THUMBNAIL_COUNT,
+  canonicalKeyFrames,
   clampFrameIndex,
   formatTimestamp,
   frameFraction,
   frameIndexFromFraction,
+  keyFramesInRange,
+  normalizeKeyFrames,
   splitInputVideoPath,
   timestampForFrame,
+  toggleKeyFrame,
 } from "../entry/nodes/video-frame-picker-model.js";
 
 assert.equal(DEFAULT_THUMBNAIL_COUNT, 12);
+
+assert.deepEqual(normalizeKeyFrames("[]"), []);
+assert.deepEqual(normalizeKeyFrames("[246,35,108,35]"), [35, 108, 246]);
+assert.equal(canonicalKeyFrames("[246,35,108,35]"), "[35,108,246]");
+assert.deepEqual(keyFramesInRange("[35,108,246]", 120), [35, 108]);
+assert.deepEqual(toggleKeyFrame("[35,108]", 108), [35]);
+assert.deepEqual(toggleKeyFrame("[35,108]", 70), [35, 70, 108]);
+for (const invalid of ["not-json", "{}", "[0]", "[-1]", "[1.5]", "[true]"]) {
+  assert.throws(() => normalizeKeyFrames(invalid));
+}
 
 assert.equal(clampFrameIndex(-10, 100), 1);
 assert.equal(clampFrameIndex(44.6, 100), 45);

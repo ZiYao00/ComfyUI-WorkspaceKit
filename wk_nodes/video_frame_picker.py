@@ -6,11 +6,13 @@ import os
 from pathlib import Path
 
 import folder_paths
+from comfy_execution.graph_utils import ExecutionBlocker
 
 from ..service.video_frame_service import (
     PREVIEW_VIDEO_EXTENSIONS,
     decode_frame_indices,
     frames_to_image_tensor,
+    normalize_key_frames,
 )
 
 
@@ -55,8 +57,8 @@ def resolve_input_video(video):
 class WKVideoFramePicker:
     CATEGORY = "🧩 WorkspaceKit/Utilities"
     FUNCTION = "pick_frame"
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("frame_image",)
+    RETURN_TYPES = ("IMAGE", "IMAGE")
+    RETURN_NAMES = ("frame_image", "batch_frame_image")
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -74,27 +76,53 @@ class WKVideoFramePicker:
                         "tooltip": "1-based frame selected by the visual Playhead.",
                     },
                 ),
+                "key_frames": (
+                    "STRING",
+                    {
+                        "default": "[]",
+                        "multiline": False,
+                        "tooltip": "WorkspaceKit Marker state as canonical 1-based JSON frame indices.",
+                    },
+                ),
             }
         }
 
     @classmethod
-    def VALIDATE_INPUTS(cls, video, frame_index):
+    def VALIDATE_INPUTS(cls, video, frame_index, key_frames="[]"):
         try:
             resolve_input_video(video)
         except ValueError as exc:
             return str(exc)
         if type(frame_index) is not int or frame_index < 1 or frame_index > MAX_FRAME_INDEX:
             return f"frame_index must be a whole number between 1 and {MAX_FRAME_INDEX}."
+        try:
+            markers = normalize_key_frames(key_frames)
+        except ValueError as exc:
+            return str(exc)
+        if markers and markers[-1] > MAX_FRAME_INDEX:
+            return f"key_frames must be between 1 and {MAX_FRAME_INDEX}."
         return True
 
     @classmethod
-    def IS_CHANGED(cls, video, frame_index):
+    def IS_CHANGED(cls, video, frame_index, key_frames="[]"):
         try:
             return os.path.getmtime(resolve_input_video(video))
         except (OSError, ValueError):
             return float("nan")
 
-    def pick_frame(self, video, frame_index):
+    def pick_frame(self, video, frame_index, key_frames="[]"):
         path = resolve_input_video(video)
-        frames = decode_frame_indices(path, [int(frame_index)])
-        return (frames_to_image_tensor(frames),)
+        markers = normalize_key_frames(key_frames)
+
+        current_frames = decode_frame_indices(path, [int(frame_index)])
+        frame_image = frames_to_image_tensor(current_frames)
+
+        if not markers:
+            batch_frame_image = ExecutionBlocker(
+                "No key frames selected. Add at least one Marker before using batch_frame_image."
+            )
+        else:
+            marker_frames = decode_frame_indices(path, markers)
+            batch_frame_image = frames_to_image_tensor(marker_frames)
+
+        return frame_image, batch_frame_image

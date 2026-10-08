@@ -7,6 +7,7 @@ Public frame numbers are 1-based; PyAV's decoded sequence is 0-based internally.
 
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 from typing import Iterable, List
@@ -41,6 +42,39 @@ def normalize_frame_indices(frame_indices: Iterable[int]) -> List[int]:
     if not normalized:
         raise ValueError("At least one frame index is required.")
     return normalized
+
+
+def normalize_key_frames(value) -> List[int]:
+    """Parse Marker state into sorted, unique, 1-based frame numbers."""
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError("key_frames must be a JSON array of positive integers.") from exc
+    elif isinstance(value, (list, tuple)):
+        parsed = list(value)
+    else:
+        raise ValueError("key_frames must be a JSON array of positive integers.")
+
+    if not isinstance(parsed, list):
+        raise ValueError("key_frames must be a JSON array of positive integers.")
+
+    normalized = []
+    for frame_index in parsed:
+        if type(frame_index) is not int or frame_index < 1:
+            raise ValueError("key_frames must contain only 1-based positive integers.")
+        normalized.append(frame_index)
+    return sorted(set(normalized))
+
+
+def canonical_key_frames(value) -> str:
+    return json.dumps(normalize_key_frames(value), separators=(",", ":"))
 
 
 def frame_to_timestamp(frame_index: int, fps: float) -> float:

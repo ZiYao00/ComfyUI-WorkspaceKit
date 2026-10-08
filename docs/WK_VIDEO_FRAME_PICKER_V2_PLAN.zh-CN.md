@@ -1,8 +1,8 @@
 # WK Video Frame Picker V2 规划
 
-> 状态：**冻结设计草案 / 待未来启动**
-> 基线：V1 已在提交 `267f8ea feat: add video frame picker` 落地并通过 Legacy / Nodes 2.0、保存刷新、真实 PyAV/Torch 解码与回归测试。
-> 本文用于未来继续开发时恢复上下文，不代表 V2 已进入实施，也不应提前把未确认输出或 UI 暴露到 V1。
+> 状态：**V2 已实现 / 进入维护**
+> 基线：V1 已在提交 `267f8ea feat: add video frame picker` 落地；V2 设计基线已在提交 `c18298e docs: add video frame picker v2 plan` 固化。
+> 本文保留 V2 的设计推导与边界；实际落地结果以文末“2026-10-08 实现结果”为准。未进入 V2 的保留名称和非目标仍继续有效。
 
 ## 1. V2 目标
 
@@ -72,14 +72,14 @@ V2 Marker 交互必须保持同一原则。
 
 ## 3. 视频帧命名规范
 
-以下四个名称作为 WorkspaceKit 视频帧领域词汇保留：
+以下三个名称作为 WorkspaceKit 视频帧领域词汇保留；普通批量/区间抽帧如未来加入，名称另行确定：
 
 | 名称 | 固定语义 | 状态 |
 | --- | --- | --- |
 | `frame_image` | 当前 Playhead 所在帧 | **已发布，稳定合同** |
 | `key_image` | 当前激活的“已打标关键帧” | **保留名，是否真正输出待确认** |
-| `batch_key_image` | 所有 Marker 帧组成的 IMAGE Batch | **V2 核心目标** |
-| `batch_frame_image` | 普通批量抽帧 / 区间抽帧，不属于 Marker | **保留给未来其它能力，不在 V2** |
+| `batch_frame_image` | 所有 Marker 帧组成的 IMAGE Batch | **V2 核心目标** |
+| （未来命名另定） | 普通批量抽帧 / 区间抽帧，不属于 Marker | **不复用 V2 已发布端口名** |
 
 ### 3.1 为什么 V2 不强制加入 `key_image`
 
@@ -113,14 +113,14 @@ V2 最小方案：
 
 ```text
 0  frame_image
-1  batch_key_image
+1  batch_frame_image
 ```
 
 未来如果真的加入 `key_image`：
 
 ```text
 0  frame_image
-1  batch_key_image
+1  batch_frame_image
 2  key_image
 ```
 
@@ -273,7 +273,7 @@ decode_frame_indices(video, [35,108,246])
         ↓
 IMAGE Batch [3]
         ↓
-batch_key_image
+batch_frame_image
 ```
 
 因此 V2 不应另写：
@@ -284,14 +284,14 @@ batch_key_image
 
 ### 7.2 Batch 顺序
 
-`batch_key_image` 默认按照 Marker 的升序帧号输出：
+`batch_frame_image` 默认按照 Marker 的升序帧号输出：
 
 ```text
 key_frames = [35,108,246]
 
-batch_key_image[0] = Frame 35
-batch_key_image[1] = Frame 108
-batch_key_image[2] = Frame 246
+batch_frame_image[0] = Frame 35
+batch_frame_image[1] = Frame 108
+batch_frame_image[2] = Frame 246
 ```
 
 顺序必须可预测。
@@ -300,7 +300,7 @@ batch_key_image[2] = Frame 246
 
 ## 8. 空 Marker 的输出语义
 
-这是 V2 实施时必须先定的事项，V1 不提前暴露 `batch_key_image` 就是为了避免现在制造错误合同。
+这是 V2 实施时必须先定的事项，V1 不提前暴露 `batch_frame_image` 就是为了避免现在制造错误合同。
 
 推荐优先方案：
 
@@ -309,7 +309,7 @@ batch_key_image[2] = Frame 246
 例如：
 
 ```text
-No key frames selected. Add at least one Marker before using batch_key_image.
+No key frames selected. Add at least one Marker before using batch_frame_image.
 ```
 
 但实施前必须检查 ComfyUI 对“可选 IMAGE 输出 / 空 batch / 未连接输出”的当前行为，再决定最终策略。
@@ -501,10 +501,10 @@ V2 继续遵守 WorkspaceKit 现有规范：
 ### 输出
 
 - `frame_image` 与 V1 完全一致；
-- `batch_key_image` Batch 数量 = Marker 数量；
+- `batch_frame_image` Batch 数量 = Marker 数量；
 - Batch 顺序 = Marker 时间顺序；
 - 每一张 Batch 图与对应帧一致；
-- 1 个 Marker 时 `batch_key_image` 仍是 Batch[1]；
+- 1 个 Marker 时 `batch_frame_image` 仍是 Batch[1]；
 - 空 Marker 行为按正式合同验证。
 
 ### 回归
@@ -533,7 +533,7 @@ V2 继续遵守 WorkspaceKit 现有规范：
 - `key_frames` 数据；
 - 解析 / 校验 / 去重 / 排序；
 - workflow 保存恢复；
-- 不开放 `batch_key_image`。
+- 不开放 `batch_frame_image`。
 
 先证明状态模型可靠。
 
@@ -548,7 +548,7 @@ V2 继续遵守 WorkspaceKit 现有规范：
 
 重点验证 dirty transaction 与 Legacy / Nodes 2.0。
 
-### Phase C — `batch_key_image`
+### Phase C — `batch_frame_image`
 
 复用：
 
@@ -559,7 +559,7 @@ frames_to_image_tensor()
 
 追加 output 1：
 
-`batch_key_image`
+`batch_frame_image`
 
 验证多帧 IMAGE Batch。
 
@@ -581,7 +581,7 @@ frames_to_image_tensor()
 
 以下能力未来即使需要，也应独立讨论，不自动塞进 V2：
 
-- `batch_frame_image` 普通批量抽帧；
+- 普通批量抽帧（未来如加入，端口名另定）；
 - 等间隔抽帧；
 - 范围抽帧；
 - In / Out；
@@ -610,11 +610,126 @@ frames_to_image_tensor()
 3. 帧编号永久使用 1-based；
 4. Playhead pointermove 只预览，pointerup 才提交；
 5. V2 核心新增能力是 Marker；
-6. V2 核心新增输出是 `batch_key_image`；
+6. V2 核心新增输出是 `batch_frame_image`；
 7. `key_image` 是保留名，只有出现独立 Active Key 语义时才新增；
-8. `batch_frame_image` 保留给未来普通批量抽帧，不属于 Marker；
+8. `batch_frame_image` 已固定为 Marker Batch；未来普通批量抽帧如加入，必须使用其它名称；
 9. Marker 推荐持久化为标准 `key_frames` 数据，不把视觉 DOM 当存储；
 10. V1 已建立的多帧解码与 IMAGE Batch helper 直接复用；
 11. 输出 append-only，不重排已发布端口；
 12. 不把节点发展成视频剪辑器；
 13. 所有 V2 行为必须重新通过 Legacy + Nodes 2.0 + 保存刷新 + dirty-state 实测。
+
+---
+
+## 19. 2026-10-08 实现结果
+
+V2 已按本计划的兼容增量方向完成，最终公开合同为：
+
+```text
+Persisted widgets
+0  video
+1  frame_index
+2  key_frames      # hidden STRING, canonical JSON
+
+Outputs
+0  frame_image
+1  batch_frame_image
+```
+
+### 19.1 Marker 数据
+
+- `key_frames` 正式采用隐藏的标准 STRING widget，而不是 DOM、`node.properties` 或 WorkspaceKit 私有存储；
+- canonical 值示例为 `[]`、`[35]`、`[35,108,246]`；
+- 后端与前端都要求 1-based 正整数，并统一去重、升序；
+- V1 的 `video / frame_index` 顺序未变化，`key_frames` 只追加在末尾；
+- 真实测试证明：只有 V1 两个 `widgets_values` 的旧工作流可以直接恢复，并自动取得 `key_frames="[]"`，无需迁移。
+
+### 19.2 Marker UI
+
+最终 UI 使用：
+
+```text
+◀ 1    ★ Marker    1 ▶    Clear
+```
+
+- `★ Marker` 是 toggle：当前帧未标记时添加，已标记时删除；
+- `Clear` 清空 Marker；
+- Marker 圆点直接叠加在既有 Filmstrip 的 `marker-layer`；
+- 点击 Marker 会提交对应 `frame_index` 并跳回该帧；
+- 连续帧 Marker 首轮验收发现 pointer target 会互相遮挡，因此最终实现加入最多四条垂直 lane 自动分层；
+- Playhead 的 V1 行为未改变：pointermove 只预览，pointerup 才提交。
+
+### 19.3 视频切换与 Undo
+
+最终规则已经通过真实保存工作流验证：
+
+```text
+v1.mp4 + [123,223]
+        ↓ 切换视频
+another.mp4 + []
+        ↓ Ctrl+Z
+v1.mp4 + [123,223]
+```
+
+视频切换与 Marker 清空处于同一次 ComfyUI change transaction，不会产生“视频回去了但 Marker 没回来”的半恢复状态。
+
+### 19.4 Batch 输出
+
+最终输出保持 append-only：
+
+```text
+0  frame_image
+1  batch_frame_image
+```
+
+`batch_frame_image` 直接复用：
+
+```text
+decode_frame_indices()
+frames_to_image_tensor()
+```
+
+真实 `/prompt` 验证：
+
+- `key_frames=[]`，只使用 `frame_image`：成功，Batch[1]；
+- `key_frames=[]`，两个输出都连接：成功，`frame_image` 正常，batch 下游被阻断；
+- `key_frames=[]`，只使用 batch 分支：prompt 成功结束，无 batch 输出；
+- `key_frames=[1,3]`：`batch_frame_image` 为 Batch[2]。
+
+空 Marker 最终采用 ComfyUI 官方 per-output `ExecutionBlocker`，没有制造空 Tensor、黑图或把当前帧冒充 Batch。
+
+### 19.5 V2 未加入的能力
+
+以下保留原结论：
+
+- 不新增 `key_image`；
+- 不新增第二个普通批量抽帧输出；该类能力未来如加入，端口名另定；
+- 不做 In / Out、Trim、Cut；
+- 不做 Timeline zoom / pan；
+- 不做音频波形；
+- 不做多轨；
+- 不做完整 NLE。
+
+### 19.6 最终验收
+
+已通过：
+
+- Legacy；
+- Nodes 2.0；
+- V1 workflow positional restore；
+- Marker add / remove / Clear / click navigation；
+- 连续 Marker 命中；
+- Playhead preview-only scrub；
+- Marker dirty-state；
+- save / reload；
+- video switch + Marker clear + Undo restore；
+- `frame_image` 单帧 API 分支；
+- 空 Marker batch blocking；
+- 两 Marker IMAGE Batch；
+- Utility Nodes 回归；
+- Number Generator 回归；
+- T-058；
+- `npm.cmd test`：119 JavaScript contracts、13 Python contracts、version `0.2.6`；
+- 真实 PyAV / Torch 多帧 IMAGE Batch。
+
+主 `:8188` 未启动或修改；所有运行时验收都在隔离 `:8190` 完成。

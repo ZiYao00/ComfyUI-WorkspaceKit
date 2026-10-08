@@ -1,12 +1,16 @@
 import { app } from "../../scripts/app.js";
 import {
   DEFAULT_THUMBNAIL_COUNT,
+  canonicalKeyFrames,
   clampFrameIndex,
   formatTimestamp,
   frameFraction,
   frameIndexFromFraction,
+  keyFramesInRange,
+  normalizeKeyFrames,
   splitInputVideoPath,
   timestampForFrame,
+  toggleKeyFrame,
 } from "./nodes/video-frame-picker-model.js";
 
 const NODE_TYPE = "WKVideoFramePicker";
@@ -97,6 +101,10 @@ function installStyles() {
       opacity: .42;
       cursor: default;
     }
+    .wk-vfp-controls button[aria-pressed="true"] {
+      background: color-mix(in srgb, currentColor 22%, transparent);
+      border-color: color-mix(in srgb, currentColor 42%, transparent);
+    }
     .wk-vfp-timeline {
       position: relative;
       height: 72px;
@@ -133,6 +141,26 @@ function installStyles() {
       position: absolute;
       inset: 0;
       pointer-events: none;
+    }
+    .wk-vfp-marker {
+      position: absolute;
+      bottom: 4px;
+      width: 10px;
+      height: 10px;
+      padding: 0;
+      border: 1px solid rgba(0,0,0,.7);
+      border-radius: 50%;
+      transform: translateX(-50%);
+      background: #f4f4f4;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.28);
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .wk-vfp-marker.is-active {
+      width: 12px;
+      height: 12px;
+      bottom: 3px;
+      box-shadow: 0 0 0 2px rgba(255,255,255,.52);
     }
     .wk-vfp-playhead {
       position: absolute;
@@ -218,7 +246,15 @@ function createUi(node) {
 
   const videoWidget = widget(node, "video");
   const frameWidget = widget(node, "frame_index");
-  if (!videoWidget || !frameWidget || typeof node.addDOMWidget !== "function") return null;
+  const keyFramesWidget = widget(node, "key_frames");
+  if (!videoWidget || !frameWidget || !keyFramesWidget || typeof node.addDOMWidget !== "function") {
+    return null;
+  }
+
+  // Marker state is persisted and sent to the backend, but the raw JSON is an
+  // implementation detail. Current ComfyUI BaseWidget supports the public
+  // hidden visibility flag while keeping normal workflow/prompt serialization.
+  keyFramesWidget.hidden = true;
 
   installStyles();
 
@@ -254,11 +290,20 @@ function createUi(node) {
   previousButton.type = "button";
   previousButton.textContent = "◀ 1";
   previousButton.setAttribute("aria-label", "Previous frame");
+  const markerButton = document.createElement("button");
+  markerButton.type = "button";
+  markerButton.textContent = "★ Marker";
+  markerButton.setAttribute("aria-label", "Toggle marker");
+  markerButton.setAttribute("aria-pressed", "false");
   const nextButton = document.createElement("button");
   nextButton.type = "button";
   nextButton.textContent = "1 ▶";
   nextButton.setAttribute("aria-label", "Next frame");
-  controls.append(previousButton, nextButton);
+  const clearButton = document.createElement("button");
+  clearButton.type = "button";
+  clearButton.textContent = "Clear";
+  clearButton.setAttribute("aria-label", "Clear markers");
+  controls.append(previousButton, markerButton, nextButton, clearButton);
 
   const timeline = document.createElement("div");
   timeline.className = "wk-vfp-timeline";
@@ -300,6 +345,73 @@ function createUi(node) {
   let seekRaf = 0;
   let pendingSeekFrame = null;
   let configured = false;
+  let lastVideoValue = String(videoWidget.value || "");
+
+  function readKeyFrames() {
+    try {
+      return normalizeKeyFrames(keyFramesWidget.value);
+    } catch (error) {
+      status.textContent = `Marker data error: ${error.message}`;
+      return [];
+    }
+  }
+
+  function updateMarkerControls() {
+    const frames = readKeyFrames();
+    const marked = frames.includes(previewFrame);
+    markerButton.setAttribute("aria-pressed", marked ? "true" : "false");
+    markerButton.textContent = marked ? "★ Marked" : "★ Marker";
+    markerButton.disabled = !metadata;
+    clearButton.disabled = !metadata || frames.length === 0;
+
+    for (const marker of markerLayer.querySelectorAll(".wk-vfp-marker")) {
+      marker.classList.toggle("is-active", Number(marker.dataset.frame) === previewFrame);
+    }
+  }
+
+  function renderMarkers() {
+    markerLayer.replaceChildren();
+    if (!metadata) {
+      updateMarkerControls();
+      return;
+    }
+
+    const allFrames = readKeyFrames();
+    const frames = keyFramesInRange(allFrames, metadata.total_frames);
+    const laneLastX = [-Infinity, -Infinity, -Infinity, -Infinity];
+    const timelineWidth = Math.max(1, timeline.clientWidth || 460);
+    const minimumMarkerGap = 14;
+
+    for (const frame of frames) {
+      const x = frameFraction(frame, metadata.total_frames) * timelineWidth;
+      let lane = laneLastX.findIndex((lastX) => x - lastX >= minimumMarkerGap);
+      if (lane < 0) {
+        lane = laneLastX.indexOf(Math.min(...laneLastX));
+      }
+      laneLastX[lane] = x;
+
+      const marker = document.createElement("button");
+      marker.type = "button";
+      marker.className = "wk-vfp-marker";
+      marker.dataset.frame = String(frame);
+      marker.dataset.lane = String(lane);
+      marker.style.left = `${frameFraction(frame, metadata.total_frames) * 100}%`;
+      marker.style.bottom = `${4 + lane * 13}px`;
+      marker.setAttribute("aria-label", `Go to marker at frame ${frame}`);
+      marker.addEventListener("pointerdown", (event) => event.stopPropagation());
+      marker.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        commitFrame(frame, event);
+      });
+      markerLayer.appendChild(marker);
+    }
+
+    if (frames.length !== allFrames.length) {
+      status.textContent = "Marker data contains frame(s) outside this video.";
+    }
+    updateMarkerControls();
+  }
 
   function setMessage(text) {
     message.textContent = text || "";
@@ -309,6 +421,8 @@ function createUi(node) {
   function setEnabled(enabled) {
     previousButton.disabled = !enabled;
     nextButton.disabled = !enabled;
+    markerButton.disabled = !enabled;
+    clearButton.disabled = !enabled || readKeyFrames().length === 0;
     timeline.toggleAttribute("aria-disabled", !enabled);
   }
 
@@ -323,6 +437,7 @@ function createUi(node) {
     timeline.setAttribute("aria-valuemin", "1");
     timeline.setAttribute("aria-valuemax", String(total));
     timeline.setAttribute("aria-valuenow", String(current));
+    updateMarkerControls();
   }
 
   function schedulePreview(frame) {
@@ -343,6 +458,48 @@ function createUi(node) {
     });
   }
 
+  function commitWidgetValue(targetWidget, value, event, { wrapTransaction = true } = {}) {
+    if (Object.is(targetWidget.value, value)) return false;
+
+    const canvas = app.canvas;
+    const graph = node.graph;
+    if (wrapTransaction) {
+      canvas?.emitBeforeChange?.();
+      graph?.beforeChange?.();
+    }
+
+    try {
+      if (typeof targetWidget.setValue === "function" && canvas) {
+        targetWidget.setValue(value, {
+          e: event,
+          node,
+          canvas,
+        });
+      } else {
+        // Compatibility fallback for older frontend builds that predate the
+        // official BaseWidget.setValue mutation path.
+        const oldValue = targetWidget.value;
+        targetWidget.value = value;
+        targetWidget.callback?.(value, canvas, node, canvas?.graph_mouse, event);
+        node.onWidgetChanged?.(targetWidget.name, value, oldValue, targetWidget);
+        graph?.incrementVersion?.();
+      }
+    } finally {
+      if (wrapTransaction) {
+        graph?.afterChange?.();
+        canvas?.emitAfterChange?.();
+      }
+    }
+    return true;
+  }
+
+  function commitKeyFrames(frames, event, options) {
+    const canonical = canonicalKeyFrames(frames);
+    const changed = commitWidgetValue(keyFramesWidget, canonical, event, options);
+    if (changed) renderMarkers();
+    return changed;
+  }
+
   function commitFrame(frame, event) {
     if (!metadata) return;
     const current = clampFrameIndex(frame, metadata.total_frames);
@@ -351,32 +508,7 @@ function createUi(node) {
       schedulePreview(current);
       return;
     }
-
-    const canvas = app.canvas;
-    const graph = node.graph;
-    canvas?.emitBeforeChange?.();
-    graph?.beforeChange?.();
-    try {
-      if (typeof frameWidget.setValue === "function" && canvas) {
-        frameWidget.setValue(current, {
-          e: event,
-          node,
-          canvas,
-        });
-        return;
-      }
-
-      // Compatibility fallback for older frontend builds that predate the
-      // official BaseWidget.setValue mutation path.
-      const oldValue = frameWidget.value;
-      frameWidget.value = current;
-      frameWidget.callback?.(current, canvas, node, canvas?.graph_mouse, event);
-      node.onWidgetChanged?.(frameWidget.name, current, oldValue, frameWidget);
-      graph?.incrementVersion?.();
-    } finally {
-      graph?.afterChange?.();
-      canvas?.emitAfterChange?.();
-    }
+    commitWidgetValue(frameWidget, current, event);
   }
 
   function pointerFrame(event) {
@@ -419,7 +551,15 @@ function createUi(node) {
   });
 
   previousButton.addEventListener("click", (event) => commitFrame(previewFrame - 1, event));
+  markerButton.addEventListener("click", (event) => {
+    if (!metadata) return;
+    commitKeyFrames(toggleKeyFrame(readKeyFrames(), previewFrame), event);
+  });
   nextButton.addEventListener("click", (event) => commitFrame(previewFrame + 1, event));
+  clearButton.addEventListener("click", (event) => {
+    if (!metadata || readKeyFrames().length === 0) return;
+    commitKeyFrames([], event);
+  });
 
   async function generateFilmstrip(sourceUrl, token) {
     filmstrip.replaceChildren();
@@ -510,6 +650,7 @@ function createUi(node) {
       setMessage("");
       setEnabled(true);
       status.textContent = `${metadata.width}×${metadata.height} · ${Number(metadata.fps).toFixed(3).replace(/\.0+$/, "")} FPS`;
+      renderMarkers();
       void generateFilmstrip(sourceUrl, token);
     } catch (error) {
       if (disposed || token !== loadToken) return;
@@ -521,9 +662,24 @@ function createUi(node) {
   }
 
   const originalVideoCallback = videoWidget.callback;
-  videoWidget.callback = function (value) {
+  videoWidget.callback = function (value, canvas, callbackNode, pos, event) {
     originalVideoCallback?.apply(this, arguments);
+    const nextVideoValue = String(value || "");
+    const changedVideo = nextVideoValue !== lastVideoValue;
+    if (changedVideo && event && readKeyFrames().length > 0) {
+      // A human video change already runs inside the widget's normal graph
+      // transaction. Clear Marker state inside that same transaction so Undo
+      // restores video + Marker state together.
+      commitKeyFrames([], event, { wrapTransaction: false });
+    }
+    lastVideoValue = nextVideoValue;
     void loadVideo(value);
+  };
+
+  const originalKeyFramesCallback = keyFramesWidget.callback;
+  keyFramesWidget.callback = function (value) {
+    originalKeyFramesCallback?.apply(this, arguments);
+    renderMarkers();
   };
 
   const originalFrameCallback = frameWidget.callback;
@@ -539,6 +695,7 @@ function createUi(node) {
   node.onConfigure = function () {
     configured = true;
     originalConfigure?.apply(this, arguments);
+    lastVideoValue = String(videoWidget.value || "");
     queueMicrotask(() => {
       if (!disposed) void loadVideo(videoWidget.value);
     });

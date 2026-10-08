@@ -52,7 +52,10 @@ async function createTestNode(page) {
 
     const videoWidget = node.widgets?.find((item) => item.name === "video");
     const frameWidget = node.widgets?.find((item) => item.name === "frame_index");
-    if (!videoWidget || !frameWidget) throw new Error("Required picker widgets are missing");
+    const keyFramesWidget = node.widgets?.find((item) => item.name === "key_frames");
+    if (!videoWidget || !frameWidget || !keyFramesWidget) {
+      throw new Error("Required picker widgets are missing");
+    }
 
     frameWidget.value = 1;
     frameWidget.callback?.(1);
@@ -63,6 +66,7 @@ async function createTestNode(page) {
     return {
       id: node.id,
       widgets: node.widgets.map((item) => item.name),
+      keyFramesHidden: keyFramesWidget.hidden,
       outputs: (node.outputs || []).map((item) => `${item.name}:${item.type}`),
     };
   }, TEST_VIDEO);
@@ -89,10 +93,19 @@ async function frameWidgetValue(page) {
   });
 }
 
+async function keyFramesWidgetValue(page) {
+  return page.evaluate(() => {
+    const state = window.__wkVfpTest;
+    const node = state ? window.app.graph.getNodeById?.(state.nodeId) : null;
+    return node?.widgets?.find((item) => item.name === "key_frames")?.value;
+  });
+}
+
 async function rendererProbe(page, nodes2) {
   const nodeReport = await createTestNode(page);
-  assert.deepEqual(nodeReport.widgets.slice(0, 2), ["video", "frame_index"]);
-  assert.deepEqual(nodeReport.outputs, ["frame_image:IMAGE"]);
+  assert.deepEqual(nodeReport.widgets.slice(0, 3), ["video", "frame_index", "key_frames"]);
+  assert.equal(nodeReport.keyFramesHidden, true);
+  assert.deepEqual(nodeReport.outputs, ["frame_image:IMAGE", "batch_frame_image:IMAGE"]);
 
   const root = page.locator(".wk-vfp").first();
   await root.waitFor({ state: "visible", timeout: 20_000 });
@@ -156,15 +169,59 @@ async function rendererProbe(page, nodes2) {
   await page.waitForTimeout(100);
   assert.equal(Number(await frameWidgetValue(page)), Math.min(contract.metadata.total_frames, afterDrag + 1));
 
+  // Marker V2: toggle add/remove, navigate by Marker, and clear all without
+  // changing the V1 frame output contract.
+  const markerButton = root.getByRole("button", { name: "Toggle marker" });
+  const clearButton = root.getByRole("button", { name: "Clear markers" });
+  const firstMarkerFrame = Number(await frameWidgetValue(page));
+  await markerButton.click();
+  await page.waitForTimeout(80);
+  assert.equal(await keyFramesWidgetValue(page), `[${firstMarkerFrame}]`);
+  assert.equal(await markerButton.getAttribute("aria-pressed"), "true");
+  assert.equal(await root.locator(".wk-vfp-marker").count(), 1);
+
+  await nextButton.click();
+  await page.waitForTimeout(80);
+  const secondMarkerFrame = Number(await frameWidgetValue(page));
+  await markerButton.click();
+  await page.waitForTimeout(80);
+  assert.equal(await keyFramesWidgetValue(page), `[${firstMarkerFrame},${secondMarkerFrame}]`);
+  assert.equal(await root.locator(".wk-vfp-marker").count(), 2);
+
+  await root.getByRole("button", { name: `Go to marker at frame ${firstMarkerFrame}` }).click();
+  await page.waitForTimeout(80);
+  assert.equal(Number(await frameWidgetValue(page)), firstMarkerFrame);
+  assert.equal(await markerButton.getAttribute("aria-pressed"), "true");
+
+  await markerButton.click();
+  await page.waitForTimeout(80);
+  assert.equal(await keyFramesWidgetValue(page), `[${secondMarkerFrame}]`,
+    "toggling a marked current frame must remove only that Marker");
+
+  await clearButton.click();
+  await page.waitForTimeout(80);
+  assert.equal(await keyFramesWidgetValue(page), "[]");
+  assert.equal(await root.locator(".wk-vfp-marker").count(), 0);
+
   const serialized = await page.evaluate(() => {
     const state = window.__wkVfpTest;
     const node = window.app.graph.getNodeById?.(state.nodeId);
     const data = node.serialize();
     const copy = window.LiteGraph.createNode("WKVideoFramePicker");
     copy.configure(data);
+
+    // Simulate a real V1 workflow written before key_frames existed: only the
+    // original positional widget values are present and there is no named map.
+    const legacyData = structuredClone(data);
+    legacyData.widgets_values = data.widgets_values.slice(0, 2);
+    delete legacyData.widgets_values_named;
+    const legacyCopy = window.LiteGraph.createNode("WKVideoFramePicker");
+    legacyCopy.configure(legacyData);
+
     return {
       values: Object.fromEntries(node.widgets.map((item) => [item.name, item.value])),
       restored: Object.fromEntries(copy.widgets.map((item) => [item.name, item.value])),
+      legacyRestored: Object.fromEntries(legacyCopy.widgets.map((item) => [item.name, item.value])),
       domWidgetSerialized: data.widgets_values?.length,
       uiWidgetSerialize: node.widgets.find((item) => item.name === "video_frame_picker_ui")?.serialize,
       nodes2: window.app.extensionManager.setting.get("Comfy.VueNodes.Enabled"),
@@ -174,8 +231,15 @@ async function rendererProbe(page, nodes2) {
   assert.equal(serialized.values.video, TEST_VIDEO);
   assert.equal(serialized.restored.video, TEST_VIDEO);
   assert.equal(serialized.restored.frame_index, serialized.values.frame_index);
+  assert.equal(serialized.values.key_frames, "[]");
+  assert.equal(serialized.restored.key_frames, "[]");
+  assert.equal(serialized.legacyRestored.video, TEST_VIDEO);
+  assert.equal(serialized.legacyRestored.frame_index, serialized.values.frame_index);
+  assert.equal(serialized.legacyRestored.key_frames, "[]",
+    "V1 workflows must acquire the V2 Marker default without migration");
   assert.equal(serialized.uiWidgetSerialize, false);
-  assert.equal(serialized.domWidgetSerialized, 2, "only video and frame_index may enter widgets_values");
+  assert.equal(serialized.domWidgetSerialized, 3,
+    "video, frame_index, and hidden key_frames must enter widgets_values");
   assert.equal(serialized.nodes2, nodes2);
 
   const thumbnailsReady = await page.locator(".wk-vfp-thumb.is-ready").count();
@@ -216,9 +280,10 @@ async function main() {
     await waitForApp(page);
 
     const contract = await fetchContract(page);
-    assert.deepEqual(contract.info.output, ["IMAGE"]);
-    assert.deepEqual(contract.info.output_name, ["frame_image"]);
-    assert.deepEqual(Object.keys(contract.info.input.required), ["video", "frame_index"]);
+    assert.deepEqual(contract.info.output, ["IMAGE", "IMAGE"]);
+    assert.deepEqual(contract.info.output_name, ["frame_image", "batch_frame_image"]);
+    assert.deepEqual(Object.keys(contract.info.input.required), ["video", "frame_index", "key_frames"]);
+    assert.equal(contract.info.input.required.key_frames[1].default, "[]");
     assert.ok(contract.info.input.required.video[0].includes(TEST_VIDEO));
     assert.equal(contract.metadata.fps, 24);
     assert.equal(contract.metadata.total_frames, 328);

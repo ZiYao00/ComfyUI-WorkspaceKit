@@ -1,26 +1,30 @@
 # Third-party notices
 
-## WK Video Frame Picker references (2026-10-07)
+## WK Video Frame Picker references (2026-10-08)
 
 `WK Video Frame Picker` is an independent WorkspaceKit implementation. No
-third-party node source, preview code, thumbnail code, or frame-decoding code was
-copied.
+third-party node source, preview code, thumbnail code, Marker code, batch-output
+code, or frame-decoding code was copied.
 
 The product behaviour was compared with the MIT-licensed
 [Slartibart23/ComfyUI-VideoFramePicker](https://github.com/Slartibart23/ComfyUI-VideoFramePicker),
 notably its in-node scrubbing, 1-based frame numbering, and current-frame IMAGE
-output. WorkspaceKit deliberately uses a smaller V1 surface: MP4/WebM input-folder
-preview, sparse browser Filmstrip, one draggable Playhead, one-frame stepping, and
-one `frame_image` output. Marker/batch behaviour is deferred while the backend is
-already multi-frame capable.
+output. WorkspaceKit keeps its own narrower interaction model: MP4/WebM
+input-folder preview, sparse browser Filmstrip, one draggable Playhead, exact
+one-frame stepping, lightweight Marker toggles, and the stable `frame_image` plus
+Marker-derived `batch_frame_image` outputs. Marker persistence, video-switch
+clearing/Undo, adjacent-Marker lane layout, and batch decoding are WorkspaceKit
+implementations.
 
-Implementation conventions were also checked against current public ComfyUI /
+Implementation conventions were checked against current public ComfyUI /
 ComfyUI_frontend behaviour: PyAV is used by the current video stack, DOM widgets
-are attached through the extension API, widget writes use the official value
-setter, and DOM-originated mutations are bracketed with the normal graph/canvas
-change transaction so undo/dirty tracking follows the same path as human widget
-edits. WorkspaceKit does not import private Vue stores or patch LiteGraph
-prototypes.
+are attached through the extension API, hidden Marker state remains a normal
+serialized backend widget, widget writes use the official value setter, and
+DOM-originated mutations are bracketed with the normal graph/canvas change
+transaction so undo/dirty tracking follows the same path as human widget edits.
+The empty-Marker batch branch uses ComfyUI's public per-output
+`ExecutionBlocker` mechanism, verified by real `/prompt` execution. WorkspaceKit
+does not import private Vue stores or patch LiteGraph prototypes.
 
 ## WK utility-node behaviour references (2026-10-07)
 

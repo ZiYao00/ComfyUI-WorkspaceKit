@@ -21,6 +21,50 @@ export function frameFraction(frameIndex, totalFrames) {
   return (frame - 1) / (total - 1);
 }
 
+export function normalizeKeyFrames(value) {
+  let parsed = value;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return [];
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new Error("key_frames must be a JSON array of positive integers.");
+    }
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("key_frames must be a JSON array of positive integers.");
+  }
+
+  const normalized = [];
+  for (const frame of parsed) {
+    if (!Number.isInteger(frame) || frame < 1) {
+      throw new Error("key_frames must contain only 1-based positive integers.");
+    }
+    normalized.push(frame);
+  }
+  return [...new Set(normalized)].sort((a, b) => a - b);
+}
+
+export function canonicalKeyFrames(value) {
+  return JSON.stringify(normalizeKeyFrames(value));
+}
+
+export function keyFramesInRange(value, totalFrames) {
+  const total = Math.max(1, Math.trunc(Number(totalFrames) || 1));
+  return normalizeKeyFrames(value).filter((frame) => frame <= total);
+}
+
+export function toggleKeyFrame(value, frameIndex) {
+  const frame = Math.max(1, Math.round(Number(frameIndex) || 1));
+  const frames = normalizeKeyFrames(value);
+  const next = new Set(frames);
+  if (next.has(frame)) next.delete(frame);
+  else next.add(frame);
+  return [...next].sort((a, b) => a - b);
+}
+
 export function timestampForFrame(frameIndex, fps) {
   const rate = Number(fps);
   if (!Number.isFinite(rate) || rate <= 0) return 0;

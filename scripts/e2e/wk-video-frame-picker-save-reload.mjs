@@ -89,10 +89,12 @@ async function pickerState(page) {
     if (!node) return null;
     const video = node.widgets?.find((item) => item.name === "video")?.value;
     const frameIndex = node.widgets?.find((item) => item.name === "frame_index")?.value;
+    const keyFrames = node.widgets?.find((item) => item.name === "key_frames")?.value;
     const serialized = node.serialize();
     return {
       video,
       frameIndex,
+      keyFrames,
       outputNames: (node.outputs || []).map((item) => item.name),
       widgetsValues: serialized.widgets_values,
       hasUiWidget: Boolean(node.widgets?.find((item) => item.name === "video_frame_picker_ui")),
@@ -188,6 +190,22 @@ try {
 
   assert.equal(await topbarSave.getAttribute("data-dirty"), "false");
 
+  // Marker edits are persisted state and must dirty the workflow exactly like
+  // a normal widget edit.
+  const markerButton = page.locator(".wk-vfp").first().getByRole("button", { name: "Toggle marker" });
+  await markerButton.click();
+  await page.waitForFunction(() =>
+    window.app?.extensionManager?.workflow?.activeWorkflow?.isModified === true,
+  null, { timeout: 5_000 });
+  let markerState = await pickerState(page);
+  assert.equal(markerState.keyFrames, `[${TEST_FRAME}]`);
+  assert.equal(await page.locator(".wk-vfp-marker").count(), 1);
+
+  await topbarSave.click();
+  await page.waitForFunction(() =>
+    window.app?.extensionManager?.workflow?.activeWorkflow?.isModified === false,
+  null, { timeout: 20_000 });
+
   // Scrubbing is preview-only until pointerup: the persisted frame_index and
   // workflow dirty state must stay unchanged throughout pointermove.
   const timeline = page.locator(".wk-vfp-timeline").first();
@@ -226,7 +244,13 @@ try {
     `expected scrubbed frame about ${expectedScrubbedFrame}, got ${scrubbedFrame}`);
   assert.equal(await topbarSave.getAttribute("data-dirty"), "true");
 
-  // Persist the Playhead result, then verify the exact selection survives a
+  await markerButton.click();
+  await page.waitForTimeout(100);
+  markerState = await pickerState(page);
+  assert.equal(markerState.keyFrames, `[${TEST_FRAME},${scrubbedFrame}]`);
+  assert.equal(await page.locator(".wk-vfp-marker").count(), 2);
+
+  // Persist the Playhead + Marker result, then verify the exact selection survives a
   // browser reload and remains clean.
   await topbarSave.click();
   await page.waitForFunction(() =>
@@ -238,9 +262,14 @@ try {
   assert.ok(beforeReload);
   assert.equal(beforeReload.video, TEST_VIDEO);
   assert.equal(Number(beforeReload.frameIndex), scrubbedFrame);
-  assert.deepEqual(beforeReload.outputNames, ["frame_image"]);
-  assert.deepEqual(beforeReload.widgetsValues, [TEST_VIDEO, scrubbedFrame],
-    "visual DOM widget must not serialize into widgets_values");
+  assert.equal(beforeReload.keyFrames, `[${TEST_FRAME},${scrubbedFrame}]`);
+  assert.deepEqual(beforeReload.outputNames, ["frame_image", "batch_frame_image"]);
+  assert.deepEqual(beforeReload.widgetsValues, [
+    TEST_VIDEO,
+    scrubbedFrame,
+    `[${TEST_FRAME},${scrubbedFrame}]`,
+  ],
+    "video, frame_index, and hidden key_frames must serialize; visual DOM must not");
   assert.equal(beforeReload.hasUiWidget, true);
   assert.equal(await topbarSave.getAttribute("data-dirty"), "false");
 
@@ -257,12 +286,66 @@ try {
   await topbarSave.waitFor({ state: "visible", timeout: 15_000 });
   assert.equal(await topbarSave.getAttribute("data-dirty"), "false",
     "reloaded saved picker workflow must remain clean");
+
+  // A human video change must clear old-video Markers inside the same graph
+  // transaction. Undo should therefore restore both the video and Marker set.
+  const alternateVideo = await page.evaluate(async (currentVideo) => {
+    const response = await fetch("/object_info/WKVideoFramePicker");
+    const payload = await response.json();
+    return (payload?.WKVideoFramePicker?.input?.required?.video?.[0] || [])
+      .find((value) => value !== currentVideo) || null;
+  }, TEST_VIDEO);
+  assert.ok(alternateVideo, "the isolated input set must contain a second test video");
+
+  await page.evaluate((nextVideo) => {
+    const app = window.app;
+    const node = (app.graph?._nodes || []).find((item) => item.type === "WKVideoFramePicker");
+    const videoWidget = node?.widgets?.find((item) => item.name === "video");
+    if (!node || !videoWidget) throw new Error("picker/video widget unavailable");
+
+    const canvas = app.canvas;
+    const graph = node.graph;
+    const event = new Event("change");
+    canvas?.emitBeforeChange?.();
+    graph?.beforeChange?.();
+    try {
+      videoWidget.setValue(nextVideo, { e: event, node, canvas });
+    } finally {
+      graph?.afterChange?.();
+      canvas?.emitAfterChange?.();
+    }
+  }, alternateVideo);
+
+  await page.waitForFunction((nextVideo) => {
+    const node = (window.app?.graph?._nodes || []).find((item) => item.type === "WKVideoFramePicker");
+    return node?.widgets?.find((item) => item.name === "video")?.value === nextVideo
+      && node?.widgets?.find((item) => item.name === "key_frames")?.value === "[]";
+  }, alternateVideo, { timeout: 10_000 });
+
+  const afterVideoSwitch = await pickerState(page);
+  assert.equal(afterVideoSwitch.video, alternateVideo);
+  assert.equal(afterVideoSwitch.keyFrames, "[]");
+  assert.equal(await topbarSave.getAttribute("data-dirty"), "true");
+
+  await page.keyboard.press("Control+z");
+  await page.waitForFunction(([video, keyFrames]) => {
+    const node = (window.app?.graph?._nodes || []).find((item) => item.type === "WKVideoFramePicker");
+    return node?.widgets?.find((item) => item.name === "video")?.value === video
+      && node?.widgets?.find((item) => item.name === "key_frames")?.value === keyFrames;
+  }, [TEST_VIDEO, beforeReload.keyFrames], { timeout: 10_000 });
+
+  const afterUndo = await pickerState(page);
+  assert.equal(afterUndo.video, TEST_VIDEO);
+  assert.equal(afterUndo.keyFrames, beforeReload.keyFrames);
   assert.deepEqual(errors, []);
 
   console.log(JSON.stringify({
     testPath: TEST_PATH,
     beforeReload,
     afterReload,
+    alternateVideo,
+    afterVideoSwitch,
+    afterUndo,
     initialFrame: TEST_FRAME,
     visualFrame: scrubbedFrame,
     dirty: false,

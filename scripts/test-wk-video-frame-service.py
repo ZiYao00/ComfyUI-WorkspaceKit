@@ -16,6 +16,20 @@ SPEC.loader.exec_module(module)
 
 
 assert module.normalize_frame_indices([1, 2, 7]) == [1, 2, 7]
+assert module.normalize_key_frames("[]") == []
+assert module.normalize_key_frames("[246,35,108,35]") == [35, 108, 246]
+assert module.normalize_key_frames([9, 3, 9]) == [3, 9]
+assert module.canonical_key_frames(" [246, 35, 108, 35] ") == "[35,108,246]"
+assert module.canonical_key_frames("") == "[]"
+
+for invalid in ("not-json", "{}", "[0]", "[-1]", "[1.5]", "[true]"):
+    try:
+        module.normalize_key_frames(invalid)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"Invalid key_frames were accepted: {invalid!r}")
+
 assert module.frame_to_timestamp(1, 24) == 0.0
 assert module.frame_to_timestamp(25, 24) == 1.0
 assert module.is_preview_video("clip.mp4") is True

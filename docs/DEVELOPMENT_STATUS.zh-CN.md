@@ -46,6 +46,7 @@
 | 新建可独立/合并的家族插件 | [PANEL_QUICKSTART.md](PANEL_QUICKSTART.md) |
 | 已确认的 WK UI Template 重建与 Theme 迁移方案 | [WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md](WK_UI_TEMPLATE_REBUILD_AND_MIGRATION_PLAN.zh-CN.md) |
 | WK、Layout、Theme 的统一图标系统 | [WK_ICON_SYSTEM_PLAN.zh-CN.md](WK_ICON_SYSTEM_PLAN.zh-CN.md) |
+| WK Video Frame Picker V2 长期设计与恢复入口 | [WK_VIDEO_FRAME_PICKER_V2_PLAN.zh-CN.md](WK_VIDEO_FRAME_PICKER_V2_PLAN.zh-CN.md) |
 | 备份规则 | [BACKUP_CONVENTION.md](BACKUP_CONVENTION.md) |
 
 ## 历史与专项参考

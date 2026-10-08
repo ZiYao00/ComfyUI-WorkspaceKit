@@ -1,5 +1,11 @@
 # WorkspaceKit Testing Log
 
+## 2026-10-08 - User report: group loss limited to an older workflow
+
+- The user reported that groups disappeared after refresh in their existing workflow, while a newly created workflow no longer showed the problem. Recreating the workflow is an observed workaround, not a verified migration.
+- The affected original JSON was not available for comparison or reproduction. Its saved group data and open/save history remain unverified; this report does not prove general incompatibility with older workflows or supersede the fresh-workflow tests below.
+- Before further changes, preserve the original JSON and compare it with a working new workflow, including `extra.xzgGroups` and the exact save/reload sequence. No source change or additional runtime test was made for this report.
+
 ## 2026-10-08 - Canvas Groups persistent-state root-cause repair (:8190 only)
 
 - **Target runtime:** ComfyUI Core `0.38.0`, Frontend `1.53.10`. The user's main `:8188` instance was not restarted or modified. All persisted fixture work was confined to uniquely named `__WK_TEST__` workflows on `:8190`; successful fixtures were moved to the test-package trash, not permanently deleted.

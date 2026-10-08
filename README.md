@@ -125,7 +125,9 @@ WK Groups are more than visual frames. They turn a section of a large workflow i
 - Group colors stay compatible with native ComfyUI groups, and groups convert between the two.
 - Group data is saved with the workflow.
 
-If `Ctrl+G` conflicts with an official ComfyUI keybinding, change the official binding first or disable the WorkspaceKit shortcut in settings.
+If `Ctrl+G` conflicts with an official ComfyUI keybinding, adjust the binding in shortcut settings. The old "Enable groups" switch was removed; it was not a master switch for the group feature.
+
+If groups disappear after refresh only in a particular older workflow while a newly created workflow works, back up the original workflow JSON first and do not overwrite it during diagnosis. Recreating the groups in a new workflow is a temporary workaround. The affected original file has not been reproduced, so this does not establish that all older workflows are incompatible. Compare the saved contents and the exact open/save steps of the old and new workflows to identify the cause.
 
 Converting a native group into a WK Group:
 

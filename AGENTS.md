@@ -39,4 +39,13 @@ Before copying implementation code, record the source repository, file path, com
 
 ## Validation
 
+On this machine, all ComfyUI runtime/browser tests must use the test package
+`G:\AIGC\ComfyUI_test` (local ports 8190/8191). Never test against, navigate,
+restart, or change the main ComfyUI instance. Inspect test data/output links
+before running; a test-package path can still point into shared production data.
+Use a real isolated user/output directory under `ComfyUI_test\_wk_validation`
+and verify `/workspace2/workflows` resolves there before writing fixtures.
+Repository-only unit and syntax checks may run in this repository. Do not
+install or upgrade the embedded Python shared by the two packages.
+
 At minimum, validate Python syntax, JavaScript syntax or lint where available, plugin import, frontend registration, existing core behavior, and `git status --short`. Report incomplete checks honestly.

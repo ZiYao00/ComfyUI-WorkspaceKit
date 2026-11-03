@@ -99,3 +99,6 @@ desktop.ini
 *.njsproj
 *.sln
 *.sw?
+
+# Local validation screenshots, reports and runtime fixtures
+/artifacts/

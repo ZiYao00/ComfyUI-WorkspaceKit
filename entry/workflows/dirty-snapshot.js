@@ -46,13 +46,20 @@ export function canonicalizeOfficialWorkflow(workflow) {
   if (!workflow || typeof workflow !== "object") return null;
 
   const nodes = Array.isArray(workflow.nodes)
-    ? [...workflow.nodes].sort((left, right) => nodeSortKey(left).localeCompare(nodeSortKey(right)))
+    ? workflow.nodes.map((node) => {
+      if (!node || typeof node !== "object") return node;
+      const { order, ...content } = node;
+      return content;
+    }).sort((left, right) => nodeSortKey(left).localeCompare(nodeSortKey(right)))
     : workflow.nodes;
 
   const extra = workflow.extra && typeof workflow.extra === "object"
     ? { ...workflow.extra }
     : {};
   delete extra.ds;
+  // Use Everywhere inserts an empty link list when a graph is captured or
+  // switched. Missing and empty both represent no links; populated lists count.
+  if (Array.isArray(extra.ue_links) && extra.ue_links.length === 0) delete extra.ue_links;
 
   const canonical = { nodes, extra };
   for (const key of OFFICIAL_GRAPH_KEYS) {

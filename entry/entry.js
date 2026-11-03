@@ -17,7 +17,6 @@ import {
   planCanvasMenuOrder,
 } from "./ui/canvas-menu-ordering.js?v=20260807_canvas_menu_ordering_r1";
 import {
-  TOPBAR_SAVE_COMMAND_ID,
   TOPBAR_SAVE_ENABLED_KEY,
   createTopbarSaveButton,
   isTopbarSaveButtonEnabled,
@@ -141,7 +140,6 @@ import {
   getOfficialWorkflowByPath,
   getOfficialWorkflowStore,
   getOpenOfficialWorkflows,
-  isOfficialWorkflowTemporary,
   openOfficialWorkflowThroughService,
   saveOfficialWorkflow,
   subscribeOfficialWorkflowStore,
@@ -2670,21 +2668,30 @@ async function saveCurrentWorkflowToPath(el, path) {
   }
   if (state.isOfficialRoot) {
     const officialWorkflow = getOfficialWorkflowByPath(app, officialWorkflowPath(path));
-    if (officialWorkflow && await saveOfficialWorkflow(officialWorkflow)) {
+    if (officialWorkflow === getActiveOfficialWorkflow(app)) {
+      return saveWorkspaceTopbarWorkflow();
+    }
+    if (officialWorkflow && await saveOfficialWorkflow(officialWorkflow, app, (savedState, savedPath) => {
+      const nextPath = relativeWorkflowPathFromOfficial(savedPath);
+      if (nextPath !== path) workflowOpenState.remapOfficialWorkflowPathState(path, nextPath);
+      setCurrentWorkflowCleanState(savedState, nextPath);
+    })) {
       // The official workflow object can be replaced while the save settles.
       // Clear the sidebar's path-keyed indicator synchronously from the known
       // persisted path; do not wait for an active-object lookup to converge.
-      state.officialWorkflowDirtyPaths.delete(path);
-      setCurrentWorkflowCleanState(undefined, path);
       state.status = t("status.workflowSaved");
-      recordRecentWorkflow(path);
+      recordRecentWorkflow(relativeWorkflowPathFromOfficial(officialWorkflow.path));
       refreshOfficialWorkflowsDeferred(0);
       // `el` belongs to the click handler and can be a stale module mount.
       // Render through the normal official-state path after the deferred list
       // refresh, otherwise the now-clean save indicator remains until a tab switch.
       scheduleOfficialWorkflowPanelRender();
+      workspaceState.topbarSaveButton?.refresh?.();
       return;
     }
+    // Cancellation/unavailable official save must not fall through to writing
+    // the active canvas under a different workflow's path.
+    return;
   }
   if (path !== state.selectedPath) {
     throw new Error(t("status.workflowSaveMismatch"));
@@ -6999,11 +7006,7 @@ function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
       await opening;
       renderWorkflowPanelAfterAsync(el);
     },
-    onSave: (entry) => (
-      entry.isOfficialWorkflow
-        ? saveWorkspaceTopbarWorkflow()
-        : saveCurrentWorkflowToPath(el, entry.path)
-    ),
+    onSave: (entry) => saveCurrentWorkflowToPath(el, entry.path),
     onStartRename: (entry) => beginWorkflowRename(el, entry.path, "open"),
     onCloseOfficial: async (entry) => {
       if (entry.isActive) {
@@ -7030,7 +7033,7 @@ function recentWorkflowRows(el, { scrollTop = 0 } = {}) {
         const choice = await workspace2ConfirmDirtyWorkflowClose(entry.displayName);
         if (!choice) return;
         if (choice === "save") {
-          const saved = await saveOfficialWorkflow(entry.officialWorkflow);
+          const saved = await saveOfficialWorkflow(entry.officialWorkflow, app);
           if (!saved) return;
         }
       }
@@ -7127,13 +7130,14 @@ function renderPanel(el, panelMount = null) {
   });
   file.classList.add("workspace2-workflow-file-button");
 
-  const open = toolbarButton("workflows.toolbar.open", t("toolbar.openWorkflow"), async () => {
+  const create = toolbarButton("workflows.file.create", t("workflows.fileNewWorkflow"), async () => {
     try {
-      await openWorkflowFileFromPicker(el);
+      await createWorkflow(el);
     } catch (error) {
       handleError(el, error);
     }
   });
+  create.disabled = state.showTrash;
 
   const trash = toolbarButton(state.showTrash ? "workflows.toolbar.leaveTrash" : "workflows.toolbar.enterTrash", state.showTrash ? t("toolbar.showFiles") : t("toolbar.showTrash"), async () => {
     try {
@@ -7161,7 +7165,7 @@ function renderPanel(el, panelMount = null) {
     focusKey: "workflow-search",
     placeholder: t("search.placeholder"),
     value: state.query,
-    buttons: [file, workflowSortButton(el), toolbarDivider(), open, trash],
+    buttons: [file, workflowSortButton(el), toolbarDivider(), create, trash],
     onInput: (value) => {
       state.query = value;
       scheduleWorkflowResultsRefresh(el);
@@ -9150,24 +9154,24 @@ function installWorkspace2SidebarIcon() {
 // See entry/ui/topbar-save-button.js for why the slot sits outside the native
 // button groups and why it re-asserts last place.
 async function saveWorkspaceTopbarWorkflow() {
-  await executeOfficialWorkflowCommand(TOPBAR_SAVE_COMMAND_ID);
-
-  // The command owns the actual save. WorkspaceKit only reconciles its own
-  // path-keyed dirty baseline after that command settles. This is the same
-  // baseline the Open-section save action clears in saveCurrentWorkflowToPath().
-  // A cancelled first-time Save As remains temporary, so never mark it clean.
-  const activeWorkflow = getActiveOfficialWorkflow(app);
-  const activePath = relativeWorkflowPathFromOfficial(activeWorkflow?.path || "");
-  if (state.isOfficialRoot && activePath && !isOfficialWorkflowTemporary(activeWorkflow)) {
-    setCurrentWorkflowCleanState(undefined, activePath);
+  const targetWorkflow = getActiveOfficialWorkflow(app);
+  if (!targetWorkflow) return false;
+  const oldPath = relativeWorkflowPathFromOfficial(targetWorkflow.path || "");
+  const saved = await saveOfficialWorkflow(targetWorkflow, app, (persistedState, savedPath) => {
+    const activePath = relativeWorkflowPathFromOfficial(savedPath);
+    if (!state.isOfficialRoot || !activePath) return;
+    if (oldPath !== activePath) workflowOpenState.remapOfficialWorkflowPathState(oldPath, activePath);
+    setCurrentWorkflowCleanState(persistedState, activePath);
     recordRecentWorkflow(activePath);
     refreshOfficialWorkflowsDeferred(0);
-  }
+  });
 
   // Reuse the existing official-store-safe render scheduler instead of hiding
   // the Open-section save button directly. The next render recomputes the dirty
   // dot and save action from the reconciled workflow state.
   scheduleOfficialWorkflowPanelRender();
+  workspaceState.topbarSaveButton?.refresh?.();
+  return saved;
 }
 
 function installWorkspaceTopbarSaveButton() {

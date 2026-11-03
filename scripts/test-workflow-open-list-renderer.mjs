@@ -15,7 +15,7 @@ const { renderOpenWorkflowList } = createWorkflowOpenListRenderer({
   iconButton: (icon, title, action) => { const button = new Element(); button.icon=icon; button.title=title; button.addEventListener("click", action); return button; },
 });
 const official = { path:"one.json", item:{path:"one.json"}, displayName:"One", isOfficialWorkflow:true, isActive:true, isPending:true, isDirty:true, isRenaming:false };
-const recent = { path:"two.json", item:{path:"two.json"}, displayName:"Two", isOfficialWorkflow:false, isActive:false, isDirty:true, isRenaming:false };
+const recent = { path:"two.json", item:{path:"two.json"}, displayName:"Two", isOfficialWorkflow:true, isActive:false, isDirty:true, isRenaming:false };
 const section = renderOpenWorkflowList({
   entries:[official,recent], capacity: 9, scrollTop: 42, createRenameInput: () => ({input:true}),
   onOpen: async (entry) => calls.push(`open:${entry.path}`), onSave: async (entry) => calls.push(`save:${entry.path}`),
@@ -45,8 +45,8 @@ officialRow.children[1].children[0].listeners.get("click")(event);
 officialRow.children[1].children[1].listeners.get("click")(event);
 officialRow.children[1].children[2].listeners.get("click")(event);
 const recentRow = section.children[2];
-assert.equal(recentRow.children[1].children.length, 1);
+assert.equal(recentRow.children[1].children.length, 3);
 recentRow.children[1].children[0].listeners.get("click")(event);
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.deepEqual(calls, ["open:one.json", "save:one.json", "rename:one.json", "close:one.json", "remove:two.json"]);
+assert.deepEqual(calls, ["open:one.json", "save:one.json", "rename:one.json", "close:one.json", "save:two.json"]);
 console.log("workflow open-list renderer contract passed");

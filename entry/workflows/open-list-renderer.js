@@ -73,10 +73,10 @@ export function createWorkflowOpenListRenderer({ document, translate, iconButton
 
       const actions = document.createElement("div");
       actions.className = "workspace2-actions";
-      // Every unsaved workflow keeps its marker, while only the active canvas
-      // workflow receives a save button.
-      if (entry.isDirty && entry.isActive) {
-        actions.append(iconButton("save", translate("workflows.saveCurrent"), (event) => runAction(event, () => onSave(entry), onError)));
+      if (entry.isDirty) {
+        const save = iconButton("save", translate("workflows.fileSave"), (event) => runAction(event, () => onSave(entry), onError));
+        save.setAttribute("data-workspace2-action", "save-workflow");
+        actions.append(save);
       }
       if (entry.isOfficialWorkflow) {
         actions.append(iconButton("edit", translate("row.rename"), (event) => runAction(event, () => onStartRename(entry), onError)));

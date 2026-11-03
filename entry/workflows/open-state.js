@@ -47,7 +47,7 @@ export function createWorkflowOpenState({
     }
   }
 
-  function officialSnapshot(workflow = serializeCurrentWorkflow()) {
+  function officialSnapshot(workflow = getActiveOfficialWorkflow(app)?.activeState || serializeCurrentWorkflow()) {
     if (!workflow) return "";
     try {
       return officialWorkflowSnapshot(workflow);
@@ -61,6 +61,12 @@ export function createWorkflowOpenState({
     return relativeWorkflowPathFromOfficial(
       getActiveOfficialWorkflow(app)?.path || "",
     );
+  }
+
+  function officialContentChanged(workflow) {
+    if (!workflow?.isModified) return false;
+    if (!workflow?.initialState || !workflow?.activeState) return Boolean(workflow?.isModified);
+    return officialSnapshot(workflow.initialState) !== officialSnapshot(workflow.activeState);
   }
 
   function clearDirtyState() {
@@ -100,7 +106,7 @@ export function createWorkflowOpenState({
     if (!path) return;
 
     officialBaselinePendingPaths.add(path);
-    if (workflow.isModified) officialBaselinePendingDirtyPaths.add(path);
+    if (officialContentChanged(workflow)) officialBaselinePendingDirtyPaths.add(path);
     else officialBaselinePendingDirtyPaths.delete(path);
     state.officialWorkflowDirtyPaths.delete(path);
 
@@ -110,38 +116,33 @@ export function createWorkflowOpenState({
     // baseline without swallowing a real edit made immediately after opening.
     scheduleOfficialBaselineTask(path, () => {
       officialBaselineInitTasks.delete(path);
-      const changedWhilePending = officialBaselinePendingDirtyPaths.has(path)
-        || Boolean(workflow.isModified);
+      const changedWhilePending = officialContentChanged(workflow);
       officialBaselinePendingPaths.delete(path);
       officialBaselinePendingDirtyPaths.delete(path);
 
-      if (changedWhilePending) {
-        state.officialWorkflowSnapshots.delete(path);
-        state.officialWorkflowDirtyPaths.add(path);
-        refreshSaveSurfaces();
-        return;
-      }
-
-      const baselineSource = activeOfficialPath() === path
-        ? serializeCurrentWorkflow()
-        : workflow.activeState;
+      // Keep the original content when an edit/draft exists. Taking the edited
+      // canvas as a clean baseline would swallow an immediate edit; discarding
+      // the baseline would leave a stale isModified flag dirty after Undo.
+      const baselineSource = changedWhilePending
+        ? workflow.initialState
+        : workflow.activeState || (activeOfficialPath() === path ? serializeCurrentWorkflow() : null);
       const baseline = officialSnapshot(baselineSource);
       if (!baseline) {
         state.officialWorkflowSnapshots.delete(path);
-        state.officialWorkflowDirtyPaths.delete(path);
+        if (changedWhilePending) state.officialWorkflowDirtyPaths.add(path);
+        else state.officialWorkflowDirtyPaths.delete(path);
         refreshSaveSurfaces();
         return;
       }
 
       state.officialWorkflowSnapshots.set(path, baseline);
-      state.officialWorkflowDirtyPaths.delete(path);
+      if (changedWhilePending) state.officialWorkflowDirtyPaths.add(path);
+      else state.officialWorkflowDirtyPaths.delete(path);
       refreshSaveSurfaces();
     });
   }
 
   function setCleanState(workflow = serializeCurrentWorkflow(), officialPath = "") {
-    state.workflowDirty = false;
-    state.workflowSnapshot = snapshot(workflow);
     const activeWorkflow = getActiveOfficialWorkflow(app);
     // Saving already knows its target path. Prefer that stable identity over
     // reading activeWorkflow here: the official store may replace the active
@@ -149,12 +150,23 @@ export function createWorkflowOpenState({
     const activePath = relativeWorkflowPathFromOfficial(
       officialPath || activeWorkflow?.path || "",
     );
-    if (state.isOfficialRoot && activePath && state.workflowSnapshot) {
+    if (!state.isOfficialRoot || activePath === activeOfficialPath()) {
+      state.workflowDirty = false;
+      state.workflowSnapshot = snapshot(workflow);
+    }
+    if (state.isOfficialRoot && activePath && workflow) {
       cancelOfficialBaselineInitTask(activePath);
       officialBaselinePendingPaths.delete(activePath);
       officialBaselinePendingDirtyPaths.delete(activePath);
       state.officialWorkflowSnapshots.set(activePath, officialSnapshot(workflow));
-      state.officialWorkflowDirtyPaths.delete(activePath);
+      const target = getOfficialWorkflowStore(app)?.openWorkflows?.find((item) =>
+        relativeWorkflowPathFromOfficial(item?.path || "") === activePath,
+      ) || (activeOfficialPath() === activePath ? activeWorkflow : null);
+      if (target?.activeState && officialSnapshot(target.activeState) !== officialSnapshot(workflow)) {
+        state.officialWorkflowDirtyPaths.add(activePath);
+      } else {
+        state.officialWorkflowDirtyPaths.delete(activePath);
+      }
     }
   }
 
@@ -169,13 +181,14 @@ export function createWorkflowOpenState({
     if (!path) return;
     if (officialBaselinePendingPaths.has(path)) {
       const workflow = getActiveOfficialWorkflow(app);
-      if (workflow?.isModified) officialBaselinePendingDirtyPaths.add(path);
+      if (officialContentChanged(workflow)) officialBaselinePendingDirtyPaths.add(path);
+      else officialBaselinePendingDirtyPaths.delete(path);
       return;
     }
     const baseline = state.officialWorkflowSnapshots.get(path);
     if (!baseline) return;
 
-    const currentSnapshot = officialSnapshot();
+    const currentSnapshot = officialSnapshot(getActiveOfficialWorkflow(app)?.activeState || serializeCurrentWorkflow());
     const isClean = currentSnapshot === baseline;
     if (isClean) {
       state.officialWorkflowDirtyPaths.delete(path);
@@ -194,7 +207,7 @@ export function createWorkflowOpenState({
       return { status: "clean", needsSave: false, dirty: false, pending: false };
     }
     if (officialBaselinePendingPaths.has(path)) {
-      const dirty = officialBaselinePendingDirtyPaths.has(path);
+      const dirty = officialContentChanged(workflow);
       return {
         status: dirty ? "dirty" : "baseline-pending",
         needsSave: dirty,
@@ -206,7 +219,7 @@ export function createWorkflowOpenState({
       const dirty = state.officialWorkflowDirtyPaths.has(path);
       return { status: dirty ? "dirty" : "clean", needsSave: dirty, dirty, pending: false };
     }
-    const dirty = Boolean(workflow?.isModified);
+    const dirty = officialContentChanged(workflow);
     return { status: dirty ? "dirty" : "clean", needsSave: dirty, dirty, pending: false };
   }
 
@@ -240,17 +253,16 @@ export function createWorkflowOpenState({
     const workflow = getActiveOfficialWorkflow(app);
     const pendingClean = officialBaselinePendingPaths.has(path)
       && !officialBaselinePendingDirtyPaths.has(path)
-      && !workflow?.isModified;
+      && !officialContentChanged(workflow);
     if (!baseline && !pendingClean) return;
 
-    // The live graph can contain runtime-injected metadata that ComfyUI does
-    // not consider an edit (for example an empty extra.ue_links array). Queue
-    // start cleanliness therefore follows ComfyUI's own isModified flag plus
-    // WorkspaceKit's already-confirmed dirty state, rather than requiring the
-    // live semantic snapshot to byte-match the stored clean baseline.
-    const startedClean = !workflow?.isModified
-      && !state.officialWorkflowDirtyPaths.has(path)
-      && !officialBaselinePendingDirtyPaths.has(path);
+    // Compare the same official snapshot used by dirty capture/reconciliation.
+    // The native modified flag may stay true after an execution-only update.
+    // Snapshot comparison also catches an immediate edit before the deferred
+    // graphChanged handler has updated WK's dirty set.
+    const startedClean = !state.officialWorkflowDirtyPaths.has(path)
+      && !officialBaselinePendingDirtyPaths.has(path)
+      && (baseline ? beforeSnapshot === baseline : !officialContentChanged(workflow));
 
     officialQueueTransactions.set(requestId, {
       path,

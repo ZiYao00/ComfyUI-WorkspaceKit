@@ -345,11 +345,11 @@ assert.ok(
   "the top-bar controller must delegate to the WorkspaceKit save coordinator",
 );
 assert.ok(
-  /async function saveWorkspaceTopbarWorkflow\(\)[\s\S]*?await executeOfficialWorkflowCommand\(TOPBAR_SAVE_COMMAND_ID\)/.test(source),
-  "the coordinator must still reuse ComfyUI's own save command, exactly like Ctrl+S",
+  /async function saveWorkspaceTopbarWorkflow\(\)[\s\S]*?await saveOfficialWorkflow\(targetWorkflow, app,/.test(source),
+  "the coordinator must delegate to the official adapter, which owns native command invocation",
 );
 assert.ok(
-  /saveWorkspaceTopbarWorkflow\(\)[\s\S]*?!isOfficialWorkflowTemporary\(activeWorkflow\)[\s\S]*?setCurrentWorkflowCleanState\(undefined, activePath\)[\s\S]*?scheduleOfficialWorkflowPanelRender\(\)/.test(source),
+  /saveWorkspaceTopbarWorkflow\(\)[\s\S]*?setCurrentWorkflowCleanState\(persistedState, activePath\)[\s\S]*?scheduleOfficialWorkflowPanelRender\(\)/.test(source),
   "a successful persisted save must clear the shared dirty baseline and schedule the Open list to re-render",
 );
 

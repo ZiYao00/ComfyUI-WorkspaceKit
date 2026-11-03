@@ -91,6 +91,7 @@ try {
     workflowsTarget: null,
   };
   let topbarRefreshes = 0;
+  let injectLiveMetadata = false;
   const workspaceState = {
     activeModule: "nodes",
     topbarSaveButton: { refresh: () => { topbarRefreshes += 1; } },
@@ -107,7 +108,7 @@ try {
     app: { api },
     state,
     workspaceState,
-    serializeCurrentWorkflow: () => graph,
+    serializeCurrentWorkflow: () => injectLiveMetadata ? { ...graph, extra: { ...graph.extra, live_only_metadata: true } } : graph,
     getActiveOfficialWorkflow: () => activeWorkflow,
     getOfficialWorkflowStore: () => ({ openWorkflows: [activeWorkflow] }),
     subscribeOfficialWorkflowStore: () => () => {},
@@ -116,7 +117,10 @@ try {
   });
 
   activeWorkflow.initialState = clone(graph);
-  activeWorkflow.activeState = clone(graph);
+  Object.defineProperty(activeWorkflow, "activeState", {
+    get: () => graph,
+    set: value => { graph = value; },
+  });
   openState.setupDirtyTracking();
 
   // A freshly opened persisted workflow stays visually clean while its expensive
@@ -256,6 +260,34 @@ try {
     dirty: true,
     pending: false,
   });
+
+  // Official snapshots, rather than a second serialization of the live canvas,
+  // must drive both sides of queue reconciliation. A stale native modified flag
+  // after one execution must not break the next execution-only queue.
+  activeWorkflow.isModified = false;
+  openState.setCleanState(graph, "demo.json");
+  injectLiveMetadata = true;
+  for (const requestId of [70, 71]) {
+    api.dispatch("promptQueueing", { requestId });
+    graph = clone(graph);
+    graph.nodes[1].widgets_values[0] += 1;
+    activeWorkflow.isModified = true;
+    api.dispatch("promptQueued", { requestId });
+    await tick();
+    assert.equal(openState.isOfficialWorkflowDirty(activeWorkflow), false, "repeated execution-only queues must use the official snapshot and effective clean state");
+  }
+  injectLiveMetadata = false;
+
+  // An edit immediately followed by Run must not be absorbed before the zero-
+  // delay graphChanged handler commits the dirty marker.
+  graph = clone(graph);
+  graph.nodes[0].widgets_values[0] = "immediate manual edit";
+  api.dispatch("graphChanged", graph);
+  api.dispatch("promptQueueing", { requestId: 72 });
+  graph.nodes[1].widgets_values[0] += 1;
+  api.dispatch("promptQueued", { requestId: 72 });
+  await tick();
+  assert.equal(openState.isOfficialWorkflowDirty(activeWorkflow), true);
 
   // Older frontends without requestId cannot be proven safe. They must fall
   // back to ordinary dirty detection rather than guessing that a change was

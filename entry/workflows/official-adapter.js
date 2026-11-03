@@ -1,3 +1,7 @@
+import { officialWorkflowSnapshot } from "./dirty-snapshot.js";
+
+const savingWorkflows = new WeakSet();
+
 function isWorkflowStore(store) {
   return Boolean(
     store
@@ -132,14 +136,54 @@ export async function openOfficialWorkflowThroughService(app, workflow) {
 }
 
 
-export async function saveOfficialWorkflow(workflow) {
+export async function saveOfficialWorkflow(workflow, app, onSaved) {
+  if (!workflow || savingWorkflows.has(workflow)) return false;
+  savingWorkflows.add(workflow);
+  try {
+    return await persistOfficialWorkflow(workflow, app, onSaved);
+  } finally {
+    savingWorkflows.delete(workflow);
+  }
+}
+
+async function persistOfficialWorkflow(workflow, app, onSaved) {
   if (typeof workflow?.save !== "function") {
     return false;
+  }
+  const store = getOfficialWorkflowStore(app);
+  if (workflow === store?.activeWorkflow) {
+    const execute = app?.extensionManager?.command?.execute;
+    if (typeof execute !== "function") return false;
+    workflow.changeTracker?.prepareForSave?.();
+    const requestedState = officialWorkflowSnapshot(workflow.activeState);
+    await execute("Comfy.SaveWorkflow");
+    if (isOfficialWorkflowTemporary(workflow) || !workflow.originalContent) return false;
+    const persisted = JSON.parse(workflow.originalContent);
+    // Native commands can handle an I/O failure without rejecting. Advance
+    // only to the content actually persisted, keeping edits made during I/O.
+    if (officialWorkflowSnapshot(persisted) !== requestedState) return false;
+    onSaved?.(persisted, workflow.path);
+    return true;
+  }
+  if (isOfficialWorkflowTemporary(workflow)) {
+    if (!store?.renameWorkflow || typeof workflow.promptSave !== "function") return false;
+    const name = await workflow.promptSave();
+    if (!name) return false;
+    const suffix = workflow.initialMode === "app" ? ".app.json" : ".json";
+    const filename = name.toLowerCase().endsWith(suffix) ? name : `${name.replace(/\.json$/i, "")}${suffix}`;
+    const path = `${workflow.directory}/${filename}`;
+    const existing = store.getWorkflowByPath(path);
+    // A background save must never overwrite another open workflow implicitly.
+    if (existing && existing !== workflow) throw new Error(`Workflow already exists: ${path}`);
+    await store.renameWorkflow(workflow, path);
   }
   // Match ComfyUI's workflow-service path: capture the active canvas before
   // serializing, while inactive workflows safely keep their frozen state.
   workflow.changeTracker?.prepareForSave?.();
-  await workflow.save();
+  const savedState = workflow.activeState ? JSON.parse(JSON.stringify(workflow.activeState)) : null;
+  if (store?.saveWorkflow) await store.saveWorkflow(workflow);
+  else await workflow.save();
+  onSaved?.(savedState, workflow.path);
   return true;
 }
 

@@ -39,6 +39,15 @@ assert.equal(
 );
 
 const promptEdited = structuredClone(base);
+const executionOrderOnly = structuredClone(base);
+executionOrderOnly.nodes[0].order = 42;
+assert.equal(officialWorkflowSnapshot(base), officialWorkflowSnapshot(executionOrderOnly), "execution order recalculation is not a workflow edit");
+assert.equal(base.nodes[0].order, undefined, "snapshot comparison must not mutate the input");
+const emptyRuntimeLinks = structuredClone(base);
+emptyRuntimeLinks.extra.ue_links = [];
+assert.equal(officialWorkflowSnapshot(base), officialWorkflowSnapshot(emptyRuntimeLinks));
+emptyRuntimeLinks.extra.ue_links = [[1, 2]];
+assert.notEqual(officialWorkflowSnapshot(base), officialWorkflowSnapshot(emptyRuntimeLinks), "real extension links remain meaningful");
 promptEdited.nodes[1].widgets_values = ["changed"];
 assert.notEqual(
   officialWorkflowSnapshot(base),

@@ -111,7 +111,6 @@ const factory = createSettingsDialogSections({
     { id: "nodes", label: "show nodes", checked: true, onChange: (value) => actions.push(["showNodes", value]) },
     { id: "templates", label: "show templates", checked: true, onChange: (value) => actions.push(["showTemplates", value]) },
     { id: "workspacekit.layout", label: "show layout", checked: true, onChange: (value) => actions.push(["showLayout", value]) },
-    { id: "workspacekit.theme", label: "show theme", checked: true, disabled: false, title: "", onChange: (value) => actions.push(["showTheme", value]) },
     { id: "external", label: "show external", checked: true, onChange: (value) => actions.push(["panelIntegrations", value]) },
   ],
   isStatusHelpEnabled: () => true,
@@ -254,11 +253,9 @@ assert.equal(sections.layoutToolSettings.children[1].children[0].kind, "action")
 sections.layoutToolSettings.children[1].children[0].onClick();
 assert.match(layoutSettingsStorage.getItem(LAYOUT_FLOATING_POSITION_KEY), /"default":true/);
 
-assert.equal(sections.sidebarTabs.children.length, 7, "help + five built-in tabs + external extensions");
+assert.equal(sections.sidebarTabs.children.length, 6, "help + four built-in tabs + external extensions");
 assert.equal(sections.sidebarTabs.children[5].checked, true);
-assert.equal(sections.sidebarTabs.children[5].disabled, false);
-assert.equal(sections.sidebarTabs.children[6].checked, true);
-sections.sidebarTabs.children[6].onChange(false);
+sections.sidebarTabs.children[5].onChange(false);
 assert.deepEqual(actions.shift(), ["panelIntegrations", false]);
 assert.equal(sections.integrations, sections.panelDisplay, "legacy integrations alias remains panel-display compatible");
 assert.equal(sections.versionInfo.text, "settings.versionLoading");

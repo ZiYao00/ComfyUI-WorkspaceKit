@@ -20,15 +20,15 @@ assert.ok(plan.mergedProviders.includes(plan.pinned), "the selector must include
     title: "Layout",
     render() {},
   });
-  const builtinAppearance = Object.freeze({
+  const builtinExample = Object.freeze({
     apiVersion: 1,
-    id: "workspacekit.theme",
+    id: "workspacekit.example",
     builtin: true,
-    title: "Appearance",
+    title: "Example",
     render() {},
   });
   registerOrQueueBuiltinProvider(builtinLayout, target);
-  registerOrQueueBuiltinProvider(builtinAppearance, target);
+  registerOrQueueBuiltinProvider(builtinExample, target);
 
   const builtinOnly = createWorkspaceTabPlan(
     ["workflows", "nodes", "templates"],
@@ -38,20 +38,25 @@ assert.ok(plan.mergedProviders.includes(plan.pinned), "the selector must include
   );
   assert.deepEqual(
     builtinOnly.mergedProviders.map((provider) => provider.id),
-    ["workspacekit.layout", "workspacekit.theme"],
+    ["workspacekit.layout", "workspacekit.example"],
     "built-in modules must remain planned even when the external Provider list is disabled/empty",
   );
   assert.equal(builtinOnly.pinned, builtinLayout);
 
-  const themeSealed = createWorkspaceTabPlan(
+  const retiredPinned = createWorkspaceTabPlan(
     ["workflows", "nodes", "templates"],
     [],
     "workspacekit.theme",
     target,
-    { providerFilter: (provider) => provider.id !== "workspacekit.theme" },
+    { providerFilter: (provider) => provider.id !== "workspacekit.example" },
   );
-  assert.deepEqual(themeSealed.mergedProviders, [builtinLayout]);
-  assert.equal(themeSealed.pinned, builtinLayout, "a hidden/sealed built-in provider cannot remain pinned");
+  assert.deepEqual(retiredPinned.mergedProviders, [builtinLayout]);
+  assert.equal(retiredPinned.pinned, builtinLayout, "a hidden/sealed built-in provider cannot remain pinned");
+
+  const retired = createWorkspaceTabPlan(["workflows"], [], "workspacekit.theme", target, {
+    providerFilter: (provider) => provider.id !== "workspacekit.example",
+  });
+  assert.equal(retired.pinned, builtinLayout);
 
   const collision = createWorkspaceTabPlan(
     ["workflows", "nodes", "templates"],

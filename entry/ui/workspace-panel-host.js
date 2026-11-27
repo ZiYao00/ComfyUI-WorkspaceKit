@@ -131,12 +131,9 @@ export function createWorkspacePanelHost({
     return button;
   };
 
-  // The unified package treats Layout and Appearance as first-party modules.
-  // Their former Provider transport remains an internal composition detail; it
-  // must not make the two tabs look like third-party dropdown extensions.
+  // First-party modules use ordinary tabs; Provider transport is internal.
   const builtinProviderOrder = new Map([
     ["workspacekit.layout", 0],
-    ["workspacekit.theme", 1],
   ]);
   const renderedBuiltinProviders = new Set();
   const appendBuiltinProviderTab = (provider, pinnedProviderId) => {

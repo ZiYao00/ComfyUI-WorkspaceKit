@@ -1,7 +1,4 @@
 {
   "schemaVersion": 1,
-  "consumers": [
-    { "name": "Layout", "path": "../ComfyUI-WorkspaceKit-Layout" },
-    { "name": "Theme", "path": "../ComfyUI-WorkspaceKit-Theme", "vendorDir": "js/vendor/workspacekit-ui" }
-  ]
+  "consumers": []
 }

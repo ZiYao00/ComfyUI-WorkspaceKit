@@ -2,7 +2,7 @@
 
 ## Scope
 
-This repository is the single long-term `ComfyUI-WorkspaceKit` plugin. It owns workflow, node, favorite, template, group, trash, workspace, panel-host, appearance/theme, and layout capabilities. `ComfyUI-WorkspaceKit-Theme` and `ComfyUI-WorkspaceKit-Layout` are migration-source repositories only during the 2026-08-29 unification program; new product work for those capabilities belongs here.
+This repository is the single long-term `ComfyUI-WorkspaceKit` plugin. It owns workflow, node, favorite, template, group, trash, workspace, panel-host, and layout capabilities. Global theme editing is retired; ComfyUI owns native palettes and user.css. `ComfyUI-WorkspaceKit-Theme` and `ComfyUI-WorkspaceKit-Layout` are historical migration-source repositories, not active runtime dependencies. Layout and remaining WorkspaceKit capabilities are maintained here.
 
 ## Before editing
 

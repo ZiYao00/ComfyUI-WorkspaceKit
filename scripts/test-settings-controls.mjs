@@ -47,13 +47,13 @@ assert.equal(section.children[0].textContent, "Title");
 assert.equal(section.children[1].textContent, "Help");
 
 const grid = controls.settingsShortcutGrid();
-assert.equal(grid.children.length, 6);
+assert.equal(grid.children.length, 5);
 assert.equal(grid.children[0].children[0].textContent, "Shift + 1");
 assert.equal(grid.children[0].children[1].textContent, "t:settings.shortcuts.commands.openWorkflows");
 assert.equal(grid.children[3].children[0].textContent, "Shift + 4");
 assert.equal(grid.children[3].children[1].textContent, "t:settings.shortcuts.commands.openLayout");
-assert.equal(grid.children[4].children[0].textContent, "Shift + 5");
-assert.equal(grid.children[4].children[1].textContent, "t:settings.shortcuts.commands.openTheme");
+assert.equal(grid.children[4].children[0].textContent, "Alt + C");
+assert.equal(grid.children[4].children[1].textContent, "t:settings.shortcuts.commands.saveTemplate");
 
 let checkboxChanged = false;
 const disabledCheckbox = controls.settingsCheckbox("Theme", false, () => { checkboxChanged = true; }, { disabled: true, title: "disabled" });

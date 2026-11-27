@@ -15,7 +15,6 @@ const EXPECTED_DEFAULTS = Object.freeze({
   "workspace.openNodes": "Shift + 2",
   "workspace.openTemplates": "Shift + 3",
   "workspace.openLayout": "Shift + 4",
-  "workspace.openTheme": "Shift + 5",
   "template.saveSelection": "Alt + C",
   "group.create": "Ctrl + G",
   "group.ungroup": "Shift + G",
@@ -42,11 +41,12 @@ async function main() {
     await root.click();
     await page.waitForSelector(".workspace2-module-tabs", { timeout: TIMEOUT });
 
-    // Default keyboard routing must target the two newly first-class modules.
+    // Layout still opens normally; retired Shift+5 must not open Theme.
     await page.keyboard.press("Shift+4");
     await page.waitForFunction(() => document.querySelector('.workspace2-module-tab.is-active')?.dataset.workspace2ModuleId === "workspacekit.layout", null, { timeout: TIMEOUT });
     await page.keyboard.press("Shift+5");
-    await page.waitForFunction(() => document.querySelector('.workspace2-module-tab.is-active')?.dataset.workspace2ModuleId === "workspacekit.theme", null, { timeout: TIMEOUT });
+    assert.equal(await page.locator('[data-workspace2-module-id="workspacekit.theme"]').count(), 0);
+    assert.equal(await page.locator('[data-workspace2-module-id="workspacekit.layout"].is-active').count(), 1);
 
     await page.locator(".workspace2-module-settings").click();
     await page.waitForSelector(".workspace2-settings-dialog", { timeout: TIMEOUT });
@@ -76,7 +76,7 @@ async function main() {
     });
 
     assert.equal(report.activeNav, "shortcuts");
-    assert.equal(Object.keys(report.bindings).length, 8);
+    assert.equal(Object.keys(report.bindings).length, 7);
     assert.deepEqual(report.bindings, EXPECTED_DEFAULTS);
     assert.deepEqual(report.pointerRows, [
       { action: "group.toggleIgnore", values: ["control", "left"] },
@@ -84,10 +84,10 @@ async function main() {
       { action: "group.toggleSelection", values: ["shift", "left"] },
     ]);
 
-    // Internal conflict: assigning Theme to Shift+4 must name the existing
+    // Internal conflict: assigning Nodes to Shift+4 must name the existing
     // Layout binding and, after confirmation, clear Layout atomically.
-    const themeBinding = page.locator('[data-workspace2-command-binding="workspace.openTheme"]');
-    await themeBinding.click();
+    const nodeBinding = page.locator('[data-workspace2-command-binding="workspace.openNodes"]');
+    await nodeBinding.click();
     await page.keyboard.press("Shift+4");
     const internalDialog = page.locator(".workspace2-confirm-dialog");
     await internalDialog.waitFor({ state: "visible", timeout: TIMEOUT });
@@ -97,13 +97,13 @@ async function main() {
     await internalDialog.locator(".workspace2-confirm-button:not(.is-secondary)").click();
     await page.waitForFunction(() => {
       const layout = document.querySelector('[data-workspace2-command-binding="workspace.openLayout"]');
-      const theme = document.querySelector('[data-workspace2-command-binding="workspace.openTheme"]');
-      return /未设置|Unassigned/.test(layout?.textContent || "") && (theme?.textContent || "").includes("Shift + 4");
+      const nodes = document.querySelector('[data-workspace2-command-binding="workspace.openNodes"]');
+      return /未设置|Unassigned/.test(layout?.textContent || "") && (nodes?.textContent || "").includes("Shift + 4");
     }, null, { timeout: TIMEOUT });
 
     // ComfyUI conflict: Ctrl+S must produce a warning. Canceling leaves the
-    // accepted Theme binding untouched.
-    await themeBinding.click();
+    // accepted Nodes binding untouched.
+    await nodeBinding.click();
     await page.keyboard.press("Control+S");
     const comfyDialog = page.locator(".workspace2-confirm-dialog");
     await comfyDialog.waitFor({ state: "visible", timeout: TIMEOUT });
@@ -111,7 +111,7 @@ async function main() {
     assert.match(comfyMessage || "", /Ctrl \+ S/);
     assert.match(comfyMessage || "", /ComfyUI/);
     await comfyDialog.locator(".workspace2-confirm-button.is-secondary").click();
-    assert.equal((await themeBinding.textContent())?.trim(), "Shift + 4");
+    assert.equal((await nodeBinding.textContent())?.trim(), "Shift + 4");
 
     assert.deepEqual(wkErrors, []);
     console.log("WorkspaceKit real-page Settings input bindings smoke passed.");

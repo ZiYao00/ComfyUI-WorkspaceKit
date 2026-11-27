@@ -18,7 +18,7 @@ Shared UI / first-party module shell
 
 Work should not bounce between product lines merely because a nearby issue is convenient. Cross-line changes are allowed only when they unblock the active product line, fix a regression, or satisfy a release gate.
 
-Shared-shell L0 now defines six user-facing visibility controls: Workflows, Nodes, Templates, Layout, Theme, and external extensions. Workflows/Nodes/Templates/Layout default visible; Theme is deliberately sealed (hidden by default and represented by a disabled Settings switch) until the Theme product line begins; external Provider visibility remains independent from first-party module identity. Real-page acceptance remains required after the local `:8190` test service is available again.
+Shared-shell visibility covers Workflows, Nodes, Templates, Layout, and external extensions. The former Theme control is retired; existing stale Theme preferences are ignored.
 
 ### Layout — current product line
 
@@ -36,21 +36,13 @@ Current / near-term priorities:
 
 Retired from the product roadmap: Layout-only Vendor UI, standalone sidebar hosting, dual-host lifecycle, and long-term WorkspaceKit Adapter compatibility. Historical source/provenance material remains preserved for audit and migration purposes.
 
-### Theme / Appearance — second product line
+### Theme / Appearance — retired
 
-After Layout is stable, Appearance resumes as one concentrated product line. Retained priorities from the former Theme roadmap are:
-
-- Finish field/group metadata bilingual coverage and visual-density/interaction polish.
-- Revalidate the complete theme session lifecycle: load/import → live edit → undo/redo/reset → save/copy → restart/reload.
-- Improve reference-image color workflow, recent/favorite palettes, contrast/readability feedback, and affected-area preview/highlighting where useful.
-- Mature Theme Manager operations such as copy/rename/update/comparison only through the controlled storage service with rollback/conflict handling.
-- Add Frontend-version/field compatibility diagnostics and migration reporting before a stable 1.0 theme format is claimed.
-
-Retired from the product roadmap: Theme standalone host, Vendor UI, dual-host visual matrix, and WorkspaceKit Adapter maintenance. Existing local Theme JSON migration remains non-destructive.
+Global theme editing is no longer a WK product line. Native ComfyUI palettes and user.css remain authoritative.
 
 ### WorkspaceKit Core — third product line
 
-After Layout and Appearance have their own stable product passes, return to the existing Core backlog: Workflows, Nodes, Templates, Groups, Settings, performance/cache behavior, shortcut editing, Browse improvements, group interactions, sidebar resilience, and incremental `entry.js` modularization. Existing requirements below remain valid unless explicitly superseded by a later product decision.
+After Layout is stable, return to the existing Core backlog: Workflows, Nodes, Templates, Groups, Settings, performance/cache behavior, shortcut editing, Browse improvements, group interactions, sidebar resilience, and incremental `entry.js` modularization. Existing requirements below remain valid unless explicitly superseded by a later product decision.
 
 ## P0 — WorkspaceKit Panel UI Template v1
 

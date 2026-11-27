@@ -63,7 +63,6 @@ export function createSettingsControls({ document, t, isolateComfyKeys }) {
       ["Shift + 2", t("settings.shortcuts.commands.openNodes")],
       ["Shift + 3", t("settings.shortcuts.commands.openTemplates")],
       ["Shift + 4", t("settings.shortcuts.commands.openLayout")],
-      ["Shift + 5", t("settings.shortcuts.commands.openTheme")],
       ["Alt + C", t("settings.shortcuts.commands.saveTemplate")],
     ];
     const grid = document.createElement("div");

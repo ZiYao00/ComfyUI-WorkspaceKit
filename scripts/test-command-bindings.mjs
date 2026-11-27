@@ -28,7 +28,8 @@ assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.OPEN_WORKFLOWS]), "Shift 
 assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.OPEN_NODES]), "Shift + 2");
 assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.OPEN_TEMPLATES]), "Shift + 3");
 assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.OPEN_LAYOUT]), "Shift + 4");
-assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.OPEN_THEME]), "Shift + 5");
+assert.equal(WORKSPACE_COMMAND.OPEN_THEME, undefined);
+assert.equal(Object.hasOwn(defaults, "workspace.openTheme"), false);
 assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.SAVE_TEMPLATE]), "Alt + C");
 assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.CREATE_GROUP]), "Ctrl + G");
 assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.UNGROUP]), "Shift + G");
@@ -36,7 +37,7 @@ assert.equal(formatKeyCombo(defaults[WORKSPACE_COMMAND.UNGROUP]), "Shift + G");
 const shift4 = { code: "Digit4", key: "4", shiftKey: true, ctrlKey: false, altKey: false, metaKey: false };
 assert.equal(resolveBoundCommand(shift4, defaults), WORKSPACE_COMMAND.OPEN_LAYOUT);
 const shift5 = { code: "Digit5", key: "5", shiftKey: true, ctrlKey: false, altKey: false, metaKey: false };
-assert.equal(resolveBoundCommand(shift5, defaults), WORKSPACE_COMMAND.OPEN_THEME);
+assert.equal(resolveBoundCommand(shift5, defaults), null);
 
 const captured = keyComboFromEvent({ code: "KeyK", key: "k", ctrlKey: true, shiftKey: true, altKey: false, metaKey: false });
 assert.deepEqual(captured, { code: "KeyK", key: "k", ctrl: true, alt: false, shift: true, meta: false });
@@ -44,7 +45,7 @@ assert.equal(formatKeyCombo(captured), "Ctrl + Shift + K");
 assert.equal(keyComboFromEvent({ code: "ShiftLeft", key: "Shift", shiftKey: true }), null);
 
 assert.equal(
-  findInternalBindingConflict(WORKSPACE_COMMAND.OPEN_THEME, defaults[WORKSPACE_COMMAND.OPEN_LAYOUT], defaults),
+  findInternalBindingConflict(WORKSPACE_COMMAND.OPEN_NODES, defaults[WORKSPACE_COMMAND.OPEN_LAYOUT], defaults),
   WORKSPACE_COMMAND.OPEN_LAYOUT,
 );
 assert.equal(findInternalBindingConflict(WORKSPACE_COMMAND.OPEN_LAYOUT, defaults[WORKSPACE_COMMAND.OPEN_LAYOUT], defaults), null);
@@ -78,13 +79,16 @@ assert.equal(migrated[WORKSPACE_COMMAND.OPEN_WORKFLOWS], null);
 assert.equal(migrated[WORKSPACE_COMMAND.CREATE_GROUP], null);
 assert.equal(formatKeyCombo(migrated[WORKSPACE_COMMAND.OPEN_LAYOUT]), "Shift + 4");
 
-const storage = createStorage();
-setCommandBinding(WORKSPACE_COMMAND.OPEN_THEME, captured, storage);
+const storage = createStorage({[COMMAND_BINDINGS_STORAGE_KEY]: JSON.stringify({version: 1, bindings: {"workspace.openTheme": captured, "workspace.openNodes": null}})});
+assert.equal(Object.hasOwn(readCommandBindings(storage), "workspace.openTheme"), false);
+assert.equal(readCommandBindings(storage)[WORKSPACE_COMMAND.OPEN_NODES], null);
+assert.equal(resolveBoundCommand({code:"KeyK", key:"k", ctrlKey:true, shiftKey:true}, readCommandBindings(storage)), null);
+setCommandBinding(WORKSPACE_COMMAND.OPEN_NODES, captured, storage);
 let saved = readCommandBindings(storage);
-assert.equal(formatKeyCombo(saved[WORKSPACE_COMMAND.OPEN_THEME]), "Ctrl + Shift + K");
+assert.equal(formatKeyCombo(saved[WORKSPACE_COMMAND.OPEN_NODES]), "Ctrl + Shift + K");
 assert.ok(storage.getItem(COMMAND_BINDINGS_STORAGE_KEY)?.includes('"version":1'));
-setCommandBinding(WORKSPACE_COMMAND.OPEN_THEME, null, storage);
+setCommandBinding(WORKSPACE_COMMAND.OPEN_NODES, null, storage);
 saved = readCommandBindings(storage);
-assert.equal(saved[WORKSPACE_COMMAND.OPEN_THEME], null);
+assert.equal(saved[WORKSPACE_COMMAND.OPEN_NODES], null);
 
 console.log("WorkspaceKit unified command bindings contract passed.");

@@ -23,30 +23,29 @@ assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.workflows, storage), t
 assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.nodes, storage), true);
 assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.templates, storage), true);
 assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.layout, storage), true);
-assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.theme, storage), true);
-assert.equal(isWorkspaceModuleSealed(WORKSPACE_MODULE_ID.theme), false);
+assert.equal(WORKSPACE_MODULE_ID.theme, undefined);
+assert.equal(isWorkspaceModuleSealed("workspacekit.theme"), true);
 
 assert.equal(setWorkspaceModuleVisible(WORKSPACE_MODULE_ID.workflows, false, storage), false);
 assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.workflows, storage), false);
 assert.equal(setWorkspaceModuleVisible(WORKSPACE_MODULE_ID.workflows, true, storage), true);
 assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.workflows, storage), true);
 
-// Theme is now a normal unified WorkspaceKit module and follows the same
-// visibility contract as the other built-ins.
-assert.equal(setWorkspaceModuleVisible(WORKSPACE_MODULE_ID.theme, false, storage), false);
-assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.theme, storage), false);
-assert.equal(storage.getItem(WORKSPACE_MODULE_VISIBILITY_KEY[WORKSPACE_MODULE_ID.theme]), "0");
-assert.equal(setWorkspaceModuleVisible(WORKSPACE_MODULE_ID.theme, true, storage), true);
-assert.equal(isWorkspaceModuleVisible(WORKSPACE_MODULE_ID.theme, storage), true);
+// Old visibility preferences must not resurrect the retired module.
+const legacy = createStorage({"workspace2.tabs.theme.visible": "1"});
+assert.equal(isWorkspaceModuleVisible("workspacekit.theme", legacy), false);
+assert.equal(setWorkspaceModuleVisible("workspacekit.theme", true, legacy), false);
+assert.equal(legacy.getItem("workspace2.tabs.theme.visible"), "1");
+assert.equal(isWorkspaceModuleVisible("external.theme", legacy), true);
 
 assert.deepEqual(
   visibleWorkspaceModuleIds([
     WORKSPACE_MODULE_ID.workflows,
     WORKSPACE_MODULE_ID.nodes,
     WORKSPACE_MODULE_ID.layout,
-    WORKSPACE_MODULE_ID.theme,
+    "workspacekit.theme",
   ], storage),
-  [WORKSPACE_MODULE_ID.workflows, WORKSPACE_MODULE_ID.nodes, WORKSPACE_MODULE_ID.layout, WORKSPACE_MODULE_ID.theme],
+  [WORKSPACE_MODULE_ID.workflows, WORKSPACE_MODULE_ID.nodes, WORKSPACE_MODULE_ID.layout],
 );
 
 console.log("WorkspaceKit module visibility contract passed.");

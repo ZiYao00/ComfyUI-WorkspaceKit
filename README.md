@@ -42,7 +42,7 @@ WorkspaceKit does not replace ComfyUI's official interface, and it is not about 
 
 ## The WK Suite
 
-Use **ComfyUI WorkspaceKit (WK)** on first mention, then **WK**. The core modules are **WK Workflows**, **WK Nodes**, **WK Templates**, and **WK Groups**; related family modules are **WK Layout** and **WK Theme**. Inside the sidebar, tabs stay concise: Workflows, Nodes, Templates, Layout, Theme.
+Use **ComfyUI WorkspaceKit (WK)** on first mention, then **WK**. The core modules are **WK Workflows**, **WK Nodes**, **WK Templates**, and **WK Groups**; the related module is **WK Layout**. Inside the sidebar, tabs stay concise: Workflows, Nodes, Templates, Layout. Global themes are managed by ComfyUI.
 
 | Common problem | WorkspaceKit approach | Result |
 | --- | --- | --- |

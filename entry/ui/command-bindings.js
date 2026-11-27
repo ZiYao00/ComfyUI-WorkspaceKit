@@ -10,7 +10,6 @@ export const WORKSPACE_COMMAND = Object.freeze({
   OPEN_NODES: "workspace.openNodes",
   OPEN_TEMPLATES: "workspace.openTemplates",
   OPEN_LAYOUT: "workspace.openLayout",
-  OPEN_THEME: "workspace.openTheme",
   SAVE_TEMPLATE: "template.saveSelection",
   CREATE_GROUP: "group.create",
   UNGROUP: "group.ungroup",
@@ -52,12 +51,6 @@ export const COMMAND_BINDING_DEFINITIONS = Object.freeze([
     group: "panels",
     labelKey: "settings.shortcuts.commands.openLayout",
     defaultCombo: combo("Digit4", "4", { shift: true }),
-  }),
-  Object.freeze({
-    commandId: WORKSPACE_COMMAND.OPEN_THEME,
-    group: "panels",
-    labelKey: "settings.shortcuts.commands.openTheme",
-    defaultCombo: combo("Digit5", "5", { shift: true }),
   }),
   Object.freeze({
     commandId: WORKSPACE_COMMAND.SAVE_TEMPLATE,

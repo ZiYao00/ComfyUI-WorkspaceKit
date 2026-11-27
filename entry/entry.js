@@ -1314,8 +1314,6 @@ function executeWorkspaceBoundCommand(commandId) {
       return openWorkspace2Module(WORKSPACE_MODULE_ID.templates, { closeIfActive: true });
     case WORKSPACE_COMMAND.OPEN_LAYOUT:
       return openWorkspace2Module(WORKSPACE_MODULE_ID.layout, { closeIfActive: true });
-    case WORKSPACE_COMMAND.OPEN_THEME:
-      return openWorkspace2Module(WORKSPACE_MODULE_ID.theme, { closeIfActive: true });
     case WORKSPACE_COMMAND.SAVE_TEMPLATE:
       saveSelectedNodesAsTemplateFromShortcut();
       return true;
@@ -1652,7 +1650,6 @@ function sidebarTabVisibilityOptions() {
     [WORKSPACE_MODULE_ID.nodes, "settings.sidebarTab.nodes"],
     [WORKSPACE_MODULE_ID.templates, "settings.sidebarTab.templates"],
     [WORKSPACE_MODULE_ID.layout, "settings.sidebarTab.layout"],
-    [WORKSPACE_MODULE_ID.theme, "settings.sidebarTab.theme"],
   ];
   return [
     ...builtins.map(([id, labelKey]) => ({
@@ -1660,7 +1657,7 @@ function sidebarTabVisibilityOptions() {
       label: t(labelKey),
       checked: isWorkspaceModuleVisible(id, localStorage),
       disabled: isWorkspaceModuleSealed(id),
-      title: isWorkspaceModuleSealed(id) ? t("settings.sidebarTab.themeSealedHelp") : "",
+      title: "",
       onChange: (checked) => setWorkspaceSidebarModuleVisible(id, checked),
     })),
     {
@@ -6304,7 +6301,7 @@ function workspaceTabPlan() {
     localStorage.getItem(PINNED_PROVIDER_KEY) || "",
     globalThis,
     {
-      providerFilter: (provider) => provider?.builtin !== true || isWorkspaceModuleVisible(provider.id, localStorage),
+      providerFilter: (provider) => !isWorkspaceModuleSealed(provider.id) && (provider?.builtin !== true || isWorkspaceModuleVisible(provider.id, localStorage)),
     },
   );
 }

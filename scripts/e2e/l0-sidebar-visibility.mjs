@@ -62,17 +62,13 @@ try {
     await page.locator(".workspace2-module-settings").click();
     await page.waitForSelector(".workspace2-settings-backdrop");
     const themeRow = page.locator('[data-workspace2-sidebar-tab-visibility="workspacekit.theme"]');
-    const themeInput = themeRow.locator('input[type="checkbox"]');
-    assert.equal(await themeRow.count(), 1);
-    assert.equal(await themeInput.isChecked(), false);
-    assert.equal(await themeInput.isDisabled(), true);
-    assert.equal(await themeRow.evaluate((el) => el.classList.contains("is-disabled")), true);
+    assert.equal(await themeRow.count(), 0);
     const externalInput = page.locator('[data-workspace2-sidebar-tab-visibility="external"] input[type="checkbox"]');
     assert.equal(await externalInput.isChecked(), false);
   });
 
   // Visibility preferences must hide only their own entries. A stale manual
-  // Theme value of 1 must not unseal Theme before that product line begins.
+  // Theme value of 1 must not resurrect the retired module.
   await withContext(browser, {
     workflows: 0, nodes: 1, templates: 0, layout: 1, theme: 1, external: 0,
   }, async (page) => {
@@ -95,7 +91,7 @@ try {
     await page.waitForSelector(".workspace2-settings-backdrop");
   });
 
-  console.log("L0 sidebar visibility and sealed Theme real-page contract passed.");
+  console.log("Sidebar visibility and retired Theme real-page contract passed.");
 } finally {
   await browser.close();
 }

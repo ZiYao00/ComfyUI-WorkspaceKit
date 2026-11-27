@@ -39,8 +39,7 @@ async function readDestinationFiles(destination) {
 
 // Resolve the list of consumers to process. A positional path argument targets a
 // single consumer (back-compatible with the original one-target usage). `--all`
-// reads the tracked consumer manifest. With neither, default to the historical
-// sibling Layout path so existing muscle memory keeps working.
+// reads the tracked consumer manifest. No archived sibling is a default target.
 async function resolveConsumers() {
   if (exportAll) {
     let manifest;
@@ -59,11 +58,10 @@ async function resolveConsumers() {
     }));
   }
 
-  const targetRoot = resolve(
-    positionalArguments[0] || resolve(workspaceKitRoot, "..", "ComfyUI-WorkspaceKit-Layout"),
-  );
+  if (!positionalArguments[0]) throw new Error("Specify an explicit consumer path (legacy sibling repositories are archived).");
+  const targetRoot = resolve(positionalArguments[0]);
   return [{
-    name: positionalArguments[0] ? targetRoot : "Layout",
+    name: targetRoot,
     root: targetRoot,
     vendorDir: "web/vendor/workspacekit-ui",
   }];

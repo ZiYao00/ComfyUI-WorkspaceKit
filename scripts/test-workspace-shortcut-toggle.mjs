@@ -37,7 +37,7 @@ assert.match(entrySource, /const commandId = resolveBoundCommand\(event, readCom
 assert.match(entrySource, /executeWorkspaceBoundCommand\(commandId\)/);
 assert.match(entrySource, /case WORKSPACE_COMMAND\.OPEN_WORKFLOWS:[\s\S]{0,180}openWorkspace2Module\(WORKSPACE_MODULE_ID\.workflows, \{ closeIfActive: true \}\)/);
 assert.match(entrySource, /case WORKSPACE_COMMAND\.OPEN_LAYOUT:[\s\S]{0,180}openWorkspace2Module\(WORKSPACE_MODULE_ID\.layout, \{ closeIfActive: true \}\)/);
-assert.match(entrySource, /case WORKSPACE_COMMAND\.OPEN_THEME:[\s\S]{0,180}openWorkspace2Module\(WORKSPACE_MODULE_ID\.theme, \{ closeIfActive: true \}\)/);
+assert.doesNotMatch(entrySource, /OPEN_THEME|WORKSPACE_MODULE_ID\.theme/);
 assert.match(entrySource, /shouldCloseWorkspaceModule\(/);
 assert.doesNotMatch(entrySource, /resolveModuleShortcut\(event\)/, "entry.js must not keep the legacy module shortcut resolver wired in");
 assert.doesNotMatch(entrySource, /isModuleShortcutEnabled\(moduleShortcut\.id/, "legacy per-module enable flags must not remain a runtime source of truth");
